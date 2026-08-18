@@ -1,0 +1,834 @@
+{
+  "schema": "trellis.product-graph/1",
+  "product": "GitHub Repo Safety Scanner",
+  "versions": {
+    "v1": {
+      "definition": "A complete one-shot audit of a single public GitHub repository, read entirely over the API with nothing written to disk. Every checklist item achievable without acquiring the repository. Ships standing alone: a person can point it at a URL and get an actionable verdict.",
+      "scale_target": "1"
+    },
+    "v2": {
+      "definition": "Continuous, semantic, and DYNAMIC. Everything v1 could not reach without executing code: sandboxed detonation with traffic capture, live MCP tool-description inspection, plus re-audit by diff, model-judged prose review, and vulnerability-database integration. Consumes v1 PASS results as its work queue.",
+      "scale_target": "100"
+    }
+  },
+  "invariants": [
+    "The scanner never clones, downloads, installs, or writes repository content to disk.",
+    "Untrusted bytes are pattern-matched by deterministic code and never enter a language model's context.",
+    "Every quoted excerpt is neutralised before it is written into a report.",
+    "A scan that could not read everything reports INCOMPLETE, never PASS.",
+    "Every check is a pure function over an in-memory snapshot; only the fetch layer performs I/O.",
+    "Every report states the tool's permanent blind spots.",
+    "Test fixtures are authored by hand, never harvested from real repositories. No third-party repository content is ever committed to this project.",
+    "Every detection check ships with at least one positive-control fixture it MUST flag. A check that silently finds nothing fails its own test suite."
+  ],
+  "non_goals": [
+    "Executing repository code, sandboxed or otherwise.",
+    "Runtime observation: network capture, syscall tracing, canary detonation.",
+    "Comparing a tool server's runtime descriptions against its source.",
+    "Detecting behavioural backdoors in machine-learning weights.",
+    "Judging intent. The tool reports what is present and why it matters."
+  ],
+  "nodes": [
+    {
+      "id": "core.snapshot",
+      "title": "RepoSnapshot type and construction",
+      "version": "v1",
+      "kind": "interface",
+      "deps": [],
+      "acceptance": [
+        "A RepoSnapshot holds file inventory, file contents, repository metadata, commit history, contributors, and star history as plain data.",
+        "It records which files were not retrieved, and why, so completeness is inspectable rather than assumed.",
+        "It is constructible from a hand-authored fixture with no network access, and the fixture set contains no content copied from any real third-party repository."
+      ],
+      "reversibility": "one-way",
+      "surfaces": [
+        "none"
+      ],
+      "scale_tier": "1",
+      "lenses": [
+        "architecture"
+      ],
+      "notes": "The seam the whole design rests on. Every check is a pure function of this type, which is what makes an exhaustive check set testable offline. Getting the shape wrong forces I/O into the checks later, so this is a one-way door. Fixtures are synthetic on purpose: harvesting one from a real suspicious repo would acquire the untrusted content the tool exists to avoid acquiring, and commit it permanently to this tree."
+    },
+    {
+      "id": "core.github-client",
+      "title": "GitHub API client",
+      "version": "v1",
+      "kind": "backend",
+      "deps": [
+        "core.snapshot"
+      ],
+      "acceptance": [
+        "Retrieves the full recursive file inventory, file contents, repository metadata, commits, contributors, and star history.",
+        "Retrieves large files through the blob endpoint when the contents endpoint refuses them.",
+        "Never writes repository content to disk.",
+        "Operates against real public GitHub repositories by owner/name or URL. Synthetic fixtures exist only to test the pure check functions offline; they are never a substitute for scanning the real thing."
+      ],
+      "reversibility": "two-way",
+      "surfaces": [
+        "network",
+        "secrets"
+      ],
+      "scale_tier": "1",
+      "lenses": [
+        "backend",
+        "security"
+      ],
+      "notes": "The only component permitted to perform I/O."
+    },
+    {
+      "id": "core.token-guard",
+      "title": "Refuse an over-scoped token",
+      "version": "v1",
+      "kind": "backend",
+      "deps": [
+        "core.github-client"
+      ],
+      "acceptance": [
+        "Startup fails with a clear message when GITHUB_TOKEN carries write or repo scope.",
+        "A token with no scopes is accepted, since public repositories need none.",
+        "An absent token is accepted with a warning that unauthenticated rate limits apply."
+      ],
+      "reversibility": "two-way",
+      "surfaces": [
+        "auth",
+        "secrets"
+      ],
+      "scale_tier": "1",
+      "lenses": [
+        "security"
+      ],
+      "notes": "A tool that demands broad credentials in order to detect credential theft is self-refuting."
+    },
+    {
+      "id": "core.completeness",
+      "title": "Incomplete-scan detection",
+      "version": "v1",
+      "kind": "backend",
+      "deps": [
+        "core.snapshot",
+        "core.github-client"
+      ],
+      "acceptance": [
+        "A truncated file inventory forces the verdict to INCOMPLETE.",
+        "An exhausted API quota forces the verdict to INCOMPLETE.",
+        "Files that could not be retrieved are listed by path in the report, not assumed benign.",
+        "INCOMPLETE can never be downgraded to PASS by any later check."
+      ],
+      "reversibility": "one-way",
+      "surfaces": [
+        "network"
+      ],
+      "scale_tier": "1",
+      "lenses": [
+        "security",
+        "architecture"
+      ],
+      "notes": "Silent under-scanning is the worst outcome the tool can produce: it manufactures confidence instead of merely lacking it. One-way because every verdict path depends on this being authoritative."
+    },
+    {
+      "id": "checks.provenance-repo",
+      "title": "Repository provenance signals",
+      "version": "v1",
+      "kind": "backend",
+      "deps": [
+        "core.snapshot"
+      ],
+      "acceptance": [
+        "Flags a repository whose star count is implausible for its age.",
+        "Distinguishes organic star growth from step-function growth.",
+        "Flags a history that is one bulk commit rather than incremental work.",
+        "Flags low contributor diversity relative to apparent popularity.",
+        "Flags recent ownership transfer.",
+        "Flags names that are near-misses of well-known projects.",
+        "Flags README claims disproportionate to the code present.",
+        "Ships a positive-control fixture containing the pattern this check exists to find, and a negative-control fixture that must NOT be flagged. A version of this check that returns no findings must fail its own tests."
+      ],
+      "reversibility": "two-way",
+      "surfaces": [
+        "none"
+      ],
+      "scale_tier": "1",
+      "lenses": [
+        "security"
+      ],
+      "mutations": []
+    },
+    {
+      "id": "checks.provenance-maintainer",
+      "title": "Maintainer provenance signals",
+      "version": "v1",
+      "kind": "backend",
+      "deps": [
+        "core.snapshot"
+      ],
+      "acceptance": [
+        "Flags an account younger than one year, or with no contribution history predating this repository.",
+        "Flags an account whose other repositories are many near-identical tools published together.",
+        "Ships a positive-control fixture containing the pattern this check exists to find, and a negative-control fixture that must NOT be flagged. A version of this check that returns no findings must fail its own tests."
+      ],
+      "reversibility": "two-way",
+      "surfaces": [
+        "none"
+      ],
+      "scale_tier": "1",
+      "lenses": [
+        "security"
+      ],
+      "mutations": []
+    },
+    {
+      "id": "checks.provenance-package",
+      "title": "Published-package provenance",
+      "version": "v1",
+      "kind": "backend",
+      "deps": [
+        "core.snapshot"
+      ],
+      "acceptance": [
+        "Flags a published package that does not link back to this repository.",
+        "Flags a dormant package that suddenly published several versions.",
+        "Flags download counts inconsistent with apparent popularity.",
+        "Flags names that are typo-squats of popular packages.",
+        "Flags plausible-sounding names with no upstream reality.",
+        "Ships a positive-control fixture containing the pattern this check exists to find, and a negative-control fixture that must NOT be flagged. A version of this check that returns no findings must fail its own tests."
+      ],
+      "reversibility": "two-way",
+      "surfaces": [
+        "network"
+      ],
+      "scale_tier": "1",
+      "lenses": [
+        "security"
+      ],
+      "mutations": []
+    },
+    {
+      "id": "checks.kill-criteria",
+      "title": "Immediate-reject instructions",
+      "version": "v1",
+      "kind": "backend",
+      "deps": [
+        "core.snapshot"
+      ],
+      "acceptance": [
+        "Flags instructions to pipe a downloaded script into a shell.",
+        "Flags instructions to disable a sandbox or permission system.",
+        "Flags instructions to install with elevated privileges.",
+        "Any match sets the verdict to REJECT and short-circuits further analysis.",
+        "Ships a positive-control fixture containing the pattern this check exists to find, and a negative-control fixture that must NOT be flagged. A version of this check that returns no findings must fail its own tests."
+      ],
+      "reversibility": "two-way",
+      "surfaces": [
+        "none"
+      ],
+      "scale_tier": "1",
+      "lenses": [
+        "security"
+      ],
+      "mutations": []
+    },
+    {
+      "id": "checks.install-surfaces",
+      "title": "Install-time and folder-open execution",
+      "version": "v1",
+      "kind": "backend",
+      "deps": [
+        "core.snapshot"
+      ],
+      "acceptance": [
+        "Flags package-manager lifecycle scripts.",
+        "Flags arbitrary code in Python build configuration and test-collection hooks.",
+        "Flags default build targets that fetch from the network.",
+        "Flags CI workflows that run untrusted pull-request code or expose secrets.",
+        "Flags development-container commands, distinguishing those that run on the host from those that run in the container.",
+        "Flags editor tasks configured to run on folder open.",
+        "Flags directory-entry shell hooks.",
+        "Flags committed version-control hooks and redirected hook paths.",
+        "Ships a positive-control fixture containing the pattern this check exists to find, and a negative-control fixture that must NOT be flagged. A version of this check that returns no findings must fail its own tests."
+      ],
+      "reversibility": "two-way",
+      "surfaces": [
+        "filesystem"
+      ],
+      "scale_tier": "1",
+      "lenses": [
+        "security"
+      ],
+      "mutations": []
+    },
+    {
+      "id": "checks.assistant-surfaces",
+      "title": "AI assistant auto-load configuration",
+      "version": "v1",
+      "kind": "backend",
+      "deps": [
+        "core.snapshot"
+      ],
+      "acceptance": [
+        "Flags project-scoped assistant settings containing lifecycle hooks.",
+        "Flags broad permission grants and reports the absence of denials where secrets are handled.",
+        "Flags environment variables injected into every tool call.",
+        "Flags project-scoped tool-server declarations, reporting the command and arguments each would run.",
+        "Flags every convention-named assistant instruction file present.",
+        "Ships a positive-control fixture containing the pattern this check exists to find, and a negative-control fixture that must NOT be flagged. A version of this check that returns no findings must fail its own tests.",
+        "Flags any declared MCP server whose responses are model-generated rather than deterministic, as a distinct and higher risk category than a static server.",
+        "States for each such server that its output cannot be audited statically, because the content does not exist until it is generated."
+      ],
+      "reversibility": "two-way",
+      "surfaces": [
+        "filesystem",
+        "secrets"
+      ],
+      "scale_tier": "1",
+      "lenses": [
+        "security"
+      ],
+      "notes": "The layer generic security tooling misses entirely. These files execute or are read automatically, without the user asking. An LLM-backed server is a prompt-injection channel with a generator behind it: the payload is created at runtime, can be targeted at specific repos or users, can vary to defeat signature matching, and is deniable as a hallucination. Static review of such a plugin proves nothing about what it will say. Flagging the category is the most this tool can honestly do; the real control is never treating that output as instructions.",
+      "mutations": []
+    },
+    {
+      "id": "checks.injection",
+      "title": "Prompt-injection patterns",
+      "version": "v1",
+      "kind": "backend",
+      "deps": [
+        "core.snapshot"
+      ],
+      "acceptance": [
+        "Flags sentences addressed to an AI assistant rather than to the reader.",
+        "Flags requests for secrecy or for skipping confirmation.",
+        "Flags requests for data unrelated to the stated purpose.",
+        "Flags external URLs to fetch, transmit to, or embed in output.",
+        "Flags attempts to override prior instructions.",
+        "Flags instructions to auto-approve actions.",
+        "Ships a positive-control fixture containing the pattern this check exists to find, and a negative-control fixture that must NOT be flagged. A version of this check that returns no findings must fail its own tests."
+      ],
+      "reversibility": "two-way",
+      "surfaces": [
+        "none"
+      ],
+      "scale_tier": "1",
+      "lenses": [
+        "security"
+      ],
+      "mutations": []
+    },
+    {
+      "id": "checks.invisible-text",
+      "title": "Invisible and deceptive characters",
+      "version": "v1",
+      "kind": "backend",
+      "deps": [
+        "core.snapshot"
+      ],
+      "acceptance": [
+        "Detects zero-width characters.",
+        "Detects Unicode tag-block characters, which render as nothing and tokenise as text.",
+        "Detects bidirectional overrides that make code display in a different order than it executes.",
+        "Detects private-use characters.",
+        "Detects homoglyph substitutions in identifiers and domain names.",
+        "Detects HTML comments and content hidden past long-line or trailing-whitespace boundaries.",
+        "Reports the exact code point and byte offset of every match.",
+        "Ships a positive-control fixture containing the pattern this check exists to find, and a negative-control fixture that must NOT be flagged. A version of this check that returns no findings must fail its own tests."
+      ],
+      "reversibility": "two-way",
+      "surfaces": [
+        "none"
+      ],
+      "scale_tier": "1",
+      "lenses": [
+        "security"
+      ],
+      "notes": "The highest-value check in the tool. These payloads are invisible to human review, so the automated check is the only line of defence.",
+      "mutations": []
+    },
+    {
+      "id": "checks.credentials",
+      "title": "Credential-path references",
+      "version": "v1",
+      "kind": "backend",
+      "deps": [
+        "core.snapshot"
+      ],
+      "acceptance": [
+        "Flags references to SSH keys, cloud credentials, registry tokens, container and cluster configuration, AI assistant configuration, environment files, keychains, browser stores, wallet files, and shell history.",
+        "Flags wholesale enumeration of environment variables or of the user's home directory.",
+        "Reports each hit against the tool's stated purpose, since some references are legitimate.",
+        "Ships a positive-control fixture containing the pattern this check exists to find, and a negative-control fixture that must NOT be flagged. A version of this check that returns no findings must fail its own tests."
+      ],
+      "reversibility": "two-way",
+      "surfaces": [
+        "secrets"
+      ],
+      "scale_tier": "1",
+      "lenses": [
+        "security"
+      ],
+      "mutations": []
+    },
+    {
+      "id": "checks.exfiltration",
+      "title": "Outbound data channels",
+      "version": "v1",
+      "kind": "backend",
+      "deps": [
+        "core.snapshot"
+      ],
+      "acceptance": [
+        "Flags HTTP clients and raw socket use.",
+        "Flags DNS lookups built from dynamically constructed hostnames.",
+        "Flags image and link beacons that transmit on render.",
+        "Flags known interaction-capture and request-bin services.",
+        "Flags messaging-platform webhooks used as command channels.",
+        "Flags hardcoded network addresses, including non-decimal encodings.",
+        "Flags telemetry enabled by default that sends more than a version string.",
+        "Ships a positive-control fixture containing the pattern this check exists to find, and a negative-control fixture that must NOT be flagged. A version of this check that returns no findings must fail its own tests."
+      ],
+      "reversibility": "two-way",
+      "surfaces": [
+        "network"
+      ],
+      "scale_tier": "1",
+      "lenses": [
+        "security"
+      ],
+      "notes": "DNS-based exfiltration matters most here: it bypasses HTTP egress filtering and is the channel least likely to be noticed.",
+      "mutations": []
+    },
+    {
+      "id": "checks.obfuscation",
+      "title": "Obfuscation signals",
+      "version": "v1",
+      "kind": "backend",
+      "deps": [
+        "core.snapshot"
+      ],
+      "acceptance": [
+        "Flags dynamic evaluation and shell-invoking execution.",
+        "Flags decode-then-execute and fetch-then-execute chains.",
+        "Flags minified files with no corresponding build step or source map.",
+        "Flags dense escape sequences and high-entropy blobs.",
+        "Flags code that branches on detecting CI, a virtual machine, a debugger, or a hostname.",
+        "Reports these as signals accompanying an attack rather than as the attack itself.",
+        "Ships a positive-control fixture containing the pattern this check exists to find, and a negative-control fixture that must NOT be flagged. A version of this check that returns no findings must fail its own tests."
+      ],
+      "reversibility": "two-way",
+      "surfaces": [
+        "none"
+      ],
+      "scale_tier": "1",
+      "lenses": [
+        "security"
+      ],
+      "mutations": []
+    },
+    {
+      "id": "checks.binaries",
+      "title": "Binary and model artifacts",
+      "version": "v1",
+      "kind": "data",
+      "deps": [
+        "core.snapshot"
+      ],
+      "acceptance": [
+        "Inventories every non-text file and requires a justification for any that is not an image or font.",
+        "Flags serialisation formats that execute code on load.",
+        "Flags weight files in executable formats where a non-executable format exists.",
+        "Flags model configuration that requires trusting remote code, and names the files that would run.",
+        "Flags precompiled native binaries with no accompanying build script.",
+        "Ships a positive-control fixture containing the pattern this check exists to find, and a negative-control fixture that must NOT be flagged. A version of this check that returns no findings must fail its own tests."
+      ],
+      "reversibility": "two-way",
+      "surfaces": [
+        "filesystem"
+      ],
+      "scale_tier": "1",
+      "lenses": [
+        "security",
+        "backend"
+      ],
+      "mutations": []
+    },
+    {
+      "id": "checks.dependencies",
+      "title": "Dependency hygiene",
+      "version": "v1",
+      "kind": "backend",
+      "deps": [
+        "core.snapshot"
+      ],
+      "acceptance": [
+        "Flags an absent or uncommitted lockfile.",
+        "Flags floating or unpinned versions.",
+        "Flags dependencies pointing at mutable branches rather than fixed commits.",
+        "Flags redirection of well-known packages to alternate sources.",
+        "Flags committed configuration that changes the package registry or injects a token.",
+        "Reports transitive dependency count against project size.",
+        "Ships a positive-control fixture containing the pattern this check exists to find, and a negative-control fixture that must NOT be flagged. A version of this check that returns no findings must fail its own tests."
+      ],
+      "reversibility": "two-way",
+      "surfaces": [
+        "network"
+      ],
+      "scale_tier": "1",
+      "lenses": [
+        "security",
+        "backend"
+      ],
+      "mutations": []
+    },
+    {
+      "id": "report.neutralise",
+      "title": "Excerpt neutralisation",
+      "version": "v1",
+      "kind": "interface",
+      "deps": [
+        "core.snapshot"
+      ],
+      "acceptance": [
+        "Renders zero-width, tag-block, and private-use characters as visible escapes.",
+        "Strips bidirectional overrides.",
+        "Defangs link and image syntax so nothing loads on render.",
+        "Escapes markup.",
+        "Truncates long lines.",
+        "A report containing a detected payload is inert when read by a person and by an AI assistant."
+      ],
+      "reversibility": "one-way",
+      "surfaces": [
+        "none"
+      ],
+      "scale_tier": "1",
+      "lenses": [
+        "security",
+        "architecture"
+      ],
+      "notes": "Every finding flows through this. If it is wrong the tool becomes a delivery mechanism for the payloads it detects, so it is an interface with many consumers and a one-way door."
+    },
+    {
+      "id": "report.verdict",
+      "title": "Verdict engine",
+      "version": "v1",
+      "kind": "backend",
+      "deps": [
+        "core.completeness",
+        "checks.kill-criteria"
+      ],
+      "acceptance": [
+        "Produces REJECT, REVIEW, PASS, or INCOMPLETE.",
+        "An immediate-reject signal short-circuits remaining analysis.",
+        "INCOMPLETE outranks PASS unconditionally.",
+        "A fast triage mode runs the highest-signal subset and says plainly that it did.",
+        "On an immediate-reject stop, records the exact finding that triggered it AND the audit progress at that moment: which checks ran and passed, which were never reached, and the checklist position where it halted.",
+        "A REJECT report visually distinguishes 'ran and passed' from 'never reached'. An early stop at check 7 of 100 must never read like a completed audit that found one problem.",
+        "A PASS is only possible when every check in the checklist actually ran against real fetched content. Any unrun check downgrades the verdict."
+      ],
+      "reversibility": "two-way",
+      "surfaces": [
+        "none"
+      ],
+      "scale_tier": "1",
+      "lenses": [
+        "security",
+        "architecture"
+      ],
+      "notes": "Progress accounting is the point of the early stop, not an extra: stopping early saves API quota and reader time, but a stop that hides how much was left unexamined trades one false confidence for another. Threat note: this tool is implemented by open-weight models whose parameters cannot be audited. The defence is not trusting them — it is that the frozen tests come from a different model family, workers cannot edit tests, and every check must trip its own positive control. A quietly disabled check fails loudly rather than reporting clean."
+    },
+    {
+      "id": "report.blind-spots",
+      "title": "Blind-spot disclosure",
+      "version": "v1",
+      "kind": "interface",
+      "deps": [],
+      "acceptance": [
+        "Every report states that no code was executed and no runtime behaviour observed.",
+        "Every report states that runtime tool descriptions were not compared against source.",
+        "Every report states that behavioural backdoors in model weights are undetectable by static reading.",
+        "The disclosure cannot be suppressed by any flag."
+      ],
+      "reversibility": "two-way",
+      "surfaces": [
+        "none"
+      ],
+      "scale_tier": "1",
+      "lenses": [
+        "security"
+      ],
+      "notes": "A report silent about its own limits converts absence of evidence into apparent safety, which is worse than producing no report."
+    },
+    {
+      "id": "report.reading-list",
+      "title": "Prioritised manual reading list",
+      "version": "v1",
+      "kind": "interface",
+      "deps": [
+        "report.verdict"
+      ],
+      "acceptance": [
+        "Orders files by signal per minute of reading.",
+        "Puts auto-executing configuration and instruction files above ordinary source.",
+        "States that automated checks find patterns and cannot find intent."
+      ],
+      "reversibility": "two-way",
+      "surfaces": [
+        "none"
+      ],
+      "scale_tier": "1",
+      "lenses": [
+        "security"
+      ]
+    },
+    {
+      "id": "report.adoption",
+      "title": "Adoption guidance",
+      "version": "v1",
+      "kind": "interface",
+      "deps": [
+        "report.verdict"
+      ],
+      "acceptance": [
+        "Emits the exact immutable commit identifier to pin to, never a mutable tag.",
+        "Emits a baseline for re-auditing on update.",
+        "Emits least-privilege recommendations for running the audited tool."
+      ],
+      "reversibility": "two-way",
+      "surfaces": [
+        "none"
+      ],
+      "scale_tier": "1",
+      "lenses": [
+        "security"
+      ]
+    },
+    {
+      "id": "report.render",
+      "title": "Human and machine output",
+      "version": "v1",
+      "kind": "interface",
+      "deps": [
+        "report.neutralise",
+        "report.verdict",
+        "report.blind-spots"
+      ],
+      "acceptance": [
+        "Emits a human-readable report and machine-readable JSON from the same findings.",
+        "Every finding carries a stable rule identifier, severity, path, line where applicable, and a neutralised excerpt.",
+        "Verdict exit codes are 10 PASS, 11 REVIEW, 12 REJECT, 13 INCOMPLETE. They must NOT collide with the codes a crashing runtime emits — a tool that dies on an uncaught exception exits 1, and if 1 also meant REVIEW then 'the tool reviewed and found concerns' and 'the tool crashed' would be the same signal.",
+        "Every successful run writes a machine-readable marker to stdout identifying the verdict, so a caller can distinguish a real verdict from an absent one without relying on exit code alone."
+      ],
+      "reversibility": "one-way",
+      "surfaces": [
+        "none"
+      ],
+      "scale_tier": "1",
+      "lenses": [
+        "architecture"
+      ],
+      "notes": "The JSON shape is consumed by v2 batch mode, so changing it later breaks downstream. Exit codes moved off 0-3 after a held-out test suite was observed passing four absence-claim assertions against a tool that did not exist: the runtime crashed with exit 1, which the suite read as a valid REVIEW verdict. An absence claim must be able to tell 'the tool ran and found nothing' from 'the tool never ran'."
+    },
+    {
+      "id": "cli.entry",
+      "title": "Command-line entry point",
+      "version": "v1",
+      "kind": "interface",
+      "deps": [
+        "report.render",
+        "core.token-guard"
+      ],
+      "acceptance": [
+        "scan <url> runs a full audit and prints a report.",
+        "--json emits machine-readable findings.",
+        "--fast runs the triage subset.",
+        "A malformed URL fails with a message naming the expected form."
+      ],
+      "reversibility": "two-way",
+      "surfaces": [
+        "none"
+      ],
+      "scale_tier": "1",
+      "lenses": [
+        "cli"
+      ]
+    },
+    {
+      "id": "v2.diff-audit",
+      "title": "Re-audit by diff",
+      "version": "v2",
+      "kind": "backend",
+      "deps": [
+        "core.github-client",
+        "report.verdict"
+      ],
+      "acceptance": [
+        "Compares a repository against a previously audited commit and audits only the delta.",
+        "Flags maintainer changes between the audited and current commits.",
+        "Treats any change to an auto-executing or instruction file as requiring full re-review."
+      ],
+      "reversibility": "two-way",
+      "surfaces": [
+        "network"
+      ],
+      "scale_tier": "100",
+      "lenses": [
+        "security"
+      ],
+      "notes": "Trust is per-commit, not per-repo. This is the control for a maintainer turning hostile after adoption."
+    },
+    {
+      "id": "v2.semantic-review",
+      "title": "Model-judged instruction review",
+      "version": "v2",
+      "kind": "backend",
+      "deps": [
+        "checks.injection",
+        "report.neutralise"
+      ],
+      "acceptance": [
+        "Reviews instruction prose for intent that pattern matching misses.",
+        "Runs in an isolated context with no tools available.",
+        "Returns a structured verdict and can never trigger an action.",
+        "Untrusted text is neutralised before it reaches the model."
+      ],
+      "reversibility": "one-way",
+      "surfaces": [
+        "network"
+      ],
+      "scale_tier": "100",
+      "lenses": [
+        "security",
+        "llm"
+      ],
+      "notes": "The single place where untrusted text reaches a model. The isolation boundary is the design; getting it wrong reintroduces the attack the tool exists to prevent, so this is a one-way door."
+    },
+    {
+      "id": "v2.vulnerability-scan",
+      "title": "Vulnerability database integration",
+      "version": "v2",
+      "kind": "backend",
+      "deps": [
+        "checks.dependencies"
+      ],
+      "acceptance": [
+        "Resolves the transitive dependency tree and queries public vulnerability databases.",
+        "Reports known-malicious packages separately from merely vulnerable ones.",
+        "Degrades to a stated partial result when a database is unreachable."
+      ],
+      "reversibility": "two-way",
+      "surfaces": [
+        "network"
+      ],
+      "scale_tier": "100",
+      "lenses": [
+        "security",
+        "backend"
+      ]
+    },
+    {
+      "id": "v2.batch",
+      "title": "Batch mode and provenance records",
+      "version": "v2",
+      "kind": "ops",
+      "deps": [
+        "report.render",
+        "v2.diff-audit"
+      ],
+      "acceptance": [
+        "Audits many repositories in one run, respecting rate limits.",
+        "Writes a provenance record per repository, pinned to the audited commit.",
+        "Emits a summary ranking by verdict severity."
+      ],
+      "reversibility": "two-way",
+      "surfaces": [
+        "network",
+        "filesystem"
+      ],
+      "scale_tier": "100",
+      "lenses": [
+        "ops"
+      ],
+      "notes": "This is what lets a passing audit write its own registry entry, closing the loop on admitting new tooling."
+    },
+    {
+      "id": "v2.clean-queue",
+      "title": "Clean-list queue from v1 verdicts",
+      "version": "v2",
+      "kind": "ops",
+      "deps": [
+        "report.render",
+        "report.verdict"
+      ],
+      "acceptance": [
+        "Every v1 PASS is recorded to a queue with the exact commit SHA that was scanned.",
+        "A queued entry states plainly that it passed STATIC review only and has not been executed or observed.",
+        "An entry whose upstream SHA has moved since it was queued is invalidated rather than carried forward.",
+        "Nothing enters the queue on a REJECT, REVIEW, or INCOMPLETE verdict."
+      ],
+      "reversibility": "two-way",
+      "surfaces": [
+        "filesystem"
+      ],
+      "scale_tier": "100",
+      "lenses": [
+        "ops",
+        "security"
+      ],
+      "notes": "The seam between the two versions. v1 answers \"is there any reason not to acquire this\"; the queue holds the survivors; v2 answers \"does it behave as claimed when actually run\". Pinning the SHA is what makes the second answer refer to the same artifact as the first."
+    },
+    {
+      "id": "v2.sandbox-detonation",
+      "title": "Sandboxed execution with observation",
+      "version": "v2",
+      "kind": "infra",
+      "deps": [
+        "v2.clean-queue"
+      ],
+      "acceptance": [
+        "Clones a queued repo at its pinned SHA into a disposable container: non-root, dropped capabilities, read-only source mount, no host home directory, no real credentials in the environment.",
+        "First run has NO network. Canary tokens are planted as fake AWS credentials, a fake .env, and a fake SSH key before it starts.",
+        "Second run enables network behind a logging proxy, capturing every HTTP request body and every DNS query.",
+        "Records file access and outbound connections at the syscall level.",
+        "Compares every observed network destination against what the README claims. Any undocumented destination fails the repo.",
+        "A fired canary is reported as proof of exfiltration with the exact time it fired.",
+        "Never runs on the host, and never with credentials present."
+      ],
+      "reversibility": "one-way",
+      "surfaces": [
+        "network",
+        "filesystem",
+        "secrets"
+      ],
+      "scale_tier": "100",
+      "lenses": [
+        "security",
+        "ops"
+      ],
+      "notes": "This is the only thing that detects runtime behaviour, and it requires execution — which is why it was never a v1 candidate. It does not violate the no-acquisition rule: that rule says never acquire before you have reason and never execute on your machine. v1 supplies the reason; the container supplies the isolation. DNS logging matters most, since DNS exfiltration bypasses HTTP egress filtering and is the channel least likely to be noticed."
+    },
+    {
+      "id": "v2.mcp-runtime-inspect",
+      "title": "Live MCP tool-description diff",
+      "version": "v2",
+      "kind": "infra",
+      "deps": [
+        "v2.clean-queue",
+        "checks.assistant-surfaces"
+      ],
+      "acceptance": [
+        "Connects each declared MCP server in an isolated throwaway session with an empty working directory and no credentials.",
+        "Dumps the live tools/list response.",
+        "Diffs every served tool description against the description in the repository source, and reports any difference as a finding.",
+        "Records what the server asks for that its stated purpose does not justify.",
+        "A server that cannot be reached is reported as unverified, never as clean."
+      ],
+      "reversibility": "two-way",
+      "surfaces": [
+        "network"
+      ],
+      "scale_tier": "100",
+      "lenses": [
+        "security"
+      ],
+      "notes": "Closes the gap v1 structurally cannot: what a server SERVES at runtime can differ from what its repo SHOWS, and no amount of static reading detects that. This is the check that matters most for connector-style plugins, which are often only a .mcp.json pointing at vendor infrastructure."
+    }
+  ]
+}

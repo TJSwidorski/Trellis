@@ -1,0 +1,128 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Trellis task graph",
+  "type": "object",
+  "required": [
+    "version",
+    "nodes"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "project": {
+      "type": "string"
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "goal",
+          "write"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9._-]+$",
+            "description": "Becomes the git branch name trellis/<id>."
+          },
+          "title": {
+            "type": "string"
+          },
+          "goal": {
+            "type": "string",
+            "description": "Three sentences max. What must exist when this is done."
+          },
+          "role": {
+            "enum": [
+              "implementer",
+              "fixer",
+              "refactorer",
+              "tester"
+            ],
+            "default": "implementer"
+          },
+          "deps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          },
+          "write": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "description": "Only paths the worker may create or modify. Must be disjoint from any node that can run concurrently."
+          },
+          "read": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [],
+            "description": "Read-only context. Keep to ~3 files; cheap models degrade with long context."
+          },
+          "tests": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [],
+            "description": "Frozen test files. Must already exist. Workers cannot modify them."
+          },
+          "gate": {
+            "type": "string",
+            "description": "Shell command that must exit 0. Scope it to this node's tests."
+          },
+          "risk": {
+            "enum": [
+              "low",
+              "audit",
+              "high"
+            ],
+            "default": "low",
+            "description": "high = hold unmerged for review and stall dependants (leaf nodes only). audit = merge and flag for reading afterwards."
+          },
+          "acceptance": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [],
+            "description": "Short labels for the KIND of work (adapter, parser, algorithm, glue, crud). How the ledger generalises across runs."
+          },
+          "mutations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [],
+            "description": "Plain-language descriptions of plausible-wrong implementations. Reintroduced into the accepted code after the node passes; the tests must catch each one."
+          },
+          "covers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [],
+            "description": "Scope bullets from the spec's 'Scope for this run' that this node satisfies. An unclaimed bullet fails validation."
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

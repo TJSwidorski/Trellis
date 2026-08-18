@@ -1,0 +1,31 @@
+{
+  "name": "trellis-kit",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Product graph in, working software out. Claude Code orchestrates, open-source models implement, the loop lives in code.",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "bin": {
+    "trellis": "./kit/bin/cli.mjs"
+  },
+  "scripts": {
+    "trellis": "node kit/bin/cli.mjs",
+    "doctor": "node kit/bin/cli.mjs doctor",
+    "validate": "node kit/bin/cli.mjs validate",
+    "verify-tests": "node kit/bin/cli.mjs verify-tests",
+    "ledger": "node kit/bin/cli.mjs ledger",
+    "run": "node kit/bin/cli.mjs run",
+    "status": "node kit/bin/cli.mjs status",
+    "test": "node kit/selftest/units.mjs && node kit/regression/run.mjs && node kit/selftest/e2e.mjs",
+    "selftest": "node kit/selftest/e2e.mjs",
+    "ingest": "node kit/bin/cli.mjs ingest",
+    "slice": "node kit/bin/cli.mjs slice",
+    "promote": "node kit/bin/cli.mjs promote",
+    "auto": "node kit/bin/cli.mjs auto",
+    "sessions": "node kit/bin/cli.mjs sessions",
+    "evolve": "node kit/bin/cli.mjs evolve",
+    "regression": "node kit/regression/run.mjs"
+  }
+}

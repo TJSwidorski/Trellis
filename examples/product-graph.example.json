@@ -1,0 +1,161 @@
+{
+  "$comment": "Authored OUTSIDE Trellis and handed in complete. Copy to .trellis/product-graph.json and edit. Run `trellis ingest` — it is deliberately unforgiving, because a plausible-looking graph that plans wrong costs far more than a hard stop.",
+
+  "schema": "trellis.product-graph/1",
+  "product": "habit-tracker",
+
+  "versions": {
+    "v1": {
+      "definition": "A single user can log a habit daily, see a streak, and keep their data across devices. Shippable and useful even if v2 is never built.",
+      "scale_target": "100"
+    },
+    "v2": {
+      "definition": "Shared habits with friends, a weekly digest, and an insights view that identifies which habits correlate with self-reported mood.",
+      "scale_target": "10000"
+    }
+  },
+
+  "invariants": [
+    "No personally identifying data in logs, error messages, or analytics events",
+    "Every timestamp is stored UTC and rendered in the user's zone at the edge",
+    "Any endpoint that mutates state is idempotent under retry"
+  ],
+
+  "non_goals": [
+    "Native mobile apps — web only in both versions",
+    "Real-time collaboration; the shared habits in v2 are eventually consistent",
+    "Custom habit scheduling beyond daily"
+  ],
+
+  "nodes": [
+    {
+      "id": "data.schema",
+      "title": "Core data model: users, habits, entries",
+      "version": "v1",
+      "kind": "data",
+      "deps": [],
+      "acceptance": [
+        "A habit belongs to exactly one user and has a stable id",
+        "An entry is unique per (habit, local calendar day)",
+        "Deleting a habit soft-deletes it and preserves its entries"
+      ],
+      "reversibility": "one-way",
+      "surfaces": ["pii"],
+      "scale_tier": "10000",
+      "lenses": ["backend"],
+      "notes": "Uniqueness on local calendar day, not UTC day. A user in UTC+13 logging at 9pm local must not collide with the next UTC day."
+    },
+    {
+      "id": "auth.session",
+      "title": "Session-based authentication",
+      "version": "v1",
+      "kind": "backend",
+      "deps": ["data.schema"],
+      "acceptance": [
+        "A valid credential pair issues a session cookie scoped to the app origin",
+        "An expired session is rejected even when the signature verifies",
+        "Logging out invalidates the session server-side, not only the cookie"
+      ],
+      "reversibility": "one-way",
+      "surfaces": ["auth", "pii"],
+      "scale_tier": "10000",
+      "lenses": ["backend", "connectors"]
+    },
+    {
+      "id": "core.streak",
+      "title": "Streak calculation",
+      "version": "v1",
+      "kind": "interface",
+      "deps": ["data.schema"],
+      "acceptance": [
+        "A streak counts consecutive local calendar days with an entry",
+        "A missed day resets the streak to zero, not to one",
+        "Today counts toward the streak only once an entry exists"
+      ],
+      "reversibility": "two-way",
+      "surfaces": ["none"],
+      "scale_tier": "1000",
+      "lenses": ["backend"],
+      "notes": "Consumed by both the API and the digest job, so this is an interface node — write the signature during slicing, before either consumer is dispatched."
+    },
+    {
+      "id": "api.entries",
+      "title": "Log and list entries",
+      "version": "v1",
+      "kind": "backend",
+      "deps": ["auth.session", "core.streak"],
+      "acceptance": [
+        "Logging the same habit twice in one local day is a no-op, not an error",
+        "Listing returns entries for the requesting user only",
+        "A request for another user's habit returns not-found, not forbidden"
+      ],
+      "reversibility": "two-way",
+      "surfaces": ["auth", "pii"],
+      "scale_tier": "1000",
+      "lenses": ["backend"]
+    },
+    {
+      "id": "ui.today",
+      "title": "Today view with habit list and streaks",
+      "version": "v1",
+      "kind": "frontend",
+      "deps": ["api.entries"],
+      "acceptance": [
+        "Every habit shows its current streak and whether today is logged",
+        "An empty habit list shows a first-run state, not a blank page",
+        "Toggling a habit is optimistic and reconciles on failure"
+      ],
+      "reversibility": "two-way",
+      "surfaces": ["none"],
+      "scale_tier": "100",
+      "lenses": ["frontend-design", "browser"]
+    },
+    {
+      "id": "ops.export",
+      "title": "User data export",
+      "version": "v2",
+      "kind": "backend",
+      "deps": ["data.schema", "auth.session"],
+      "acceptance": [
+        "A user can export all their habits and entries as JSON",
+        "The export contains no other user's data under any input"
+      ],
+      "reversibility": "two-way",
+      "surfaces": ["pii"],
+      "scale_tier": "1000",
+      "lenses": ["backend"],
+      "notes": "Every dependency is already in v1, so `trellis promote` will flag this as shippable early. Deciding to move it is still a human edit to this file."
+    },
+    {
+      "id": "social.shared-habits",
+      "title": "Habits shared between friends",
+      "version": "v2",
+      "kind": "backend",
+      "deps": ["api.entries"],
+      "acceptance": [
+        "A shared habit shows both participants' streaks",
+        "Revoking a share stops updates without deleting history"
+      ],
+      "reversibility": "one-way",
+      "surfaces": ["auth", "pii"],
+      "scale_tier": "10000",
+      "lenses": ["backend", "architecture"]
+    },
+    {
+      "id": "social.digest",
+      "title": "Weekly digest email",
+      "version": "v2",
+      "kind": "ops",
+      "deps": ["social.shared-habits", "core.streak"],
+      "acceptance": [
+        "Each user receives at most one digest per week",
+        "A failed send retries without producing a duplicate"
+      ],
+      "reversibility": "two-way",
+      "surfaces": ["pii", "network"],
+      "scale_tier": "10000",
+      "lenses": ["backend", "connectors"],
+      "notes": "Depends on v2 work, so it is not promotable however tempting it looks."
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "trellis: run",
+      "type": "shell",
+      "command": "node kit/bin/cli.mjs run",
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": {
+        "owner": "trellis",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^\\[([\\w.-]+)\\]\\s+(?:\\S+\\s+)?(EXHAUSTED|merge failed|worktree failed)(.*)$",
+          "file": 1,
+          "message": 3,
+          "severity": 2
+        }
+      }
+    },
+    {
+      "label": "trellis: run (resume)",
+      "type": "shell",
+      "command": "node kit/bin/cli.mjs run --resume",
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "trellis: retry failed",
+      "type": "shell",
+      "command": "node kit/bin/cli.mjs run --resume --retry-failed",
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "trellis: validate",
+      "type": "shell",
+      "command": "node kit/bin/cli.mjs validate",
+      "group": { "kind": "test", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "trellis: doctor",
+      "type": "shell",
+      "command": "node kit/bin/cli.mjs doctor",
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "trellis: status",
+      "type": "shell",
+      "command": "node kit/bin/cli.mjs status",
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "trellis: open report",
+      "type": "shell",
+      "command": "node -e \"const {execSync}=require('child_process');const f='.trellis/REPORT.md';execSync(process.platform==='win32'?`code ${f}`:`code ${f}`)\"",
+      "presentation": { "reveal": "never" },
+      "problemMatcher": []
+    },
+    {
+      "label": "trellis: clean worktrees",
+      "type": "shell",
+      "command": "node kit/bin/cli.mjs clean",
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    }
+  ]
+}

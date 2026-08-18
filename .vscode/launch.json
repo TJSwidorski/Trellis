@@ -1,0 +1,48 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug: runner (real models)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/kit/bin/cli.mjs",
+      "args": ["run"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"],
+      "env": { "TRELLIS_NO_COLOR": "1" }
+    },
+    {
+      "name": "Debug: runner (single node)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/kit/bin/cli.mjs",
+      "args": ["run", "--only", "${input:nodeId}", "--concurrency", "1"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Debug: validate",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/kit/bin/cli.mjs",
+      "args": ["validate"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Debug: e2e suite (no network)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/kit/selftest/e2e.mjs",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    }
+  ],
+  "inputs": [
+    { "id": "nodeId", "type": "promptString", "description": "Node id to run alone" }
+  ]
+}

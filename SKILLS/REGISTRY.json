@@ -1,0 +1,1284 @@
+{
+  "schema": "trellis.skill-registry/1",
+  "$comment": "The arsenal Trellis carries into every project. Two jobs: record where each entry came from and whether it has been audited, and decide which entries load in which session. Nothing with audit_status 'pending' or 'rejected' is ever activated — that rule is enforced in kit/lib/skills.mjs and covered by an adversarial regression check, not by convention.",
+  "$activation": {
+    "always": "loads in every session. Reserve for voice and behaviour skills that change how work is done rather than what is done.",
+    "stage": "loads only in the named session stages.",
+    "applies_to": "loads when the current slice contains a node matching any listed kind, surface, or lens. Resolved against the product graph, so a SPEC author never needs to know this catalogue exists.",
+    "manual": "loads only when named explicitly in trellis.config.json skills.manual."
+  },
+  "$cost": "Every activated skill's name and description enters the context at session start. That is the tax the gating exists to bound — but the sharper cost is selection accuracy: a model choosing among forty descriptions picks worse than one choosing among six. Measure with `trellis skills --explain` before adding to the always list.",
+  "$marketplace-trust": {
+    "the-wrong-inference": "'It is in anthropics/claude-plugins-official, therefore Anthropic vetted it.' That does not follow, and this registry exists partly to stop a future session deriving it again.",
+    "three-source-classes": {
+      "./plugins/<name>": "Anthropic-authored and vendored in Anthropic's own repo. Trust basis is AUTHORSHIP. All 25 plugin entries below are this class (19 here, 6 from the anthropics/skills repo).",
+      "external_plugins/<name>": "Third-party, vendored in Anthropic's repo. Trust basis is review, not authorship.",
+      "remote git-subdir or url": "Third-party code fetched from someone else's repository entirely. Nothing is vendored; Anthropic hosts only the pointer."
+    },
+    "what-anthropic-claims": "Automated safety screening plus validation checks on every submission, and 'both initial and ongoing reviews'. An 'Anthropic Verified' badge means it additionally passed human quality-and-safety review. Standard listing does NOT imply Verified.",
+    "what-anthropic-disclaims": "The marketplace README states Anthropic 'does not control what MCP servers, files, or other software are included in plugins and cannot verify that they will work as intended or that they won't change.'",
+    "the-structural-limit": "11 of 15 external_plugins are 2-3 files: a .mcp.json plus a README. The behaviour lives on a remote server fetched at runtime, so there is barely any code in the repo to screen, and no point-in-time review can bind what that server returns tomorrow. This is the Phase 3 gap in lenses/repo-audit.md — runtime tool descriptions can differ from source — which is why connectors need a live tools/list diff rather than a static read.",
+    "verified-is-not-recorded-locally": "marketplace.json carries no 'verified' field. Badge status is only visible on the claude.com/plugins page for each plugin, so it must be checked per-plugin on the web and recorded here by hand.",
+    "policy": "Only ./plugins/<name> entries qualify for trusted-provenance. Everything else is pending until audited, and an unverified third-party plugin is rejected outright."
+  },
+  "entries": [
+    {
+      "name": "42crunch-api-security-testing",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "repo": "42Crunch-AI/claude-plugins",
+        "path": "plugins/api-security-testing",
+        "ref": "v1.5.5",
+        "sha": "30287f5e3f122a646d1ac5ca3ab96e130c52a3ad"
+      },
+      "audit_status": "rejected",
+      "audit_date": "2026-08-15",
+      "note": "Listed in the official marketplace but NOT Anthropic Verified — the directory page shows 'Made by 42Crunch' with no badge. Third-party code fetched from 42Crunch-AI/claude-plugins; Anthropic hosts only the pointer. Recorded as rejected rather than deleted so this is not re-derived: presence in the official marketplace is not verification. Disabled in the user's settings.json on 2026-08-15. Pinned to a full SHA, which is the one thing in its favour — revisit only if it earns the Verified badge."
+    },
+    {
+      "name": "agentforce-adlc",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "repo": "SalesforceAIResearch/agentforce-adlc",
+        "sha": "d16d14ac7f817336e21bf9392cf51b6cac6194d8"
+      },
+      "audit_status": "rejected",
+      "audit_date": "2026-08-15",
+      "note": "Not Anthropic Verified, and the directory page lists NO publisher at all — the 'Made by' link is empty. Missing attribution is a provenance failure on its own terms, independent of the badge: lenses/repo-audit.md Phase 0 asks who the maintainer is, and here there is no answer. Third-party code from SalesforceAIResearch. Disabled in the user's settings.json on 2026-08-15."
+    },
+    {
+      "name": "trellis-plan",
+      "kind": "skill",
+      "source": {
+        "local": "kit"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Ships with the kit.",
+      "activation": {
+        "stage": [
+          "02_slice"
+        ]
+      }
+    },
+    {
+      "name": "trellis-review",
+      "kind": "skill",
+      "source": {
+        "local": "kit"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Ships with the kit.",
+      "activation": {
+        "stage": [
+          "02_slice"
+        ]
+      }
+    },
+    {
+      "name": "trellis-cases",
+      "kind": "skill",
+      "source": {
+        "local": "kit"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Ships with the kit.",
+      "activation": {
+        "stage": [
+          "03_cases"
+        ]
+      }
+    },
+    {
+      "name": "trellis-tests",
+      "kind": "skill",
+      "source": {
+        "local": "kit"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Ships with the kit.",
+      "activation": {
+        "stage": [
+          "04_tests"
+        ]
+      }
+    },
+    {
+      "name": "trellis-report",
+      "kind": "skill",
+      "source": {
+        "local": "kit"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Ships with the kit.",
+      "activation": {
+        "stage": [
+          "06_triage"
+        ]
+      }
+    },
+    {
+      "name": "graphify",
+      "kind": "skill",
+      "source": {
+        "local": "author"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Authored by the repo owner. Frontmatter name was 'graphify-windows' against a 'graphify' directory; normalised on import so the trigger resolves.",
+      "activation": {
+        "stage": [
+          "01_ingest",
+          "02_slice"
+        ]
+      }
+    },
+    {
+      "name": "quant-bias-audit",
+      "kind": "skill",
+      "source": {
+        "local": "author"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Authored by the repo owner. Shipped with no YAML frontmatter, so it could not trigger; a name and description were added on import.",
+      "$scoping": "Lens only. It was briefly scoped to kind 'data' as well, which fired it on a security scanner's binary-inventory node — a data node has nothing to do with backtest bias. Kind is too coarse a signal for a domain-specific skill.",
+      "activation": {
+        "applies_to": {
+          "lenses": [
+            "quant"
+          ]
+        }
+      }
+    },
+    {
+      "name": "quant-phase-status",
+      "kind": "skill",
+      "source": {
+        "local": "author"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Authored by the repo owner. Frontmatter added on import, as above.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "repo-audit",
+      "kind": "lens",
+      "source": {
+        "local": "author"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Layer 3 reference, never auto-loaded. Doubles as the spec source for the scanner and the admission policy for everything below.",
+      "activation": {
+        "applies_to": {
+          "lenses": [
+            "security"
+          ],
+          "surfaces": [
+            "network",
+            "secrets",
+            "filesystem"
+          ]
+        }
+      }
+    },
+    {
+      "name": "claude-api",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "anthropic-agent-skills",
+        "plugin": "claude-api"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Installed at user scope from the Anthropic marketplace; referenced, not vendored, so it updates through the plugin system.",
+      "activation": {
+        "applies_to": {
+          "lenses": [
+            "llm"
+          ]
+        }
+      }
+    },
+    {
+      "name": "frontend-design",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "anthropic-agent-skills",
+        "plugin": "frontend-design"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "activation": {
+        "applies_to": {
+          "kinds": [
+            "frontend"
+          ]
+        }
+      }
+    },
+    {
+      "name": "theme-factory",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "anthropic-agent-skills",
+        "plugin": "theme-factory"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "activation": {
+        "applies_to": {
+          "kinds": [
+            "frontend"
+          ]
+        }
+      }
+    },
+    {
+      "name": "webapp-testing",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "anthropic-agent-skills",
+        "plugin": "webapp-testing"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "activation": {
+        "stage": [
+          "03_cases",
+          "04_tests"
+        ],
+        "applies_to": {
+          "kinds": [
+            "frontend"
+          ]
+        }
+      }
+    },
+    {
+      "name": "web-artifacts-builder",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "anthropic-agent-skills",
+        "plugin": "web-artifacts-builder"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "activation": {
+        "applies_to": {
+          "kinds": [
+            "frontend"
+          ]
+        }
+      }
+    },
+    {
+      "name": "internal-comms",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "anthropic-agent-skills",
+        "plugin": "internal-comms"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "$group": "anthropics/claude-plugins-official — all verified present in that repo's plugins/ directory, NOT external_plugins/. That distinction is the whole basis for trusted-provenance here: the marketplace also distributes 250+ vendor-submitted plugins that Anthropic hosts but did not write, and those would need the full audit path.",
+      "$unpinned": "These record no gitCommitSha in installed_plugins.json, so they are NOT pinned to an immutable commit — the repo-audit lens Phase 5 asks for a full SHA. Provenance is trusted; version is not. Re-check after any marketplace update.",
+      "name": "code-review",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "code-review",
+        "repo": "anthropics/claude-plugins-official",
+        "path": "plugins/code-review"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Multi-agent PR review with confidence scoring. Strong fit for 06_triage, where the orchestrator reads high-risk and exhausted nodes. CANDIDATE for a post-gate review hook on worker output — see references/worker-trust.md. Adopt only after measuring what it finds on nodes the gate already passed; a review pass on every node attacks the orchestrator-tokens-per-merged-node metric directly.",
+      "activation": {
+        "stage": [
+          "06_triage"
+        ]
+      }
+    },
+    {
+      "name": "pr-review-toolkit",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "pr-review-toolkit",
+        "repo": "anthropics/claude-plugins-official",
+        "path": "plugins/pr-review-toolkit"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Review agents for tests, error handling, and type design.",
+      "activation": {
+        "stage": [
+          "06_triage"
+        ]
+      }
+    },
+    {
+      "name": "claude-security",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "claude-security",
+        "repo": "anthropics/claude-plugins-official",
+        "path": "plugins/claude-security"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "In-session vulnerability scanning. Directly relevant to the scanner build and to any node touching a consequential surface.",
+      "activation": {
+        "applies_to": {
+          "surfaces": [
+            "auth",
+            "secrets",
+            "payments",
+            "pii",
+            "network"
+          ],
+          "lenses": [
+            "security"
+          ]
+        }
+      }
+    },
+    {
+      "name": "code-simplifier",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "code-simplifier",
+        "repo": "anthropics/claude-plugins-official",
+        "path": "plugins/code-simplifier"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "activation": {
+        "stage": [
+          "06_triage"
+        ]
+      }
+    },
+    {
+      "name": "feature-dev",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "feature-dev",
+        "repo": "anthropics/claude-plugins-official",
+        "path": "plugins/feature-dev"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Exploration and architecture-design agents. Scoped to the planning stages; it must not fire during test writing, where the contract is already fixed.",
+      "activation": {
+        "stage": [
+          "01_ingest",
+          "02_slice"
+        ]
+      }
+    },
+    {
+      "name": "skill-creator",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "skill-creator",
+        "repo": "anthropics/claude-plugins-official",
+        "path": "plugins/skill-creator"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Manual only, deliberately. This is the tool that would let Trellis author its own skills — see SKILLS/README.md. A self-authored skill is an instruction file entering the orchestrator's own context, so it must stay a human-initiated act until skills Trellis writes are reclassified load-bearing rather than advisory.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "claude-md-management",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "claude-md-management",
+        "repo": "anthropics/claude-plugins-official",
+        "path": "plugins/claude-md-management"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Manual only. CLAUDE.md is Layer 0 and is classified advisory by references/EVOLUTION.md, so a tool that rewrites it automatically is exactly the self-modification path the evolve guardrails exist to slow down.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "hookify",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "hookify",
+        "repo": "anthropics/claude-plugins-official",
+        "path": "plugins/hookify"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Manual only. Hooks are shell commands that fire without being asked; .claude/hooks/ is in the PROTECTED set precisely so they are never generated unattended.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "commit-commands",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "commit-commands",
+        "repo": "anthropics/claude-plugins-official",
+        "path": "plugins/commit-commands"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Manual only. The runner owns branches, worktrees, and merges; a session committing on its own would fight it.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "code-modernization",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "code-modernization",
+        "repo": "anthropics/claude-plugins-official",
+        "path": "plugins/code-modernization"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "activation": {
+        "applies_to": {
+          "lenses": [
+            "legacy",
+            "modernization"
+          ]
+        }
+      }
+    },
+    {
+      "name": "mcp-server-dev",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "mcp-server-dev",
+        "repo": "anthropics/claude-plugins-official",
+        "path": "plugins/mcp-server-dev"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "activation": {
+        "applies_to": {
+          "lenses": [
+            "mcp",
+            "connectors"
+          ]
+        }
+      }
+    },
+    {
+      "name": "agent-sdk-dev",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "agent-sdk-dev",
+        "repo": "anthropics/claude-plugins-official",
+        "path": "plugins/agent-sdk-dev"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "activation": {
+        "applies_to": {
+          "lenses": [
+            "agents",
+            "llm"
+          ]
+        }
+      }
+    },
+    {
+      "name": "plugin-dev",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "plugin-dev",
+        "repo": "anthropics/claude-plugins-official",
+        "path": "plugins/plugin-dev"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "activation": {
+        "applies_to": {
+          "lenses": [
+            "plugins"
+          ]
+        }
+      }
+    },
+    {
+      "name": "playground",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "playground",
+        "repo": "anthropics/claude-plugins-official",
+        "path": "plugins/playground"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "activation": {
+        "applies_to": {
+          "kinds": [
+            "frontend"
+          ]
+        }
+      }
+    },
+    {
+      "name": "project-artifact",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "project-artifact",
+        "repo": "anthropics/claude-plugins-official",
+        "path": "plugins/project-artifact"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Living project status page. Useful for reporting A/B results; not part of a build.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "claude-code-setup",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "claude-code-setup",
+        "repo": "anthropics/claude-plugins-official",
+        "path": "plugins/claude-code-setup"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Manual only — it recommends hooks and MCP servers, which are exactly the surfaces that must not be configured unattended.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "mcp-tunnels",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "mcp-tunnels",
+        "repo": "anthropics/claude-plugins-official",
+        "path": "plugins/mcp-tunnels"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Manual only. Opens a network path to a private MCP server; never something a build stage should do on its own.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "ralph-loop",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "ralph-loop",
+        "repo": "anthropics/claude-plugins-official",
+        "path": "plugins/ralph-loop"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Manual only, and it must never be enabled during an A/B run: a self-referential iteration loop inside a session would change the very thing being measured.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "cwc-makers",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "cwc-makers",
+        "repo": "anthropics/claude-plugins-official",
+        "path": "plugins/cwc-makers"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Hardware onboarding for a Cardputer. No relevance to a build; manual only.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "impeccable",
+      "kind": "skill",
+      "source": {
+        "url": "https://github.com/pbakaus/impeccable"
+      },
+      "audit_status": "pending",
+      "activation": {
+        "applies_to": {
+          "kinds": [
+            "frontend"
+          ]
+        }
+      }
+    },
+    {
+      "name": "taste-skill",
+      "kind": "skill",
+      "source": {
+        "url": "https://github.com/Leonxinx/taste-skill"
+      },
+      "audit_status": "pending",
+      "activation": {
+        "applies_to": {
+          "kinds": [
+            "frontend"
+          ]
+        }
+      }
+    },
+    {
+      "name": "awesome-design-md",
+      "kind": "skill",
+      "source": {
+        "url": "https://github.com/VoltAgent/awesome-design-md"
+      },
+      "audit_status": "pending",
+      "activation": {
+        "applies_to": {
+          "kinds": [
+            "frontend"
+          ]
+        }
+      }
+    },
+    {
+      "name": "design-md",
+      "kind": "skill",
+      "source": {
+        "url": "https://github.com/google-labs-code/design.md"
+      },
+      "audit_status": "pending",
+      "activation": {
+        "applies_to": {
+          "kinds": [
+            "frontend"
+          ]
+        }
+      }
+    },
+    {
+      "name": "open-design",
+      "kind": "skill",
+      "source": {
+        "url": "https://github.com/nexu-io/open-design"
+      },
+      "audit_status": "pending",
+      "activation": {
+        "applies_to": {
+          "kinds": [
+            "frontend"
+          ]
+        }
+      }
+    },
+    {
+      "name": "html-anything",
+      "kind": "skill",
+      "source": {
+        "url": "https://github.com/nexu-io/html-anything"
+      },
+      "audit_status": "pending",
+      "activation": {
+        "applies_to": {
+          "kinds": [
+            "frontend"
+          ]
+        }
+      }
+    },
+    {
+      "name": "astryx",
+      "kind": "skill",
+      "source": {
+        "url": "https://github.com/facebook/astryx"
+      },
+      "audit_status": "pending",
+      "activation": {
+        "applies_to": {
+          "kinds": [
+            "frontend"
+          ]
+        }
+      }
+    },
+    {
+      "name": "huashu-design",
+      "kind": "skill",
+      "source": {
+        "url": "https://github.com/alchaincyf/huashu-design"
+      },
+      "audit_status": "pending",
+      "activation": {
+        "applies_to": {
+          "kinds": [
+            "frontend"
+          ]
+        }
+      }
+    },
+    {
+      "name": "oil-motion",
+      "kind": "skill",
+      "source": {
+        "url": "https://github.com/oi-oil/oil-motion"
+      },
+      "audit_status": "pending",
+      "activation": {
+        "applies_to": {
+          "kinds": [
+            "frontend"
+          ]
+        }
+      }
+    },
+    {
+      "name": "thinking-orbs",
+      "kind": "skill",
+      "source": {
+        "url": "https://github.com/Jakubantalik/thinking-orbs"
+      },
+      "audit_status": "pending",
+      "activation": {
+        "applies_to": {
+          "kinds": [
+            "frontend"
+          ]
+        }
+      }
+    },
+    {
+      "name": "tailwindcss",
+      "kind": "lens",
+      "source": {
+        "url": "https://tailwindcss.com/docs"
+      },
+      "audit_status": "pending",
+      "activation": {
+        "applies_to": {
+          "kinds": [
+            "frontend"
+          ]
+        }
+      }
+    },
+    {
+      "name": "gstack",
+      "kind": "skill",
+      "source": {
+        "url": "https://github.com/garrytan/gstack"
+      },
+      "audit_status": "pending",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "pm-skills",
+      "kind": "skill",
+      "source": {
+        "url": "https://github.com/phuryn/pm-skills"
+      },
+      "audit_status": "pending",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "marketingskills",
+      "kind": "skill",
+      "source": {
+        "url": "https://github.com/coreyhaines31/marketingskills"
+      },
+      "audit_status": "pending",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "caveman",
+      "kind": "skill",
+      "source": {
+        "url": "https://github.com/JuliusBrussee/caveman"
+      },
+      "audit_status": "pending",
+      "note": "Voice skill — intended for the always list once audited.",
+      "activation": {
+        "always": true
+      }
+    },
+    {
+      "name": "ponytail",
+      "kind": "skill",
+      "source": {
+        "url": "https://github.com/DietrichGebert/ponytail"
+      },
+      "audit_status": "pending",
+      "note": "Voice skill — intended for the always list once audited.",
+      "activation": {
+        "always": true
+      }
+    },
+    {
+      "name": "token-savior",
+      "kind": "skill",
+      "source": {
+        "url": "https://github.com/Mibayy/token-savior"
+      },
+      "audit_status": "pending",
+      "note": "Voice skill — intended for the always list once audited.",
+      "activation": {
+        "always": true
+      }
+    },
+    {
+      "name": "21st-dev",
+      "kind": "connector",
+      "source": {
+        "url": "https://21st.dev"
+      },
+      "audit_status": "pending",
+      "note": "MCP connector. Static scanning cannot vet this: per the repo-audit lens Phase 3, tool descriptions served at runtime can differ from the repo. Needs a live tools/list diff and sandboxed observation.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "shadcn-ui",
+      "kind": "connector",
+      "source": {
+        "url": "https://github.com/shadcn-ui/ui"
+      },
+      "audit_status": "pending",
+      "note": "MCP connector. Safer used as vendored copy-paste components than as a live connector.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "shadcn-improve",
+      "kind": "connector",
+      "source": {
+        "url": "https://github.com/shadcn/improve"
+      },
+      "audit_status": "pending",
+      "note": "MCP connector — same caveat as shadcn-ui.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "figma",
+      "kind": "connector",
+      "source": {
+        "url": "https://www.figma.com/developers"
+      },
+      "audit_status": "pending",
+      "note": "MCP connector. Needs the manual Phase 3/4 path.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "adobe-for-creativity",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "adobe-for-creativity",
+        "author": "Adobe"
+      },
+      "audit_status": "audited",
+      "audit_date": "2026-08-15",
+      "note": "THIRD-PARTY but Anthropic Verified — passed additional human quality-and-safety review. Creative asset editing. Verified badge confirmed on the directory page despite third-party authorship. Admitted on the badge, not on authorship.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "apollo",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "apollo",
+        "author": "Apollo.io"
+      },
+      "audit_status": "audited",
+      "audit_date": "2026-08-15",
+      "note": "THIRD-PARTY but Anthropic Verified — passed additional human quality-and-safety review. Sales prospecting. Verified badge confirmed. Admitted on the badge, not on authorship.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "monday-crm",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "monday-crm",
+        "author": "monday.com"
+      },
+      "audit_status": "audited",
+      "audit_date": "2026-08-15",
+      "note": "THIRD-PARTY but Anthropic Verified — passed additional human quality-and-safety review. CRM. Verified badge confirmed (note: the separate monday.com plugin was NOT confirmed verified). Admitted on the badge, not on authorship.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "design",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "design",
+        "author": "Anthropic"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Design skills. Anthropic-authored. Badge not individually confirmed on the directory page — authorship is the trust basis here.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "marketing",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "marketing",
+        "author": "Anthropic"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Marketing skills. Anthropic-authored. Badge not individually confirmed on the directory page — authorship is the trust basis here.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "engineering",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "engineering",
+        "author": "Anthropic"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Engineering skills. Anthropic-authored. Badge not individually confirmed on the directory page — authorship is the trust basis here.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "data",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "data",
+        "author": "Anthropic"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Data analysis skills. Anthropic-authored. Badge not individually confirmed on the directory page — authorship is the trust basis here.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "pdf-viewer",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "pdf-viewer",
+        "author": "Anthropic"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Interactive PDF viewer. Anthropic-authored. Badge not individually confirmed on the directory page — authorship is the trust basis here.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "product-management",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "product-management",
+        "author": "Anthropic"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Product management skills. Anthropic-authored. Badge not individually confirmed on the directory page — authorship is the trust basis here.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "productivity",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "productivity",
+        "author": "Anthropic"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Productivity skills. Anthropic-authored. Badge not individually confirmed on the directory page — authorship is the trust basis here.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "legal",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "legal",
+        "author": "Anthropic"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Legal skills. Anthropic-authored. Badge not individually confirmed on the directory page — authorship is the trust basis here.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "ai-governance-legal",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "ai-governance-legal",
+        "author": "Anthropic"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "AI governance legal skills. Anthropic-authored. Badge not individually confirmed on the directory page — authorship is the trust basis here.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "product-legal",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "product-legal",
+        "author": "Anthropic"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Product legal skills. Anthropic-authored. Badge not individually confirmed on the directory page — authorship is the trust basis here.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "ip-legal",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "ip-legal",
+        "author": "Anthropic"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "IP legal skills. Anthropic-authored. Badge not individually confirmed on the directory page — authorship is the trust basis here.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "legal-builder-hub",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "legal-builder-hub",
+        "author": "Anthropic"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Legal skill registry hub. Anthropic-authored. Badge not individually confirmed on the directory page — authorship is the trust basis here.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "financial-analysis",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "financial-analysis",
+        "author": "Anthropic FSI"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Anthropic FSI vertical. Finance domain; irrelevant to a build pipeline, so manual only.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "market-researcher",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "market-researcher",
+        "author": "Anthropic FSI"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Anthropic FSI vertical. Finance domain; irrelevant to a build pipeline, so manual only.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "wealth-management",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "wealth-management",
+        "author": "Anthropic FSI"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Anthropic FSI vertical. Finance domain; irrelevant to a build pipeline, so manual only.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "operations",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "operations",
+        "author": "Anthropic FSI"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Anthropic FSI vertical. Finance domain; irrelevant to a build pipeline, so manual only.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "earnings-reviewer",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "earnings-reviewer",
+        "author": "Anthropic FSI"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Anthropic FSI vertical. Finance domain; irrelevant to a build pipeline, so manual only.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "private-equity",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "private-equity",
+        "author": "Anthropic FSI"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Anthropic FSI vertical. Finance domain; irrelevant to a build pipeline, so manual only.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "kyc-screener",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "kyc-screener",
+        "author": "Anthropic FSI"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Anthropic FSI vertical. Finance domain; irrelevant to a build pipeline, so manual only.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "model-builder",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "model-builder",
+        "author": "Anthropic FSI"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Anthropic FSI vertical. Finance domain; irrelevant to a build pipeline, so manual only.",
+      "activation": {
+        "manual": true
+      }
+    },
+    {
+      "name": "equity-research",
+      "kind": "plugin",
+      "source": {
+        "marketplace": "claude-plugins-official",
+        "plugin": "equity-research",
+        "author": "Anthropic FSI"
+      },
+      "audit_status": "trusted-provenance",
+      "audit_date": "2026-08-15",
+      "note": "Anthropic FSI vertical. Finance domain; irrelevant to a build pipeline, so manual only.",
+      "activation": {
+        "manual": true
+      }
+    }
+  ]
+}

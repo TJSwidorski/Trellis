@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "trellis-broker": {
+      "command": "node",
+      "args": ["kit/mcp/server.mjs"],
+      "env": {}
+    }
+  }
+}

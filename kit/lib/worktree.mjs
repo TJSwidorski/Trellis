@@ -1,0 +1,157 @@
+import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import { norm } from "./paths.mjs";
+
+export function git(cwd, args, opts = {}) {
+  const r = spawnSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    shell: false,
+    maxBuffer: 32 * 1024 * 1024,
+    ...opts,
+  });
+  return {
+    code: r.status ?? -1,
+    out: (r.stdout || "").trim(),
+    err: (r.stderr || "").trim(),
+    ok: r.status === 0,
+  };
+}
+
+export function gitOrThrow(cwd, args) {
+  const r = git(cwd, args);
+  if (!r.ok) throw new Error(`git ${args.join(" ")} failed:\n${r.err || r.out}`);
+  return r.out;
+}
+
+export function repoRoot(from = process.cwd()) {
+  const r = git(from, ["rev-parse", "--show-toplevel"]);
+  if (!r.ok) return null;
+  return path.resolve(r.out);
+}
+
+export function isClean(root) {
+  return git(root, ["status", "--porcelain"]).out === "";
+}
+
+export function currentBranch(root) {
+  return git(root, ["rev-parse", "--abbrev-ref", "HEAD"]).out;
+}
+
+export function branchName(nodeId) {
+  return `trellis/${nodeId}`;
+}
+
+/**
+ * Every change in the worktree, including untracked files.
+ * `git diff --name-only HEAD` misses untracked files entirely — a worker could
+ * add a whole new module and the gate would never see it. Porcelain does not.
+ */
+export function changedPaths(wt) {
+  const out = git(wt, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]).out;
+  if (!out) return [];
+  const parts = out.split("\0").filter(Boolean);
+  const files = [];
+  for (let i = 0; i < parts.length; i++) {
+    const entry = parts[i];
+    const status = entry.slice(0, 2);
+    let file = entry.slice(3);
+    // Renames/copies emit the source path as the next NUL-separated record.
+    if (status[0] === "R" || status[0] === "C") {
+      const src = parts[++i];
+      if (src) files.push(norm(src));
+    }
+    if (file) files.push(norm(file));
+  }
+  return [...new Set(files)];
+}
+
+export function createWorktree(root, cfg, nodeId) {
+  const dir = path.join(root, cfg.paths.worktrees, nodeId);
+  const branch = branchName(nodeId);
+
+  removeWorktree(root, cfg, nodeId, { quiet: true });
+
+  fs.mkdirSync(path.join(root, cfg.paths.worktrees), { recursive: true });
+  const r = git(root, ["worktree", "add", "-B", branch, dir, cfg.baseBranch]);
+  if (!r.ok) throw new Error(`Could not create worktree for ${nodeId}:\n${r.err}`);
+  return { dir, branch };
+}
+
+export function removeWorktree(root, cfg, nodeId, { quiet = false } = {}) {
+  const dir = path.join(root, cfg.paths.worktrees, nodeId);
+  const r = git(root, ["worktree", "remove", "--force", dir]);
+  if (!r.ok && !quiet && fs.existsSync(dir)) {
+    fs.rmSync(dir, { recursive: true, force: true });
+    git(root, ["worktree", "prune"]);
+  }
+  return r.ok;
+}
+
+export function commitWorktree(wt, message) {
+  git(wt, ["add", "-A"]);
+  const r = git(wt, ["commit", "-m", message, "--no-verify"]);
+  return r.ok || /nothing to commit/i.test(r.out + r.err);
+}
+
+/** Revert specific paths in the worktree back to their committed state. */
+export function revertPaths(wt, paths) {
+  if (!paths.length) return;
+  git(wt, ["checkout", "HEAD", "--", ...paths]);
+  for (const p of paths) {
+    // checkout won't remove an untracked file the worker invented
+    const full = path.join(wt, p);
+    const tracked = git(wt, ["ls-files", "--error-unmatch", p]).ok;
+    if (!tracked && fs.existsSync(full)) fs.rmSync(full, { force: true });
+  }
+}
+
+/** Merge a node branch into the base branch. Returns { ok, conflict, message }. */
+export function mergeNode(root, cfg, nodeId) {
+  const branch = branchName(nodeId);
+  const head = currentBranch(root);
+  if (head !== cfg.baseBranch) {
+    return { ok: false, conflict: false, message: `Repo is on "${head}", expected "${cfg.baseBranch}".` };
+  }
+  const r = git(root, ["merge", "--no-ff", "-m", `trellis: merge ${nodeId}`, branch]);
+  if (r.ok) return { ok: true, conflict: false, message: r.out };
+  const conflicted = git(root, ["diff", "--name-only", "--diff-filter=U"]).out;
+  git(root, ["merge", "--abort"]);
+  return {
+    ok: false,
+    conflict: Boolean(conflicted),
+    message: conflicted ? `Merge conflict in:\n${conflicted}` : r.err || r.out,
+  };
+}
+
+// ---------- VS Code multi-root workspace sync ----------
+
+const WS_MARKER = "trellis";
+
+export function syncWorkspaceFile(root, cfg, activeNodeIds) {
+  const wsPath = path.join(root, "trellis.code-workspace");
+  let ws = { folders: [], settings: {} };
+  if (fs.existsSync(wsPath)) {
+    try { ws = JSON.parse(fs.readFileSync(wsPath, "utf8")); } catch { /* rebuild */ }
+  }
+  const keep = (ws.folders || []).filter((f) => !f[WS_MARKER]);
+  if (!keep.some((f) => f.path === ".")) {
+    keep.unshift({ path: ".", name: "◆ orchestrator" });
+  }
+  const added = activeNodeIds.map((id) => ({
+    path: `${cfg.paths.worktrees}/${id}`,
+    name: `↳ ${id}`,
+    [WS_MARKER]: true,
+  }));
+  ws.folders = [...keep, ...added];
+  ws.settings = {
+    ...(ws.settings || {}),
+    "files.exclude": {
+      ...((ws.settings || {})["files.exclude"] || {}),
+      [`${cfg.paths.worktrees}/`]: true,
+    },
+  };
+  fs.writeFileSync(wsPath, JSON.stringify(ws, null, 2) + "\n");
+  return wsPath;
+}

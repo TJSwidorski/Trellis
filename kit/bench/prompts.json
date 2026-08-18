@@ -1,0 +1,72 @@
+{
+  "schema": "trellis.bench-prompts/1",
+  "$framing": "REALISTIC USE, not a matched contest. Each arm is prompted the way it would actually be used, because the question being answered is 'which should I reach for on Monday', not 'which is better with the advantages equalised'. Two consequences are accepted deliberately and must be stated in the report rather than hidden: Arm B receives a hand-authored product graph that Arm A does not, and the Opus tokens spent authoring that graph are not booked to either arm.",
+  "$fairness-rule": "Arm A's guardrails may forbid BEHAVIOUR we do not want. They may not prescribe METHOD. 'Do not leave stubs' is fair — Trellis's gate enforces the same thing mechanically, so stating it for Arm A removes an accidental handicap. 'Write the tests before the implementation' would be unfair: that is Trellis's method, and handing it to Arm A means measuring the method twice instead of comparing two systems.",
+  "$edit-me": "Change these prompts here, not in run.mjs. They are the experiment's independent variable. Any change invalidates comparison with earlier runs — bump `revision` when you edit.",
+  "revision": 2,
+  "armA": {
+    "label": "A (plain Claude Code)",
+    "setup": "Empty git repo containing only SPEC.md. No Trellis assets, no product graph.",
+    "sessions": 1,
+    "prompt": "Use the attached spec document (SPEC.md) to build this project.\n\nConstraints:\n- Work autonomously to completion. Do not stop to ask clarifying questions — make a reasonable decision, note it, and keep going.\n- Do not leave stubs, placeholders, TODOs, or `pass`/`return null` bodies standing in for real implementations. Every function you declare must actually do its job.\n- Do not modify SPEC.md.\n- Do not narrow the scope. If you cannot finish something, implement everything else in full and say plainly at the end what you left out and why.\n- Respect the \"Explicitly not in scope\" section — do not build those.\n- Write tests for what you build.",
+    "$why-these-guardrails": [
+      "'Work autonomously' — the run is headless; a question would just hang the session. Arm B's stages are equally autonomous.",
+      "'No stubs' — Trellis enforces this mechanically via verify-tests, which proves each gate rejects a null-returning stub. Without saying it, Arm A is handicapped by a rule Arm B gets for free from its machinery.",
+      "'Do not modify SPEC.md' — the spec is the shared control. Arm B literally cannot edit it mid-run; sessions are cleared between stages.",
+      "'Do not narrow scope' — prevents the cheapest way to look finished, which the held-out suite would catch anyway, but the failure is more legible when it was forbidden.",
+      "'Write tests for what you build' — Arm A is otherwise scored by a suite it never sees, having been given no reason to test at all. This is not method-leakage: it says to test, not what to test or when."
+    ]
+  },
+  "armB": {
+    "label": "B (Trellis)",
+    "setup": "Git repo with Trellis installed via setup.mjs, the same SPEC.md, and the product graph at .trellis/product-graph.json.",
+    "sessions": 5,
+    "$note": "These are verbatim the prompts kit/lib/driver.mjs already uses. They are terse by design: the stage contract on disk carries the instructions, so the prompt only has to route the session to it. That routing IS the product — keeping orchestrator context small is the thing under test — so paraphrasing them here would measure something other than Trellis.",
+    "stages": [
+      {
+        "id": "01_ingest",
+        "prompt": "Read sessions/01_ingest/CONTEXT.md and do exactly what it says. Nothing else."
+      },
+      {
+        "id": "02_slice",
+        "prompt": "Read sessions/02_slice/CONTEXT.md and do exactly what it says. Nothing else."
+      },
+      {
+        "id": "03_cases",
+        "prompt": "Read sessions/03_cases/CONTEXT.md and do exactly what it says. Nothing else."
+      },
+      {
+        "id": "04_tests",
+        "prompt": "Read sessions/04_tests/CONTEXT.md and do exactly what it says. Nothing else."
+      },
+      {
+        "id": "05_build",
+        "prompt": null,
+        "runner": true,
+        "$note": "No model. kit/lib/runner.mjs dispatches to OpenRouter workers in isolated worktrees. Zero orchestrator tokens — the central claim under test."
+      },
+      {
+        "id": "06_triage",
+        "prompt": "Read sessions/06_triage/CONTEXT.md and do exactly what it says. Nothing else."
+      }
+    ]
+  },
+  "scoring": {
+    "$rule": "Both arms are scored by a held-out acceptance suite that NEITHER arm can see, authored from SPEC.md before either arm runs and kept outside both working repos.",
+    "$why": "Trellis writes its own tests and merges nodes when they pass. Scored on those, it wins by construction and the result carries no information. The gap between Arm B's own pass rate and its held-out pass rate is the single most informative number the experiment produces.",
+    "heldOutSuitePath": "C:/Users/tswid/PersonalPrograms/trellis-heldout/suite",
+    "invoke": "From the held-out suite directory: SCAN_CMD=\"node <arm-repo>/bin/scan.mjs\" npm test",
+    "calibration": {
+      "noImplementation": {
+        "tests": 188,
+        "pass": 1,
+        "note": "Only the meta-test that grades the fixtures. Any other pass here is vacuous."
+      },
+      "contractOnlyMock": {
+        "tests": 188,
+        "pass": 33,
+        "note": "Plumbing satisfied, every detection test failing. Establishes that the suite discriminates rather than failing unconditionally."
+      }
+    }
+  }
+}

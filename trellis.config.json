@@ -1,0 +1,134 @@
+{
+  "$comment": "Edit this file, not the code. Run `npm run doctor` after changing tiers to verify every model slug resolves against the live provider.",
+
+  "project": "unnamed-project",
+  "baseBranch": "main",
+  "specPath": null,
+
+  "concurrency": 3,
+
+  "requiredEnv": [],
+  "$comment_requiredEnv": "Environment the PROJECT needs, not what Trellis needs. Checked by `trellis doctor` and by setup --probe, so a missing key surfaces before a run instead of at node 40. Entries are either \"NAME\" or { \"name\": \"NAME\", \"why\": \"what it is for\" }. Example: [{ \"name\": \"GITHUB_TOKEN\", \"why\": \"read-only, no scopes — never a PAT with repo scope\" }]",
+
+  "budget": {
+    "$comment": "Run-level ceilings. Null disables one. On breach the runner stops LAUNCHING, lets in-flight nodes finish, and leaves the rest for --resume.",
+    "maxTotalAttempts": 120,
+    "maxWorkerTokens": 3000000,
+    "maxWallClockMs": 5400000,
+    "maxCostUsd": 5.0
+  },
+
+  "routing": {
+    "$comment": "Ledger-driven tier selection. Inert until minObservations of a tag/tier pair exist, then skips leading tiers that historically fail it.",
+    "enabled": true,
+    "minObservations": 5,
+    "minSuccessRate": 0.15
+  },
+
+  "verify": {
+    "$comment": "mutationsOnPass runs each node's declared mutations against the accepted code. onSurvivor: 'warn' merges and flags; 'hold' keeps it unmerged.",
+    "mutationsOnPass": true,
+    "onSurvivor": "warn"
+  },
+
+  "driver": {
+    "$comment": "Autonomous session chaining. OFF by default — read sessions/README.md before enabling. There is no API for remaining subscription quota, so the driver never predicts whether the next session fits; it runs, verifies on disk, and backs off. Set ANTHROPIC_API_KEY to get documented limits and retryable 429s instead of opaque subscription caps.",
+    "enabled": false,
+    "command": "claude",
+    "model": null,
+    "permissionMode": "acceptEdits",
+    "maxTurns": 60,
+    "maxAttempts": 3,
+    "sessionTimeoutMs": 3600000,
+    "retryBackoffMs": 30000,
+    "throttleBackoffMs": 900000
+  },
+
+  "evolve": {
+    "$comment": "Self-improvement stays inert until the same structured rejection code appears in minRuns distinct runs. autoApply governs advisory prose only; load-bearing changes always wait for a human merge, and protected paths are never proposable at all.",
+    "minRuns": 3,
+    "autoApplyAdvisory": true,
+    "requireRegressionGreen": true
+  },
+
+  "tiers": [
+    {
+      "name": "cheap",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "model": "deepseek/deepseek-v4-flash",
+      "apiKeyEnv": "OPENROUTER_API_KEY",
+      "maxAttempts": 3,
+      "temperature": 0.1,
+      "maxTokens": 8000,
+      "costPer1kInput": 0.00027,
+      "costPer1kOutput": 0.0011
+    },
+    {
+      "name": "mid",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "model": "moonshotai/kimi-k2.6",
+      "apiKeyEnv": "OPENROUTER_API_KEY",
+      "maxAttempts": 2,
+      "temperature": 0.1,
+      "maxTokens": 8000,
+      "costPer1kInput": 0.0006,
+      "costPer1kOutput": 0.0025
+    },
+    {
+      "name": "strong",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "model": "qwen/qwen3-coder-next",
+      "apiKeyEnv": "OPENROUTER_API_KEY",
+      "maxAttempts": 2,
+      "temperature": 0.1,
+      "maxTokens": 8000,
+      "costPer1kInput": 0.0009,
+      "costPer1kOutput": 0.0035
+    }
+  ],
+
+  "headers": {
+    "$comment": "OpenRouter uses these for attribution. Harmless elsewhere.",
+    "HTTP-Referer": "https://localhost/trellis",
+    "X-Title": "Trellis"
+  },
+
+  "gate": {
+    "defaultCommand": null,
+    "timeoutMs": 300000,
+    "feedbackChars": 4000
+  },
+
+  "worker": {
+    "requestTimeoutMs": 180000,
+    "maxContextFileBytes": 40000
+  },
+
+  "boundaries": {
+    "$comment": "Paths no worker may ever write, regardless of what the graph node allows.",
+    "denyWrite": [
+      ".git/**",
+      ".env",
+      ".env.*",
+      "**/.env",
+      "**/.env.*",
+      "**/*.pem",
+      "**/*.key",
+      "**/id_rsa*",
+      "**/credentials*",
+      "**/secrets.*",
+      ".claude/**",
+      ".trellis/**",
+      "kit/**",
+      "trellis.config.json",
+      "package-lock.json",
+      "**/node_modules/**"
+    ]
+  },
+
+  "paths": {
+    "state": ".trellis",
+    "worktrees": ".worktrees",
+    "graph": ".trellis/graph.json"
+  }
+}

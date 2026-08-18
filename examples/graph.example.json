@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "project": "url-shortener",
+  "nodes": [
+    {
+      "id": "codec",
+      "title": "Base62 id codec",
+      "goal": "Export encode(n) and decode(s) converting between non-negative integers and base62 strings. Round-trip must be exact. Reject negative and non-integer input.",
+      "role": "implementer",
+      "deps": [],
+      "write": [
+        "src/codec.mjs"
+      ],
+      "read": [],
+      "tests": [
+        "tests/codec.test.mjs"
+      ],
+      "gate": "node --test tests/codec.test.mjs",
+      "risk": "low",
+      "tags": [
+        "algorithm"
+      ],
+      "covers": [
+        "Base62 id codec"
+      ],
+      "mutations": [
+        "the alphabet ordering is digits-last instead of digits-first, so round-trip works but ids differ",
+        "decode does not reject an empty string and returns 0"
+      ]
+    },
+    {
+      "id": "store",
+      "title": "In-memory link store",
+      "goal": "Export a createStore() factory with put(url), get(id), and has(id). Ids come from an injected id generator so the store stays testable.",
+      "role": "implementer",
+      "deps": [],
+      "write": [
+        "src/store.mjs"
+      ],
+      "read": [],
+      "tests": [
+        "tests/store.test.mjs"
+      ],
+      "gate": "node --test tests/store.test.mjs",
+      "risk": "low",
+      "tags": [
+        "crud",
+        "glue"
+      ],
+      "covers": [
+        "In-memory link store"
+      ],
+      "mutations": [
+        "has() returns true for an id that was never stored because it checks the prototype chain"
+      ]
+    },
+    {
+      "id": "shorten",
+      "title": "Shorten service",
+      "goal": "Export shorten(url) and resolve(id), wiring the codec to the store. Validate that the url has an http or https scheme before storing.",
+      "role": "implementer",
+      "deps": [
+        "codec",
+        "store"
+      ],
+      "write": [
+        "src/shorten.mjs"
+      ],
+      "read": [
+        "src/codec.mjs",
+        "src/store.mjs"
+      ],
+      "tests": [
+        "tests/shorten.test.mjs"
+      ],
+      "gate": "node --test tests/shorten.test.mjs",
+      "risk": "low",
+      "notes": "Do not add a database. The store is injected.",
+      "tags": [
+        "glue"
+      ],
+      "covers": [
+        "Shorten service"
+      ],
+      "mutations": [
+        "url validation accepts any string containing '://' rather than requiring http or https"
+      ]
+    },
+    {
+      "id": "routes",
+      "title": "HTTP routes",
+      "goal": "Export a request handler exposing POST /api/links and GET /:id. POST returns 201 with the short id, GET returns 302 or 404.",
+      "role": "implementer",
+      "deps": [
+        "shorten"
+      ],
+      "write": [
+        "src/routes.mjs"
+      ],
+      "read": [
+        "src/shorten.mjs"
+      ],
+      "tests": [
+        "tests/routes.test.mjs"
+      ],
+      "gate": "node --test tests/routes.test.mjs",
+      "risk": "audit",
+      "acceptance": "An unknown id must never leak whether it was previously used. 404 for both cases.",
+      "tags": [
+        "http",
+        "glue"
+      ],
+      "covers": [
+        "HTTP routes"
+      ],
+      "mutations": [
+        "an unknown id returns 410 for a previously-used id and 404 otherwise, leaking prior existence"
+      ]
+    }
+  ]
+}

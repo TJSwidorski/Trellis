@@ -1,0 +1,8 @@
+{
+  "files.watcherExclude": { "**/.worktrees/**": true },
+  "search.exclude": { "**/.worktrees/**": true, "**/.trellis/run.jsonl": true },
+  "markdown.preview.breaks": true,
+  "git.detectSubmodules": false,
+  "git.openRepositoryInParentFolders": "always",
+  "terminal.integrated.scrollback": 20000
+}

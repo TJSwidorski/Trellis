@@ -1,0 +1,207 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Trellis product graph",
+  "description": "Authored OUTSIDE Trellis and handed in complete. This is the boundary between two systems that cannot see each other, so the validator is deliberately unforgiving.",
+  "type": "object",
+  "required": [
+    "schema",
+    "product",
+    "versions",
+    "nodes"
+  ],
+  "properties": {
+    "schema": {
+      "const": "trellis.product-graph/1"
+    },
+    "product": {
+      "type": "string",
+      "minLength": 1
+    },
+    "versions": {
+      "type": "object",
+      "required": [
+        "v1",
+        "v2"
+      ],
+      "properties": {
+        "v1": {
+          "$ref": "#/definitions/versionSpec"
+        },
+        "v2": {
+          "$ref": "#/definitions/versionSpec"
+        }
+      },
+      "additionalProperties": false
+    },
+    "invariants": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "True of every node. Restated into node notes at slice time."
+    },
+    "non_goals": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Explicitly out of scope for both versions. Prevents scope drift during slicing."
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/node"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "versionSpec": {
+      "type": "object",
+      "required": [
+        "definition",
+        "scale_target"
+      ],
+      "properties": {
+        "definition": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What this version must do standing alone. v1 must be shippable even if v2 is never built."
+        },
+        "scale_target": {
+          "enum": [
+            "1",
+            "10",
+            "100",
+            "1000",
+            "10000",
+            "100000"
+          ],
+          "description": "Concurrent users this version must hold. Drives which scale-tier reference loads."
+        }
+      },
+      "additionalProperties": false
+    },
+    "node": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "version",
+        "kind",
+        "acceptance",
+        "reversibility",
+        "scale_tier"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+([._-][a-z0-9]+)*$",
+          "description": "Stable slug, dotted namespaces encouraged (auth.session, data.user-model)."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "enum": [
+            "v1",
+            "v2"
+          ],
+          "description": "Which release this belongs to as authored. `trellis promote` may suggest moving v2 nodes up; it never moves them automatically."
+        },
+        "kind": {
+          "enum": [
+            "frontend",
+            "backend",
+            "data",
+            "infra",
+            "interface",
+            "ops"
+          ],
+          "description": "interface = a contract two or more other nodes consume. These are the integration-break nodes."
+        },
+        "deps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Ids of nodes that must exist first. A v1 node depending on a v2 node is a hard validation failure."
+        },
+        "acceptance": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "description": "What done means, in plain language, one bullet per checkable claim. Becomes the seed for the cases session."
+        },
+        "reversibility": {
+          "enum": [
+            "one-way",
+            "two-way"
+          ],
+          "description": "one-way = changing your mind later costs a migration or a breaking change. Data models, auth, multitenancy, public API shape, billing."
+        },
+        "surfaces": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "auth",
+              "pii",
+              "payments",
+              "secrets",
+              "network",
+              "filesystem",
+              "none"
+            ]
+          },
+          "default": [
+            "none"
+          ],
+          "description": "What this node touches that can hurt you. Non-empty (other than 'none') forces the security lens and derives high risk."
+        },
+        "scale_tier": {
+          "enum": [
+            "1",
+            "10",
+            "100",
+            "1000",
+            "10000",
+            "100000"
+          ],
+          "description": "The user count at which this node must still hold. Usually the version's scale_target; raise it for nodes that are expensive to revisit."
+        },
+        "lenses": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Which references/chiefs and references/skills entries load as Layer 3 when this node is planned."
+        },
+        "notes": {
+          "type": "string"
+        },
+        "high_risk": {
+          "type": "boolean",
+          "description": "DERIVED. Do not author this field; the validator computes it and rejects graphs that set it. True when risk_level is high."
+        },
+        "risk_level": {
+          "enum": [
+            "low",
+            "audit",
+            "high"
+          ],
+          "description": "DERIVED. Do not author. high = one-way door, consequential surface (auth/payments/secrets), or two or more dependents. audit = pii/network/filesystem only. Reviewed at triage accordingly."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

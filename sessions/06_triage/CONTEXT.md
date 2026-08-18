@@ -1,0 +1,58 @@
+# Stage 06 — triage
+
+## Inputs
+
+- Layer 4 (working): `.trellis/REPORT.md`, `.trellis/plan.json`
+- Layer 3 (reference): `references/chiefs/` (per node `lenses`), `references/EVOLUTION.md`
+
+## Process
+
+Read `REPORT.md` once. Not `run.jsonl`, not worker transcripts, not the diffs of
+nodes that passed cleanly.
+
+You enter the loop for exactly two categories:
+
+- **Exhausted nodes** — the mechanical loop tried every tier and failed.
+- **High-risk nodes** — one-way doors, security surfaces, interfaces with two or
+  more consumers. These get read whether or not they went green, because the gate
+  cannot see what the test did not ask.
+
+Everything else merged on evidence. Leave it alone. Reviewing a green low-risk node
+costs context and buys nothing the mutation gate did not already prove.
+
+For each node you do review, choose one: re-decompose, rewrite the contract, take
+it yourself (say so out loud), or cut it. Two review passes per node is the ceiling
+— a third means the decomposition is wrong, not the implementation.
+
+## Rejection codes
+
+Record every rejection with a **structured code**, not prose. "The error handling
+is sloppy" cannot be counted across runs. `unhandled-error-path` can, and nine
+occurrences of it is evidence that stage 03 is missing a case category.
+
+This is the entire input to self-improvement. Prose here means Trellis learns
+nothing about itself, ever.
+
+## Outputs
+
+- `.trellis/triage.json` — `{ decisions: [{ node, verdict, code?, reason }] }`
+- Appended to `.trellis/triage.jsonl` — the cross-run record
+- `.trellis/built.json` — accepted node ids, so the next slice skips them
+
+## Verify
+
+Every node in the report that is exhausted or high-risk has a decision. Silence on
+a stuck node is not acceptance.
+
+## Evolution
+
+Run `node kit/bin/cli.mjs evolve`. If a rejection code has appeared in three or
+more distinct runs, write a proposal under `evolution/proposals/`.
+
+Fix the source, not the run. If you have tightened the same contract three times,
+the fix is in the skill that writes contracts, not in this run's contract.
+
+You may not propose changes to `MISSION.md`, the gates, the schemas, the hooks, or
+the regression suite. `trellis classify <path>` will tell you which bucket a file
+is in. Advisory proposals auto-apply once regression is green; load-bearing ones
+wait for a human.
