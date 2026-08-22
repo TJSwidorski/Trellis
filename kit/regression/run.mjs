@@ -20,6 +20,8 @@ import { classify, writeProposal, PROTECTED, actionable, unknownCodes } from "..
 import { isRetryable, STAGES } from "../lib/driver.mjs";
 import { resolveActive, blockedByAudit } from "../lib/skills.mjs";
 import { loadCodes, normaliseCode, allCodes, groupSimilar, CODES_DOC } from "../lib/codes.mjs";
+import { KINDS, FLAG_TO_KIND, COSTLY_KINDS } from "../lib/kinds.mjs";
+import { kindActionable, kindCounts } from "../lib/evolve.mjs";
 import os from "node:os";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -583,6 +585,127 @@ check("ADVERSARIAL an unstamped triage record does not satisfy the stage", () =>
 check("ADVERSARIAL a run-stamped record carrying no decisions does not satisfy the stage", () => {
   const root = triageStageRoot({ jsonl: [{ run: "run-1", decisions: [] }] });
   assert(!triageVerify(root).ok, "an empty decision list was accepted as a triage record");
+});
+
+// ------------------------------------------------------------ attempt kinds
+//
+// kinds.mjs mirrors literals that live in protected files. The mirror is what
+// lets a load-bearing module read the vocabulary without protected code ever
+// importing load-bearing code — a dependency that would put a hole in the
+// protection boundary that classify() could not see. These checks are the price
+// of the mirror: they catch drift, which is the only thing a shared enum would
+// have bought.
+
+check("ADVERSARIAL the kinds table matches the literals in the source, both ways", () => {
+  const read = (rel) => fs.readFileSync(path.join(kitRoot, rel), "utf8");
+  const inSource = new Set();
+
+  // gate.mjs and worker.mjs assign `kind: "..."` / `record.kind = "..."`.
+  for (const rel of ["kit/lib/gate.mjs", "kit/lib/worker.mjs"]) {
+    const src = read(rel);
+    for (const m of src.matchAll(/\bkind:\s*"([a-z-]+)"/g)) inSource.add(m[1]);
+    for (const m of src.matchAll(/\.kind\s*=\s*"([a-z-]+)"/g)) inSource.add(m[1]);
+    for (const m of src.matchAll(/\.kind\s*=\s*\w+\s*(?:instanceof\s+\w+\s*)?\?\s*"([a-z-]+)"\s*:\s*"([a-z-]+)"/g)) {
+      inSource.add(m[1]);
+      inSource.add(m[2]);
+    }
+  }
+
+  // extract.mjs adds FLAGS, which worstFlag maps to kinds.
+  const ex = read("kit/lib/extract.mjs");
+  const flags = new Set([...ex.matchAll(/flags\.add\("([a-z-]+)"\)/g)].map((m) => m[1]));
+  assert(flags.size > 0, "found no flags.add() literals in extract.mjs — the extractor changed shape");
+
+  const mappedFlags = new Set(Object.keys(FLAG_TO_KIND));
+  const flagOnlyInSource = [...flags].filter((f) => !mappedFlags.has(f));
+  const flagOnlyInTable = [...mappedFlags].filter((f) => !flags.has(f));
+  assert(flagOnlyInSource.length === 0,
+    `extract.mjs raises flags absent from FLAG_TO_KIND: ${flagOnlyInSource.join(", ")}`);
+  assert(flagOnlyInTable.length === 0,
+    `FLAG_TO_KIND maps flags extract.mjs no longer raises: ${flagOnlyInTable.join(", ")}`);
+
+  for (const f of flags) inSource.add(FLAG_TO_KIND[f]);
+
+  const onlyInSource = [...inSource].filter((k) => !KINDS.has(k));
+  const onlyInTable = [...KINDS].filter((k) => !inSource.has(k));
+  assert(onlyInSource.length === 0,
+    `kinds assigned in source but missing from KINDS: ${onlyInSource.join(", ")}. ` +
+      `A kind the aggregation does not know about is evidence that silently vanishes.`);
+  assert(onlyInTable.length === 0,
+    `KINDS lists kinds no longer assigned anywhere: ${onlyInTable.join(", ")}`);
+});
+
+check("ADVERSARIAL test-failure and pass are never treated as costly", () => {
+  for (const k of ["test-failure", "pass", "env-failure"]) {
+    assert(!COSTLY_KINDS.has(k),
+      `${k} in COSTLY_KINDS would drown every other signal in the loop working correctly`);
+  }
+});
+
+/** Ledger records, shaped like ledger.recordsFor output. */
+const ledgerRec = (over = {}) => ({
+  runId: "r1",
+  nodeId: "n01",
+  tags: ["api"],
+  status: "merged",
+  landedTier: "cheap",
+  survivingMutations: [],
+  failureKinds: [],
+  attemptsByTier: {},
+  ...over,
+});
+
+check("a failure kind on exhausted nodes across three runs is actionable", () => {
+  const history = ["r1", "r2", "r3"].map((runId) =>
+    ledgerRec({ runId, status: "exhausted", landedTier: null, failureKinds: ["no-files", "no-files"] })
+  );
+  const found = kindActionable(null, CFG, { minRuns: 3, history });
+  assert(found.length === 1 && found[0].kind === "no-files" && found[0].tag === "api",
+    `expected no-files|api to surface, got: ${JSON.stringify(found)}`);
+});
+
+check("ADVERSARIAL test-failure on nodes that landed never reaches actionable", () => {
+  // Five runs, every node fails twice then lands on the cheap tier. This is the
+  // tier ladder working. If it produces a pattern, the scoping is broken and the
+  // shortlist will be nothing but noise forever.
+  const history = ["r1", "r2", "r3", "r4", "r5"].map((runId) =>
+    ledgerRec({ runId, status: "merged", landedTier: "cheap", failureKinds: ["test-failure", "test-failure"] })
+  );
+  assert(kindActionable(null, CFG, { minRuns: 3, history }).length === 0,
+    "retries that later landed produced a pattern — the costly-node scoping is not holding");
+  // ...and the same data DOES surface when a human deliberately widens the scope.
+  assert(kindActionable(null, CFG, { minRuns: 3, scope: "all", history }).length > 0,
+    "--all-nodes should still be able to see it; the default just should not");
+});
+
+check("ADVERSARIAL ten exhausted nodes in one run is one observation", () => {
+  const history = Array.from({ length: 10 }, (_, i) =>
+    ledgerRec({ runId: "r1", nodeId: `n${i}`, status: "exhausted", landedTier: null, failureKinds: ["out-of-scope"] })
+  );
+  const counts = kindCounts(null, CFG, { history });
+  const e = counts.get("out-of-scope|api");
+  assert(e && e.runs === 1 && e.attempts === 10,
+    `expected 1 run / 10 attempts, got ${JSON.stringify(e)}`);
+  assert(kindActionable(null, CFG, { minRuns: 3, history }).length === 0,
+    "one bad slice reached the threshold — runs, not nodes, is the unit of recurrence");
+});
+
+check("ADVERSARIAL one node retried within a run counts once per run", () => {
+  const history = [
+    ledgerRec({ runId: "r1", status: "exhausted", landedTier: null, failureKinds: ["timeout", "timeout", "timeout"] }),
+    ledgerRec({ runId: "r2", status: "exhausted", landedTier: null, failureKinds: ["timeout"] }),
+  ];
+  const e = kindCounts(null, CFG, { history }).get("timeout|api");
+  assert(e.runs === 2 && e.nodes === 2,
+    `three retries in one run inflated the count: ${JSON.stringify(e)}`);
+});
+
+check("ADVERSARIAL an unrecognised kind is dropped rather than counted", () => {
+  const history = ["r1", "r2", "r3", "r4"].map((runId) =>
+    ledgerRec({ runId, status: "exhausted", landedTier: null, failureKinds: ["invented-kind"] })
+  );
+  assert(kindActionable(null, CFG, { minRuns: 3, history }).length === 0,
+    "a kind absent from KINDS became actionable — drift would be laundered into evidence");
 });
 
 const fixDir = path.join(here, "fixtures");

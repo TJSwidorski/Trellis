@@ -11,6 +11,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { loadCodes, normaliseCode, isBucketed } from "./codes.mjs";
+import * as ledger from "./ledger.mjs";
+import { isKnownKind } from "./kinds.mjs";
 
 // Never proposable. See MISSION.md. Prefix match on repo-relative paths.
 export const PROTECTED = [
@@ -120,6 +122,159 @@ export function unknownCodes(root, cfg) {
     .filter(([code]) => isBucketed(code))
     .map(([code, v]) => ({ code, ...v }))
     .sort((a, b) => b.runs - a.runs || b.count - a.count);
+}
+
+// -------------------------------------------------------- mechanical evidence
+//
+// Rejection codes need a human or a model to have rejected something three
+// separate times before anything can be said. Attempt kinds exist from run one,
+// cost nothing to collect, and are already in the ledger — they are the reason
+// `trellis evolve` stops being inert.
+
+/**
+ * Was this node expensive?
+ *
+ * The scoping decision that makes the whole aggregation work. A node that failed
+ * twice on `test-failure` and then landed on the cheap tier is the ladder doing
+ * its job, and counting it would drown every other signal in the noise of the
+ * system working correctly. So the population is nodes that actually cost
+ * something: never landed, needed the top tier, or landed with a mutation still
+ * alive.
+ *
+ * This is not a statistical correction applied after the fact. It is the correct
+ * population, and choosing it dissolves the `test-failure` problem without a
+ * blocklist that someone would later have to maintain.
+ */
+function isCostly(rec) {
+  return (
+    rec.status === "exhausted" ||
+    rec.landedTier === "strong" ||
+    (rec.survivingMutations?.length ?? 0) > 0
+  );
+}
+
+function scoped(records, scope) {
+  return scope === "all" ? records : records.filter(isCostly);
+}
+
+/**
+ * Failure kinds by `kind|tag`, deduped by distinct run.
+ *
+ * Keyed on tag as well as kind because a tooling proposal is almost always "for
+ * nodes tagged X we keep hitting Y" — and because tags are the join key routing
+ * and skills already use. Identity for dedup is `runId|nodeId`, copied from
+ * ledger.tierStats: without it, one node retried four times looks like four
+ * independent observations.
+ *
+ * Deliberately not built on ledger.summarise(), which counts a node once per tag
+ * and never dedupes by run. That function is human-facing; this one feeds a
+ * threshold, and a threshold needs the stricter arithmetic.
+ */
+export function kindCounts(root, cfg, { scope = "costly", history = null } = {}) {
+  const records = scoped(history ?? ledger.read(root, cfg), scope);
+
+  // Corpus-wide share per kind, for the comparison column below.
+  const corpus = {};
+  let corpusTotal = 0;
+  for (const rec of records) {
+    for (const k of rec.failureKinds ?? []) {
+      corpus[k] = (corpus[k] ?? 0) + 1;
+      corpusTotal++;
+    }
+  }
+
+  const byTag = {};
+  const out = new Map();
+  const seen = new Set();
+
+  for (const rec of records) {
+    const identity = `${rec.runId}|${rec.nodeId}`;
+    const tags = rec.tags?.length ? rec.tags : ["__untagged"];
+    for (const k of rec.failureKinds ?? []) {
+      for (const tag of tags) {
+        byTag[tag] = (byTag[tag] ?? 0) + 1;
+        const key = `${k}|${tag}`;
+        const e = out.get(key) ?? { kind: k, tag, runs: new Set(), nodes: new Set(), attempts: 0 };
+        e.attempts++;
+        if (!seen.has(`${key}|${identity}`)) {
+          seen.add(`${key}|${identity}`);
+          e.nodes.add(identity);
+          if (rec.runId) e.runs.add(rec.runId);
+        }
+        out.set(key, e);
+      }
+    }
+  }
+
+  const result = new Map();
+  for (const [key, e] of out) {
+    const base = corpusTotal ? (corpus[e.kind] ?? 0) / corpusTotal : 0;
+    const local = byTag[e.tag] ? e.attempts / byTag[e.tag] : 0;
+    result.set(key, {
+      kind: e.kind,
+      tag: e.tag,
+      runs: e.runs.size,
+      nodes: e.nodes.size,
+      attempts: e.attempts,
+      // Shown, never gated on. Gating on a ratio invites threshold-gaming, and
+      // there is no data yet to calibrate a cutoff against.
+      share: local,
+      baseline: base,
+    });
+  }
+  return result;
+}
+
+/**
+ * The same kinds keyed by tier.
+ *
+ * A different and very tooling-shaped question: "the cheap tier emits `no-files`
+ * on everything" is a fact about the prompt and the extract format, not about the
+ * product being built. That distinction is what routes a signal to plain code
+ * rather than to a contract fix.
+ */
+export function kindByTier(root, cfg, { scope = "costly", history = null } = {}) {
+  const records = scoped(history ?? ledger.read(root, cfg), scope);
+  const out = new Map();
+  const seen = new Set();
+
+  for (const rec of records) {
+    const identity = `${rec.runId}|${rec.nodeId}`;
+    for (const [tier, t] of Object.entries(rec.attemptsByTier ?? {})) {
+      for (const k of t.kinds ?? []) {
+        const key = `${k}|${tier}`;
+        const e = out.get(key) ?? { kind: k, tier, runs: new Set(), nodes: new Set(), attempts: 0 };
+        e.attempts++;
+        if (!seen.has(`${key}|${identity}`)) {
+          seen.add(`${key}|${identity}`);
+          e.nodes.add(identity);
+          if (rec.runId) e.runs.add(rec.runId);
+        }
+        out.set(key, e);
+      }
+    }
+  }
+
+  const result = new Map();
+  for (const [key, e] of out) {
+    result.set(key, { kind: e.kind, tier: e.tier, runs: e.runs.size, nodes: e.nodes.size, attempts: e.attempts });
+  }
+  return result;
+}
+
+/**
+ * Kinds with enough evidence to act on.
+ *
+ * Same discipline as `actionable`: distinct runs, not distinct nodes. An
+ * unrecognised kind is dropped rather than counted — a kind this table does not
+ * know about means the mirror in kinds.mjs has drifted, which is a bug to fix
+ * rather than evidence to act on, and the regression suite says so loudly.
+ */
+export function kindActionable(root, cfg, { minRuns = 3, scope = "costly", history = null } = {}) {
+  return [...kindCounts(root, cfg, { scope, history }).values()]
+    .filter((e) => isKnownKind(e.kind))
+    .filter((e) => e.runs >= minRuns)
+    .sort((a, b) => b.runs - a.runs || b.attempts - a.attempts);
 }
 
 // ------------------------------------------------------------------ proposal

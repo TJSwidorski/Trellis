@@ -18,10 +18,10 @@ Order: 0 → 1 → 2 → 5 → 3 → 4 → 6
 - [x] adversarial checks
 
 ## Commit 2 — attempt-kind evidence
-- [ ] `kit/lib/kinds.mjs` — KINDS / FLAG_TO_KIND / COSTLY_KINDS
-- [ ] `kindCounts` / `kindByTier` / `kindActionable` scoped to costly outcomes
-- [ ] second section in `trellis evolve`
-- [ ] adversarial checks incl. source-text set-equality
+- [x] `kit/lib/kinds.mjs` — KINDS / FLAG_TO_KIND / COSTLY_KINDS
+- [x] `kindCounts` / `kindByTier` / `kindActionable` scoped to costly outcomes
+- [x] second section in `trellis evolve`
+- [x] adversarial checks incl. source-text set-equality
 
 ## Commit 5 — skills activation log
 - [ ] `.trellis/skills.jsonl` written from `applySkills`

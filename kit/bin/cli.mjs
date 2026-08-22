@@ -23,7 +23,7 @@ import {
   PRODUCT_GRAPH_DEFAULT,
 } from "../lib/product.mjs";
 import { STAGES, runSession, recordSession, sessionStats, isRetryable, sleep } from "../lib/driver.mjs";
-import { actionable, unknownCodes, writeProposal, classify } from "../lib/evolve.mjs";
+import { actionable, unknownCodes, kindActionable, kindByTier, writeProposal, classify } from "../lib/evolve.mjs";
 import { loadCodes, allCodes, groupSimilar, bucketOf, CODES_DOC } from "../lib/codes.mjs";
 import { loadRegistry, resolveActive, materialise, blockedByAudit, missingPlugins } from "../lib/skills.mjs";
 
@@ -730,21 +730,49 @@ function cmdEvolve() {
 
   if (flags.has("--unknown")) return reportUnknown(root, cfg, minRuns);
 
+  const scope = flags.has("--all-nodes") ? "all" : "costly";
   const found = actionable(root, cfg, { minRuns });
+  const kinds = kindActionable(root, cfg, { minRuns, scope });
 
-  if (!found.length) {
+  if (!found.length && !kinds.length) {
     log.info(
-      `No rejection code has appeared in ${minRuns}+ distinct runs yet. ` +
-        `Self-improvement stays inert until there is evidence.`
+      `Nothing has appeared in ${minRuns}+ distinct runs yet — not a rejection code, ` +
+        `not a failure kind. Self-improvement stays inert until there is evidence.`
     );
     return;
   }
 
-  log.ok(`${found.length} pattern(s) with enough evidence to act on:`);
-  for (const f of found) {
-    log.info(`  ${f.code.padEnd(30)} ${f.runs} runs, ${f.count} rejections, ${f.nodes.length} distinct nodes`);
+  if (found.length) {
+    log.ok(`${found.length} rejection pattern(s) with enough evidence to act on:`);
+    for (const f of found) {
+      log.info(`  ${f.code.padEnd(30)} ${f.runs} runs, ${f.count} rejections, ${f.nodes.length} distinct nodes`);
+    }
+    log.info("");
   }
-  log.info("");
+
+  if (kinds.length) {
+    log.ok(`${kinds.length} failure-kind pattern(s) on nodes that cost something:`);
+    for (const k of kinds) {
+      const lift = k.baseline > 0 ? ` (${(k.share / k.baseline).toFixed(1)}x baseline)` : "";
+      log.info(`  ${`${k.kind}|${k.tag}`.padEnd(38)} ${k.runs} runs, ${k.attempts} attempts${lift}`);
+    }
+
+    // A kind that clusters on ONE tier is a fact about the prompt or the extract
+    // format, not about the product. Different signal, different fix.
+    const perTier = [...kindByTier(root, cfg, { scope }).values()].filter((t) => t.runs >= minRuns);
+    if (perTier.length) {
+      log.info("");
+      log.info("  by tier — a kind that only one tier emits is about the prompt, not the product:");
+      for (const t of perTier) log.info(`    ${`${t.kind}|${t.tier}`.padEnd(36)} ${t.runs} runs, ${t.attempts} attempts`);
+    }
+    log.info("");
+    if (scope === "costly") {
+      log.info(`  Scoped to exhausted / strong-tier / mutation-surviving nodes. --all-nodes widens it,`);
+      log.info(`  which mostly shows the ladder working: retries that later landed.`);
+      log.info("");
+    }
+  }
+
   log.info("Opus writes the proposal from these in the triage session. It may not touch:");
   log.info("  MISSION.md, gate/verify/mutate/worktree, kit/schema/, kit/regression/, .claude/hooks/");
 }
@@ -980,9 +1008,10 @@ Autonomy and evolution:
   trellis auto [--stage id]   Drive the session pipeline headless, verifying on disk
     --force                     Re-run a stage even if its artifact already exists
   trellis sessions            Measured cost per stage from your own runs
-  trellis evolve              Rejection patterns with enough evidence to act on
+  trellis evolve              Rejection codes and failure kinds with enough evidence
     --unknown                   Unrecognised codes: vocabulary pressure, never actionable
     --min-runs <n>              Override the threshold (default: config evolve.minRuns)
+    --all-nodes                 Include nodes that failed then landed (mostly noise)
   trellis codes               The vocabulary triage records in
     --explain <code>            What it means and which artifact it probably indicts
   trellis classify <path>     Is this path protected, load-bearing, or advisory
