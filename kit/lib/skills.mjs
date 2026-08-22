@@ -147,6 +147,94 @@ export function missingPlugins(registry, { home = os.homedir() } = {}) {
     }));
 }
 
+// ------------------------------------------------------------- activation log
+//
+// The arsenal could only ever grow. materialise() records what got copied in;
+// nothing recorded whether it was ever reached. Without that, a proposal to
+// delete a skill can never have evidence, and a self-improvement loop that can
+// only add will quietly degrade every session's selection accuracy while every
+// metric it can see improves.
+//
+// This is the cheapest true signal available: a skill whose rules never matched
+// has PROVABLY never entered a context window. No outcome data, no confounding,
+// no judgement — just an absence of rows.
+
+export function activationPath(root, cfg) {
+  return path.join(root, cfg?.paths?.state ?? ".trellis", "skills.jsonl");
+}
+
+/** One row per skill per stage-run. Append-only, like every other record here. */
+export function recordActivation(root, cfg, { run, stage, active }) {
+  const p = activationPath(root, cfg);
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  const ts = new Date().toISOString();
+  const rows = active.map((a) => JSON.stringify({ ts, run, stage, name: a.name, reason: a.reason }));
+  if (!rows.length) return p;
+  fs.appendFileSync(p, rows.join("\n") + "\n");
+  return p;
+}
+
+export function readActivations(root, cfg) {
+  const p = activationPath(root, cfg);
+  if (!fs.existsSync(p)) return [];
+  return fs.readFileSync(p, "utf8").split("\n").filter(Boolean)
+    .map((l) => { try { return JSON.parse(l); } catch { return null; } })
+    .filter(Boolean);
+}
+
+/** Rules that can fire on their own. `manual` is not one — it needs a human. */
+const AUTOMATIC = ["always", "stage", "applies_to"];
+
+const firesAutomatically = (e) => AUTOMATIC.some((k) => {
+  const v = e.activation?.[k];
+  return Array.isArray(v) ? v.length > 0 : Boolean(v);
+});
+
+/**
+ * Registered entries that never once activated.
+ *
+ * Two thresholds, and both exist because a naive version of this is worse than
+ * useless — it names forty entries every time and gets ignored.
+ *
+ *   - `minRuns` distinct runs before saying anything at all. One run in which a
+ *     skill happened not to match is not a fact about the skill.
+ *   - Manual-only entries are excluded entirely. They activate when a human names
+ *     them in `skills.manual` and never otherwise, so their silence is the design
+ *     working, not evidence of dead weight.
+ *
+ * Entries with no automatic rule AND no manual opt-in are a different finding:
+ * not unused but *unreachable*, which is a bug in the registry rather than a
+ * reason to delete. Reported separately so the two never get confused.
+ */
+export function neverActivated(registry, activations, { minRuns = 3 } = {}) {
+  const runs = new Set(activations.map((a) => a.run).filter(Boolean));
+
+  const candidates = (registry.entries ?? [])
+    .filter((e) => ACTIVATABLE.has(e.audit_status))
+    .filter((e) => e.kind === "skill" || e.kind === "plugin");
+
+  const unreachable = candidates
+    .filter((e) => !firesAutomatically(e) && !e.activation?.manual)
+    .map((e) => ({ name: e.name, kind: e.kind }));
+
+  if (runs.size < minRuns) return { ready: false, runs: runs.size, skills: [], unreachable };
+
+  const fired = new Set(activations.map((a) => a.name));
+  const skills = candidates
+    .filter(firesAutomatically)
+    .filter((e) => !fired.has(e.name))
+    .map((e) => ({
+      name: e.name,
+      kind: e.kind,
+      rules: AUTOMATIC.filter((k) => {
+        const v = e.activation?.[k];
+        return Array.isArray(v) ? v.length > 0 : Boolean(v);
+      }),
+    }));
+
+  return { ready: true, runs: runs.size, skills, unreachable };
+}
+
 /**
  * Materialise the active skills into `.claude/skills/`, which is where Claude Code
  * discovers them at session start.

@@ -24,9 +24,9 @@ Order: 0 → 1 → 2 → 5 → 3 → 4 → 6
 - [x] adversarial checks incl. source-text set-equality
 
 ## Commit 5 — skills activation log
-- [ ] `.trellis/skills.jsonl` written from `applySkills`
-- [ ] `trellis evolve --retire` (zero-activation)
-- [ ] `SKILLS/` added to LOAD_BEARING
+- [x] `.trellis/skills.jsonl` written from `applySkills`
+- [x] `trellis evolve --retire` (zero-activation)
+- [x] `SKILLS/` added to LOAD_BEARING
 
 ## Commit 3 — friction stream
 - [ ] `kit/lib/friction.mjs` + `trellis friction`

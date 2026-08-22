@@ -18,7 +18,7 @@ import {
 } from "../lib/product.mjs";
 import { classify, writeProposal, PROTECTED, actionable, unknownCodes } from "../lib/evolve.mjs";
 import { isRetryable, STAGES } from "../lib/driver.mjs";
-import { resolveActive, blockedByAudit } from "../lib/skills.mjs";
+import { resolveActive, blockedByAudit, neverActivated } from "../lib/skills.mjs";
 import { loadCodes, normaliseCode, allCodes, groupSimilar, CODES_DOC } from "../lib/codes.mjs";
 import { KINDS, FLAG_TO_KIND, COSTLY_KINDS } from "../lib/kinds.mjs";
 import { kindActionable, kindCounts } from "../lib/evolve.mjs";
@@ -706,6 +706,89 @@ check("ADVERSARIAL an unrecognised kind is dropped rather than counted", () => {
   );
   assert(kindActionable(null, CFG, { minRuns: 3, history }).length === 0,
     "a kind absent from KINDS became actionable — drift would be laundered into evidence");
+});
+
+// --------------------------------------------------------- the deletion half
+//
+// A self-improvement loop that can only add is not a loop. These checks defend
+// the retirement signal against the two ways it would quietly stop working:
+// speaking too early, and letting the arsenal move without a human.
+
+const reg = (entries) => ({ schema: "trellis.skill-registry/1", entries });
+const skillEntry = (name, over = {}) => ({
+  name,
+  kind: "skill",
+  audit_status: "audited",
+  activation: { stage: ["03_cases"] },
+  ...over,
+});
+const act = (run, name) => ({ ts: "t", run, stage: "03_cases", name, reason: "stage:03_cases" });
+
+check("a skill that never activated across enough runs is reported", () => {
+  const r = neverActivated(
+    reg([skillEntry("used"), skillEntry("unused")]),
+    [act("r1", "used"), act("r2", "used"), act("r3", "used")],
+    { minRuns: 3 }
+  );
+  assert(r.ready, "three distinct runs should be enough evidence to speak");
+  assert(r.skills.length === 1 && r.skills[0].name === "unused",
+    `expected only "unused", got: ${r.skills.map((s) => s.name).join(", ")}`);
+});
+
+check("ADVERSARIAL retirement stays silent below the run threshold", () => {
+  const r = neverActivated(
+    reg([skillEntry("used"), skillEntry("unused")]),
+    [act("r1", "used"), act("r2", "used")],
+    { minRuns: 3 }
+  );
+  assert(!r.ready && r.skills.length === 0,
+    "two runs produced a retirement recommendation — one slice that happened not to match " +
+      "a skill is not a fact about the skill");
+});
+
+check("ADVERSARIAL a manual-only entry is never recommended for retirement", () => {
+  // Manual entries activate when a human names them in skills.manual and never
+  // otherwise. Reporting them as dead weight names most of the registry every
+  // time, and a signal that fires on everything is one nobody reads.
+  const r = neverActivated(
+    reg([skillEntry("used"), skillEntry("opt-in", { activation: { manual: true } })]),
+    [act("r1", "used"), act("r2", "used"), act("r3", "used")],
+    { minRuns: 3 }
+  );
+  assert(r.skills.length === 0,
+    `a manual-only entry was proposed for deletion: ${r.skills.map((s) => s.name).join(", ")}`);
+});
+
+check("an entry with no rule at all is reported as unreachable, not as unused", () => {
+  const r = neverActivated(
+    reg([skillEntry("used"), skillEntry("stranded", { activation: {} })]),
+    [act("r1", "used")],
+    { minRuns: 3 }
+  );
+  assert(r.unreachable.some((u) => u.name === "stranded"),
+    "an entry no rule can ever reach was not reported");
+  assert(!r.skills.some((s) => s.name === "stranded"),
+    "unreachable and unused are different findings and must not be merged");
+});
+
+check("ADVERSARIAL an unaudited entry is never recommended for retirement", () => {
+  // It never activated because the audit gate withheld it, not because it is
+  // useless. Recommending deletion here would turn "not yet reviewed" into
+  // "delete it", which is the wrong direction entirely.
+  const r = neverActivated(
+    reg([skillEntry("used"), skillEntry("pending-review", { audit_status: "pending" })]),
+    [act("r1", "used"), act("r2", "used"), act("r3", "used")],
+    { minRuns: 3 }
+  );
+  assert(r.skills.length === 0,
+    `an unaudited entry was proposed for deletion: ${r.skills.map((s) => s.name).join(", ")}`);
+});
+
+check("ADVERSARIAL the arsenal is load-bearing, never advisory", () => {
+  for (const p of ["SKILLS/REGISTRY.json", "SKILLS/skills/trellis-plan/SKILL.md", "SKILLS/"]) {
+    assert(classify(p) === "load-bearing",
+      `${p} classified "${classify(p)}" — an arsenal change that auto-applies is one nobody saw`);
+  }
 });
 
 const fixDir = path.join(here, "fixtures");

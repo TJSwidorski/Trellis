@@ -22,10 +22,13 @@ import {
   nodeFingerprint,
   PRODUCT_GRAPH_DEFAULT,
 } from "../lib/product.mjs";
-import { STAGES, runSession, recordSession, sessionStats, isRetryable, sleep } from "../lib/driver.mjs";
+import { STAGES, runSession, recordSession, sessionStats, isRetryable, sleep, currentRunId } from "../lib/driver.mjs";
 import { actionable, unknownCodes, kindActionable, kindByTier, writeProposal, classify } from "../lib/evolve.mjs";
 import { loadCodes, allCodes, groupSimilar, bucketOf, CODES_DOC } from "../lib/codes.mjs";
-import { loadRegistry, resolveActive, materialise, blockedByAudit, missingPlugins } from "../lib/skills.mjs";
+import {
+  loadRegistry, resolveActive, materialise, blockedByAudit, missingPlugins,
+  recordActivation, readActivations, neverActivated,
+} from "../lib/skills.mjs";
 
 const argv = process.argv.slice(2);
 const cmd = argv[0];
@@ -729,6 +732,7 @@ function cmdEvolve() {
   const minRuns = flagInt("min-runs") ?? cfg.evolve?.minRuns ?? 3;
 
   if (flags.has("--unknown")) return reportUnknown(root, cfg, minRuns);
+  if (flags.has("--retire")) return reportRetire(root, cfg, minRuns);
 
   const scope = flags.has("--all-nodes") ? "all" : "costly";
   const found = actionable(root, cfg, { minRuns });
@@ -812,6 +816,51 @@ function reportUnknown(root, cfg, minRuns) {
     log.warn(`${ripe.length} bucket(s) clear ${minRuns} runs. To make one actionable, a human adds it to:`);
     log.info(`  ${CODES_DOC}   (prose section + an entry in the codes:begin block)`);
   }
+}
+
+/**
+ * The other half of self-improvement: what should stop existing.
+ *
+ * A loop that can only add is not a loop. Every skill taxes selection accuracy in
+ * every session it is eligible for, and that cost appears in no per-node metric —
+ * so nothing else in the system will ever notice it.
+ *
+ * Zero activations is the one deletion signal that needs no judgement: the rules
+ * never matched, so the skill provably never entered a context window.
+ */
+function reportRetire(root, cfg, minRuns) {
+  const registry = loadRegistry(root);
+  const activations = readActivations(root, cfg);
+  const { ready, runs, skills, unreachable } = neverActivated(registry, activations, { minRuns });
+
+  // Reachability is a registry bug, not a usage fact, so it is reported whether
+  // or not there is enough run data to say anything about usage.
+  if (unreachable.length) {
+    log.warn(`${unreachable.length} entr(y/ies) can never activate at all — no automatic rule, no manual opt-in:`);
+    for (const u of unreachable) log.info(`  ${u.name.padEnd(28)} ${u.kind}`);
+    log.info("  That is a registry bug rather than dead weight: give it a rule or drop it.");
+    log.info("");
+  }
+
+  if (!ready) {
+    log.info(
+      `Only ${runs} run(s) of activation data. Retirement needs ${minRuns}+ distinct runs — ` +
+        `a skill that happened not to match once is not a fact about the skill.`
+    );
+    return;
+  }
+
+  if (!skills.length) {
+    log.ok(`Every automatically-activating entry fired at least once across ${runs} runs.`);
+    return;
+  }
+
+  log.warn(`${skills.length} entr(y/ies) never activated across ${runs} runs:`);
+  for (const s of skills) log.info(`  ${s.name.padEnd(28)} ${s.kind}, ${s.rules.join("+")}`);
+  log.info("");
+  log.info("These have provably never entered a context window. Either the activation rules are");
+  log.info("wrong, or the entry is dead weight. Both are worth a proposal against SKILLS/REGISTRY.json.");
+  log.info(log.dim("Manual-only entries are excluded: they activate when named, so silence is by design."));
 }
 
 function cmdCodes() {
@@ -926,6 +975,11 @@ function applySkills(root, cfg, stage, { dryRun = false } = {}) {
   const opts = { stage, sliceNodes: sliceNodes(root), manual: cfg.skills?.manual ?? [] };
   const active = resolveActive(registry, opts);
   const changes = materialise(root, active, { dryRun });
+  // Only a real stage transition is evidence. A dry run is somebody asking what
+  // would happen, and recording it would make an unused skill look exercised.
+  if (!dryRun) {
+    recordActivation(root, cfg, { run: currentRunId(root), stage, active });
+  }
   return { active, changes, blocked: blockedByAudit(registry, opts), registry };
 }
 
@@ -1012,6 +1066,7 @@ Autonomy and evolution:
     --unknown                   Unrecognised codes: vocabulary pressure, never actionable
     --min-runs <n>              Override the threshold (default: config evolve.minRuns)
     --all-nodes                 Include nodes that failed then landed (mostly noise)
+    --retire                    Skills that never once activated: the deletion signal
   trellis codes               The vocabulary triage records in
     --explain <code>            What it means and which artifact it probably indicts
   trellis classify <path>     Is this path protected, load-bearing, or advisory

@@ -27,12 +27,19 @@ export const PROTECTED = [
 ];
 
 // Proposable, but a human merges. Correctness lives here.
+//
+// SKILLS/ is listed explicitly rather than left to fail closed. Retirement
+// proposals target SKILLS/REGISTRY.json, and the arsenal is exactly the kind of
+// thing that should not change without someone looking — an entry going in is a
+// standing tax on every session's selection accuracy, and an entry coming out is
+// a capability the next project silently no longer has.
 export const LOAD_BEARING = [
   "kit/lib/",
   "kit/bin/",
   "kit/mcp/",
   "trellis.config.json",
   "sessions/",
+  "SKILLS/",
 ];
 
 // Proposable and auto-applied when the regression suite is green. Prose only.
