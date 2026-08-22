@@ -23,7 +23,8 @@ import {
   PRODUCT_GRAPH_DEFAULT,
 } from "../lib/product.mjs";
 import { STAGES, runSession, recordSession, sessionStats, isRetryable, sleep } from "../lib/driver.mjs";
-import { actionable, writeProposal, classify } from "../lib/evolve.mjs";
+import { actionable, unknownCodes, writeProposal, classify } from "../lib/evolve.mjs";
+import { loadCodes, allCodes, groupSimilar, bucketOf, CODES_DOC } from "../lib/codes.mjs";
 import { loadRegistry, resolveActive, materialise, blockedByAudit, missingPlugins } from "../lib/skills.mjs";
 
 const argv = process.argv.slice(2);
@@ -726,6 +727,9 @@ async function cmdAuto() {
 function cmdEvolve() {
   const { root, cfg } = ctx();
   const minRuns = flagInt("min-runs") ?? cfg.evolve?.minRuns ?? 3;
+
+  if (flags.has("--unknown")) return reportUnknown(root, cfg, minRuns);
+
   const found = actionable(root, cfg, { minRuns });
 
   if (!found.length) {
@@ -743,6 +747,99 @@ function cmdEvolve() {
   log.info("");
   log.info("Opus writes the proposal from these in the triage session. It may not touch:");
   log.info("  MISSION.md, gate/verify/mutate/worktree, kit/schema/, kit/regression/, .claude/hooks/");
+}
+
+/**
+ * Vocabulary pressure.
+ *
+ * Nothing here can trigger a proposal no matter how often it recurs — that is the
+ * point. It is a list for a human to read and decide whether to name.
+ */
+function reportUnknown(root, cfg, minRuns) {
+  const unknown = unknownCodes(root, cfg);
+  if (!unknown.length) {
+    log.info("No unrecognised rejection codes. Everything recorded so far is in the vocabulary.");
+    return;
+  }
+
+  log.info(`${unknown.length} unrecognised code(s), bucketed and never actionable:`);
+  for (const u of unknown) {
+    const ready = u.runs >= minRuns ? "  <- clears the threshold" : "";
+    log.info(`  ${u.code.padEnd(34)} ${u.runs} runs, ${u.count} rejections${ready}`);
+  }
+
+  // Display-only grouping. Deliberately not folded into the counts above: if
+  // near-matches counted as one code, a threshold could be reached by varying
+  // spelling, which is the manipulation the run-count discipline exists to stop.
+  const groups = groupSimilar(unknown.map((u) => u.code)).filter((g) => g.members.length > 1);
+  if (groups.length) {
+    log.info("");
+    log.info("Possibly the same idea spelled differently (shown, never summed):");
+    for (const g of groups) log.info(`  ${g.members.join("  ~  ")}`);
+  }
+
+  const ripe = unknown.filter((u) => u.runs >= minRuns);
+  if (ripe.length) {
+    log.info("");
+    log.warn(`${ripe.length} bucket(s) clear ${minRuns} runs. To make one actionable, a human adds it to:`);
+    log.info(`  ${CODES_DOC}   (prose section + an entry in the codes:begin block)`);
+  }
+}
+
+function cmdCodes() {
+  const { root } = ctx();
+  const codes = loadCodes(root);
+  if (codes.missing) die(`${CODES_DOC} not found. That file is the vocabulary.`);
+
+  const one = flagVal("explain");
+  if (one) {
+    const family = Object.hasOwn(codes.rejection, one)
+      ? "rejection"
+      : Object.hasOwn(codes.friction, one)
+        ? "friction"
+        : null;
+    if (!family) {
+      log.fail(`"${one}" is not in the vocabulary.`);
+      log.info(`Use it anyway if nothing fits — it records as other:${bucketOf(`other:${one}`)} and shows up under 'evolve --unknown'.`);
+      process.exit(1);
+    }
+    log.ok(`${one}  (${family})`);
+    const prose = explainFromDoc(root, one);
+    if (prose) log.info(prose);
+    const suspects = codes[family][one]?.suspects ?? [];
+    if (suspects.length) {
+      log.info("");
+      log.info(`Probably indicts: ${suspects.join(", ")}`);
+    }
+    return;
+  }
+
+  for (const family of ["rejection", "friction"]) {
+    const names = Object.keys(codes[family] ?? {});
+    if (!names.length) continue;
+    log.info(`${family} codes (${names.length}):`);
+    for (const n of names) log.info(`  ${n}`);
+    log.info("");
+  }
+
+  // A code defined in the block with no prose beside it is unexplained, and an
+  // unexplained code gets guessed at. Report both directions.
+  const defined = new Set(allCodes(codes));
+  const undocumented = [...defined].filter((c) => !codes.documented.has(c));
+  const orphaned = [...codes.documented].filter((c) => !defined.has(c));
+  if (undocumented.length) log.warn(`defined but not explained in prose: ${undocumented.join(", ")}`);
+  if (orphaned.length) log.warn(`explained in prose but not defined: ${orphaned.join(", ")}`);
+
+  log.info(`If nothing fits, use your own words. It buckets as other:<slug> and a human decides later.`);
+}
+
+/** The prose paragraph under `### <code>` in the doc, for --explain. */
+function explainFromDoc(root, code) {
+  const p = path.join(root, CODES_DOC);
+  if (!fs.existsSync(p)) return null;
+  const text = fs.readFileSync(p, "utf8");
+  const m = new RegExp(`^###\\s+${code}\\s*$([\\s\\S]*?)(?=^###\\s|^---\\s*$)`, "m").exec(text);
+  return m ? m[1].trim() : null;
 }
 
 function cmdClassifyPath() {
@@ -884,6 +981,10 @@ Autonomy and evolution:
     --force                     Re-run a stage even if its artifact already exists
   trellis sessions            Measured cost per stage from your own runs
   trellis evolve              Rejection patterns with enough evidence to act on
+    --unknown                   Unrecognised codes: vocabulary pressure, never actionable
+    --min-runs <n>              Override the threshold (default: config evolve.minRuns)
+  trellis codes               The vocabulary triage records in
+    --explain <code>            What it means and which artifact it probably indicts
   trellis classify <path>     Is this path protected, load-bearing, or advisory
   trellis regression          Fixtures that must still pass after any kit change
   trellis skills              Which skills load in a session, and why
@@ -910,6 +1011,7 @@ const table = {
   auto: cmdAuto,
   sessions: cmdSessions,
   evolve: cmdEvolve,
+  codes: cmdCodes,
   classify: cmdClassifyPath,
   regression: cmdRegression,
   skills: cmdSkills,

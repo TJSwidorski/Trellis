@@ -21,7 +21,15 @@ eight times is one observation about that slice.
 
 ```
 node kit/bin/cli.mjs evolve
+node kit/bin/cli.mjs evolve --unknown
 ```
+
+The codes themselves live in `references/CODES.md` — read that file, not this one,
+when you need to pick one. Counting only works if everyone spells it the same way,
+which is the whole reason the vocabulary is written down. A code nobody has agreed
+on is recorded as `other:<slug>`: visible under `--unknown` as pressure to name it,
+and **never actionable at any run count**. Widening the vocabulary is a human
+commit, so the loop cannot redefine what counts as evidence.
 
 ## 2. Three buckets, three authorities
 

@@ -10,6 +10,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { loadCodes, normaliseCode, isBucketed } from "./codes.mjs";
 
 // Never proposable. See MISSION.md. Prefix match on repo-relative paths.
 export const PROTECTED = [
@@ -67,16 +68,22 @@ export function triagePath(root, cfg) {
 export function rejectionCounts(root, cfg) {
   const p = triagePath(root, cfg);
   if (!fs.existsSync(p)) return {};
+  const codes = loadCodes(root);
   const counts = {};
   for (const line of fs.readFileSync(p, "utf8").split("\n").filter(Boolean)) {
     let row;
     try { row = JSON.parse(line); } catch { continue; }
     for (const d of row.decisions ?? []) {
       if (d.verdict !== "reject" || !d.code) continue;
-      counts[d.code] ??= { count: 0, nodes: new Set(), runs: new Set() };
-      counts[d.code].count++;
-      counts[d.code].nodes.add(d.node ?? "?");
-      if (row.run) counts[d.code].runs.add(row.run);
+      // Normalise at read time, not write time. Sessions past wrote what they
+      // wrote; the vocabulary can grow later and old records pool correctly the
+      // moment a spelling becomes a known code.
+      const code = normaliseCode(d.code, codes, "rejection");
+      if (!code) continue;
+      counts[code] ??= { count: 0, nodes: new Set(), runs: new Set() };
+      counts[code].count++;
+      counts[code].nodes.add(d.node ?? "?");
+      if (row.run) counts[code].runs.add(row.run);
     }
   }
   return Object.fromEntries(
@@ -90,11 +97,29 @@ export function rejectionCounts(root, cfg) {
 // A pattern is actionable when the same code appears across enough distinct runs.
 // Distinct runs, not distinct nodes: one bad slice producing the same code eight
 // times is one observation about that slice, not eight about Trellis.
+// Bucketed codes are excluded here unconditionally, at any run count. That is the
+// loophole closure: the loop can record a code nobody has agreed on, and can show
+// it as pressure, but cannot act on one. Widening the vocabulary is a human commit
+// to references/CODES.md.
 export function actionable(root, cfg, { minRuns = 3 } = {}) {
   return Object.entries(rejectionCounts(root, cfg))
+    .filter(([code]) => !isBucketed(code))
     .filter(([, v]) => v.runs >= minRuns)
     .map(([code, v]) => ({ code, ...v }))
     .sort((a, b) => b.runs - a.runs);
+}
+
+/**
+ * Vocabulary pressure: unrecognised codes and how often they recur.
+ *
+ * These can never trip a threshold. They exist so a human can see that the same
+ * unnamed thing keeps happening and decide, deliberately, to name it.
+ */
+export function unknownCodes(root, cfg) {
+  return Object.entries(rejectionCounts(root, cfg))
+    .filter(([code]) => isBucketed(code))
+    .map(([code, v]) => ({ code, ...v }))
+    .sort((a, b) => b.runs - a.runs || b.count - a.count);
 }
 
 // ------------------------------------------------------------------ proposal

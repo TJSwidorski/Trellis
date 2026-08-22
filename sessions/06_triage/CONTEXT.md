@@ -3,7 +3,8 @@
 ## Inputs
 
 - Layer 4 (working): `.trellis/REPORT.md`, `.trellis/plan.json`
-- Layer 3 (reference): `references/chiefs/` (per node `lenses`), `references/EVOLUTION.md`
+- Layer 3 (reference): `references/chiefs/` (per node `lenses`), `references/EVOLUTION.md`,
+  `references/CODES.md`
 
 ## Process
 
@@ -33,10 +34,28 @@ occurrences of it is evidence that stage 03 is missing a case category.
 This is the entire input to self-improvement. Prose here means Trellis learns
 nothing about itself, ever.
 
+The vocabulary is not listed here — it lives in one place and you read it at run
+time:
+
+```
+node kit/bin/cli.mjs codes
+node kit/bin/cli.mjs codes --explain <code>
+```
+
+Pick the closest code. **If nothing fits, use your own words.** The record is still
+written, bucketed as `other:<your-words>`, and surfaced under
+`trellis evolve --unknown` for a human to name later. What it cannot do is reach a
+threshold — so never stretch a code to fit. A wrong code is worse than an unknown
+one, because it pushes an unrelated pattern toward a proposal that was never about
+it.
+
 ## Outputs
 
 - `.trellis/triage.json` — `{ decisions: [{ node, verdict, code?, reason }] }`
-- Appended to `.trellis/triage.jsonl` — the cross-run record
+- Appended to `.trellis/triage.jsonl` — the cross-run record. One line per triage
+  session: `{ run, decisions: [{ node, verdict, code?, reason }] }`, where `run` is
+  the `runId` from `.trellis/state.json`. Without `run` the line cannot be counted
+  and the stage does not pass.
 - `.trellis/built.json` — accepted node ids, so the next slice skips them
 
 ## Verify

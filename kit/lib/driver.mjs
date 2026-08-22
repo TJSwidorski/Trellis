@@ -55,7 +55,7 @@ export const STAGES = [
   {
     id: "06_triage",
     prompt: "Read sessions/06_triage/CONTEXT.md and do exactly what it says. Nothing else.",
-    verify: (root) => artifactExists(root, ".trellis/triage.json", (j) => Array.isArray(j.decisions)),
+    verify: (root) => triageRecordedEvidence(root),
   },
 ];
 
@@ -114,6 +114,57 @@ function testsExistAndAreNonVacuous(root) {
   if (missing.length) return { ok: false, detail: `${missing.length} test file(s) not written: ${missing.slice(0, 4).join(", ")}` };
   if (thin.length) return { ok: false, detail: `${thin.length} test file(s) suspiciously small: ${thin.slice(0, 4).join(", ")}` };
   return { ok: true, detail: `${declared.length} test files present (run verify-tests for non-vacuity)` };
+}
+
+/**
+ * Read the JSONL lines belonging to the current run.
+ *
+ * `run` comes from state.json rather than from the session, so a line stamped
+ * with someone else's run id — or with none — cannot satisfy a stage.
+ */
+export function currentRunId(root) {
+  return readJson(root, ".trellis/state.json")?.runId ?? null;
+}
+
+function jsonlRowsForRun(root, rel, run) {
+  const p = path.resolve(root, rel);
+  if (!fs.existsSync(p)) return null;
+  const rows = [];
+  for (const line of fs.readFileSync(p, "utf8").split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const row = JSON.parse(line);
+      if (row.run === run) rows.push(row);
+    } catch { /* a torn last line is not evidence of anything */ }
+  }
+  return rows;
+}
+
+/**
+ * Triage must leave the cross-run record, not just this run's summary.
+ *
+ * `triage.json` is what the next slice reads; `triage.jsonl` is the only thing
+ * self-improvement ever sees. Verifying only the former let a stage pass having
+ * written no evidence at all — which is how `trellis evolve` could stay inert
+ * forever while every stage reported success.
+ */
+function triageRecordedEvidence(root) {
+  const base = artifactExists(root, ".trellis/triage.json", (j) => Array.isArray(j.decisions));
+  if (!base.ok) return base;
+
+  const run = currentRunId(root);
+  if (!run) return { ok: false, detail: "state.json has no runId to attribute triage to" };
+
+  const rows = jsonlRowsForRun(root, ".trellis/triage.jsonl", run);
+  if (rows === null) return { ok: false, detail: ".trellis/triage.jsonl was not written" };
+  if (!rows.length) {
+    return { ok: false, detail: `.trellis/triage.jsonl has no line stamped run "${run}"` };
+  }
+  const decisions = rows.flatMap((r) => (Array.isArray(r.decisions) ? r.decisions : []));
+  if (!decisions.length) {
+    return { ok: false, detail: `.trellis/triage.jsonl line for run "${run}" carries no decisions` };
+  }
+  return { ok: true, detail: `triage.json + ${decisions.length} decision(s) recorded for run ${run}` };
 }
 
 // ------------------------------------------------------------------- spawning

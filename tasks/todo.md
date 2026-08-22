@@ -4,18 +4,18 @@ Plan: `~/.claude/plans/plan-steps-1-4-spicy-puzzle.md`
 Order: 0 → 1 → 2 → 5 → 3 → 4 → 6
 
 ## Commit 0 — prerequisites
-- [ ] `rejectionCounts(root, cfg)` / `actionable(root, cfg, …)` honour `cfg.paths.state`
-- [ ] `cmdEvolve` keeps `cfg`, honours `cfg.evolve.minRuns`
-- [ ] regression + units green
+- [x] `rejectionCounts(root, cfg)` / `actionable(root, cfg, …)` honour `cfg.paths.state`
+- [x] `cmdEvolve` keeps `cfg`, honours `cfg.evolve.minRuns`
+- [x] regression + units green
 
 ## Commit 1 — controlled vocabulary
-- [ ] `references/CODES.md` with delimited JSON block
-- [ ] `kit/lib/codes.mjs` — loadCodes / normaliseCode / isKnown
-- [ ] `other:` bucketing; `actionable` filters `other:*` unconditionally
-- [ ] `trellis codes` + `trellis evolve --unknown`
-- [ ] `sessions/06_triage/CONTEXT.md` points at the CLI; jsonl shape specified
-- [ ] 06_triage `verify` requires a triage.jsonl record for this run
-- [ ] adversarial checks
+- [x] `references/CODES.md` with delimited JSON block
+- [x] `kit/lib/codes.mjs` — loadCodes / normaliseCode / isKnown
+- [x] `other:` bucketing; `actionable` filters `other:*` unconditionally
+- [x] `trellis codes` + `trellis evolve --unknown`
+- [x] `sessions/06_triage/CONTEXT.md` points at the CLI; jsonl shape specified
+- [x] 06_triage `verify` requires a triage.jsonl record for this run
+- [x] adversarial checks
 
 ## Commit 2 — attempt-kind evidence
 - [ ] `kit/lib/kinds.mjs` — KINDS / FLAG_TO_KIND / COSTLY_KINDS

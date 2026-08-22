@@ -16,9 +16,11 @@ import {
   nextSlice,
   nodeFingerprint,
 } from "../lib/product.mjs";
-import { classify, writeProposal, PROTECTED } from "../lib/evolve.mjs";
-import { isRetryable } from "../lib/driver.mjs";
+import { classify, writeProposal, PROTECTED, actionable, unknownCodes } from "../lib/evolve.mjs";
+import { isRetryable, STAGES } from "../lib/driver.mjs";
 import { resolveActive, blockedByAudit } from "../lib/skills.mjs";
+import { loadCodes, normaliseCode, allCodes, groupSimilar, CODES_DOC } from "../lib/codes.mjs";
+import os from "node:os";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 let pass = 0;
@@ -415,6 +417,172 @@ check("ADVERSARIAL every shipped SKILL.md has frontmatter that can actually trig
       `${name}/SKILL.md declares name "${declared}" — a mismatch with the directory breaks the trigger`);
     assert(/^description:\s*\S/m.test(fm), `${name}/SKILL.md has no description, so dispatch cannot choose it`);
   }
+});
+
+// ------------------------------------------------------- vocabulary (codes)
+//
+// The vocabulary exists so the same idea spelled three ways stops counting as
+// three ideas. These checks defend the other half of that bargain: an unnamed
+// code must stay visible without ever becoming able to act.
+
+const CFG = { paths: { state: ".trellis" } };
+
+/** A throwaway repo root carrying a real CODES.md and a triage record. */
+function triageRoot(rows) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-codes-"));
+  fs.mkdirSync(path.join(dir, "references"), { recursive: true });
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  fs.copyFileSync(path.join(kitRoot, CODES_DOC), path.join(dir, CODES_DOC));
+  fs.writeFileSync(
+    path.join(dir, ".trellis", "triage.jsonl"),
+    rows.map((r) => JSON.stringify(r)).join("\n") + "\n"
+  );
+  return dir;
+}
+
+const reject = (code, node = "n01") => ({ node, verdict: "reject", code, reason: "x" });
+
+check("the shipped vocabulary parses and every code is explained in prose", () => {
+  const codes = loadCodes(kitRoot);
+  assert(!codes.missing, `${CODES_DOC} is missing — it is the vocabulary`);
+  const defined = allCodes(codes);
+  assert(defined.length > 0, "the codes block defines nothing");
+  const undocumented = defined.filter((c) => !codes.documented.has(c));
+  assert(undocumented.length === 0,
+    `defined but never explained: ${undocumented.join(", ")}. An unexplained code gets guessed at.`);
+});
+
+check("a known code reaching the run threshold is actionable", () => {
+  const root = triageRoot([
+    { run: "r1", decisions: [reject("unhandled-error-path")] },
+    { run: "r2", decisions: [reject("unhandled-error-path")] },
+    { run: "r3", decisions: [reject("unhandled-error-path")] },
+  ]);
+  const found = actionable(root, CFG, { minRuns: 3 });
+  assert(found.length === 1 && found[0].code === "unhandled-error-path",
+    `expected the known code to surface, got: ${JSON.stringify(found)}`);
+});
+
+check("ADVERSARIAL an unknown code never becomes actionable, at any run count", () => {
+  const rows = Array.from({ length: 50 }, (_, i) => ({
+    run: `r${i}`,
+    decisions: [reject("something-nobody-ever-named")],
+  }));
+  const root = triageRoot(rows);
+  assert(actionable(root, CFG, { minRuns: 3 }).length === 0,
+    "a bucketed code reached the threshold — the loop can now invent its own evidence");
+  const unknown = unknownCodes(root, CFG);
+  assert(unknown.length === 1 && unknown[0].runs === 50,
+    "the bucketed code should still be VISIBLE as vocabulary pressure, just not actionable");
+});
+
+check("ADVERSARIAL drifted spellings do not pool into a threshold", () => {
+  const root = triageRoot([
+    { run: "r1", decisions: [reject("unhandled-erroneous")] },
+    { run: "r2", decisions: [reject("mishandled-error-branch")] },
+    { run: "r3", decisions: [reject("no-error-coverage")] },
+  ]);
+  assert(actionable(root, CFG, { minRuns: 3 }).length === 0,
+    "three different spellings were treated as one code");
+});
+
+check("ADVERSARIAL ten rejections in one run is one observation, not ten", () => {
+  const root = triageRoot([
+    { run: "r1", decisions: Array.from({ length: 10 }, (_, i) => reject("design-slop", `n${i}`)) },
+  ]);
+  assert(actionable(root, CFG, { minRuns: 3 }).length === 0,
+    "one bad slice produced a threshold — runs, not nodes, is the unit of recurrence");
+});
+
+check("ADVERSARIAL other: normalisation is idempotent", () => {
+  const codes = loadCodes(kitRoot);
+  for (const raw of ["other:other:x", "Other: Foo", "other: other:  bar", "made-up"]) {
+    const once = normaliseCode(raw, codes, "rejection");
+    const twice = normaliseCode(once, codes, "rejection");
+    assert(once === twice,
+      `normalising ${JSON.stringify(raw)} twice changed it: ${once} -> ${twice}. ` +
+        `One observation would count under two keys.`);
+    assert(!/other:other:/.test(once), `nested bucket produced: ${once}`);
+  }
+});
+
+check("ADVERSARIAL near-duplicate grouping is display-only, never summed", () => {
+  const root = triageRoot([
+    { run: "r1", decisions: [reject("flaky-timing-thing")] },
+    { run: "r2", decisions: [reject("flaky-timing-thing")] },
+    { run: "r3", decisions: [reject("timing-flaky-thing")] },
+    { run: "r4", decisions: [reject("timing-flaky-thing")] },
+  ]);
+  const unknown = unknownCodes(root, CFG);
+  const grouped = groupSimilar(unknown.map((u) => u.code));
+  assert(grouped.some((g) => g.members.length > 1),
+    "the two spellings should be shown together for a human to notice");
+  for (const u of unknown) {
+    assert(u.runs === 2,
+      `grouping leaked into counting: ${u.code} shows ${u.runs} runs, should be 2. ` +
+        `Summing near-matches lets a threshold be reached by varying spelling.`);
+  }
+  assert(actionable(root, CFG, { minRuns: 3 }).length === 0, "grouped buckets became actionable");
+});
+
+// -------------------------------------------------- triage leaves evidence
+//
+// triage.json is what the next slice reads. triage.jsonl is the only thing
+// self-improvement ever sees. Verifying just the former let a stage report
+// success having written no evidence at all.
+
+const triageVerify = STAGES.find((s) => s.id === "06_triage").verify;
+
+/** A root with state.json, triage.json, and whatever triage.jsonl you pass. */
+function triageStageRoot({ runId = "run-1", decisions = [{ node: "n01", verdict: "accept" }], jsonl }) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-triage-"));
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  const w = (f, o) => fs.writeFileSync(path.join(dir, ".trellis", f), JSON.stringify(o));
+  if (runId !== null) w("state.json", { runId });
+  w("triage.json", { decisions });
+  if (jsonl !== undefined) {
+    fs.writeFileSync(
+      path.join(dir, ".trellis", "triage.jsonl"),
+      jsonl.map((r) => JSON.stringify(r)).join("\n") + (jsonl.length ? "\n" : "")
+    );
+  }
+  return dir;
+}
+
+check("triage passes when it leaves a jsonl record for this run", () => {
+  const root = triageStageRoot({ jsonl: [{ run: "run-1", decisions: [reject("design-slop")] }] });
+  const r = triageVerify(root);
+  assert(r.ok, `expected pass, got: ${r.detail}`);
+});
+
+check("ADVERSARIAL triage.json alone does not satisfy the stage", () => {
+  const root = triageStageRoot({});
+  const r = triageVerify(root);
+  assert(!r.ok, "a stage that wrote no cross-run evidence was accepted");
+  assert(/triage\.jsonl/.test(r.detail), `detail should name the missing file, got: ${r.detail}`);
+});
+
+check("ADVERSARIAL an empty triage.jsonl does not satisfy the stage", () => {
+  const root = triageStageRoot({ jsonl: [] });
+  assert(!triageVerify(root).ok, "an empty evidence file was accepted as evidence");
+});
+
+check("ADVERSARIAL a triage record from a different run does not satisfy this one", () => {
+  const root = triageStageRoot({ runId: "run-2", jsonl: [{ run: "run-1", decisions: [reject("design-slop")] }] });
+  const r = triageVerify(root);
+  assert(!r.ok, "last run's evidence was accepted as this run's");
+  assert(/run-2/.test(r.detail), `detail should name the run it wanted, got: ${r.detail}`);
+});
+
+check("ADVERSARIAL an unstamped triage record does not satisfy the stage", () => {
+  const root = triageStageRoot({ jsonl: [{ decisions: [reject("design-slop")] }] });
+  assert(!triageVerify(root).ok,
+    "a line with no run id was accepted — it can never be counted, so it is not evidence");
+});
+
+check("ADVERSARIAL a run-stamped record carrying no decisions does not satisfy the stage", () => {
+  const root = triageStageRoot({ jsonl: [{ run: "run-1", decisions: [] }] });
+  assert(!triageVerify(root).ok, "an empty decision list was accepted as a triage record");
 });
 
 const fixDir = path.join(here, "fixtures");
