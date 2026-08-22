@@ -41,11 +41,11 @@ Order: 0 → 1 → 2 → 5 → 3 → 4 → 6
 - [x] adversarial checks
 
 ## Commit 6 — 07_evolve stage
-- [ ] `sessions/07_evolve/CONTEXT.md`
-- [ ] `STAGES` entry with `periodic: true`; `cmdAuto` skips it by default
-- [ ] stage-07 proposals stamped human-merge
-- [ ] lockstep updates: root CONTEXT.md, regression stage list, bench prompts
-- [ ] adversarial checks
+- [x] `sessions/07_evolve/CONTEXT.md`
+- [x] `STAGES` entry with `periodic: true`; `cmdAuto` skips it by default
+- [x] stage-07 proposals stamped human-merge
+- [x] lockstep updates: root CONTEXT.md, regression stage list, bench prompts
+- [x] adversarial checks
 
 ## Review
 _(filled in at the end)_

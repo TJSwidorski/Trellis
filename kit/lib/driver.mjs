@@ -21,6 +21,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import * as friction from "./friction.mjs";
+import * as evolve from "./evolve.mjs";
 
 // --------------------------------------------------------------- stage table
 
@@ -58,7 +59,19 @@ export const STAGES = [
     prompt: "Read sessions/06_triage/CONTEXT.md and do exactly what it says. Nothing else.",
     verify: (root, cfg) => triageRecordedEvidence(root, cfg),
   },
+  {
+    id: "07_evolve",
+    // Not in the default chain. Evolution should run rarely and deliberately —
+    // every pass costs an expensive session, and the evidence it reads only
+    // changes across many runs. `trellis auto --stage 07_evolve` reaches it.
+    periodic: true,
+    prompt: "Read sessions/07_evolve/CONTEXT.md and do exactly what it says. Nothing else.",
+    verify: (root, cfg) => evolveConsideredEverything(root, cfg),
+  },
 ];
+
+/** Stages that run on an ordinary `trellis auto`. */
+export const DEFAULT_CHAIN = STAGES.filter((s) => !s.periodic);
 
 // -------------------------------------------------------------- verification
 
@@ -177,6 +190,64 @@ function triageRecordedEvidence(root, cfg) {
     ok: true,
     detail: `triage.json + ${decisions.length} decision(s) for run ${run}; friction: ${f.detail}`,
   };
+}
+
+/**
+ * The evolve stage must account for every pattern it was shown.
+ *
+ * Stage 06's rule, transplanted: silence on a stuck node is not acceptance, and
+ * silence on a shortlisted pattern is not a decline. Without this a pass can
+ * quietly ignore the evidence it would rather not act on, and every artifact it
+ * leaves behind still looks complete.
+ */
+function evolveConsideredEverything(root, cfg) {
+  const base = artifactExists(root, ".trellis/evolve.json", (j) => Array.isArray(j.consideredCodes));
+  if (!base.ok) return base;
+
+  const j = readJson(root, ".trellis/evolve.json");
+  const considered = new Set(j.consideredCodes);
+  const proposals = Array.isArray(j.proposals) ? j.proposals : [];
+  const declined = Array.isArray(j.declined) ? j.declined : [];
+
+  const minRuns = cfg?.evolve?.minRuns ?? 3;
+  const shortlist = evolveShortlistCodes(root, cfg, minRuns);
+  const ignored = shortlist.filter((c) => !considered.has(c));
+  if (ignored.length) {
+    return {
+      ok: false,
+      detail: `shortlisted but never considered: ${ignored.join(", ")}. Deciding to do nothing is a decline, not an omission.`,
+    };
+  }
+
+  if (considered.size !== proposals.length + declined.length) {
+    return {
+      ok: false,
+      detail:
+        `${considered.size} code(s) considered but ${proposals.length} proposal(s) + ` +
+        `${declined.length} decline(s) accounts for ${proposals.length + declined.length}`,
+    };
+  }
+
+  const missing = proposals.filter((p) => !fs.existsSync(path.resolve(root, p)));
+  if (missing.length) {
+    return { ok: false, detail: `evolve.json names proposals that do not exist: ${missing.join(", ")}` };
+  }
+
+  return {
+    ok: true,
+    detail: `${considered.size} pattern(s) accounted for; ${proposals.length} proposal(s), ${declined.length} declined`,
+  };
+}
+
+/** Codes the mechanical shortlist currently reports, for the verify above. */
+function evolveShortlistCodes(root, cfg, minRuns) {
+  const out = [];
+  for (const f of evolve.actionable(root, cfg, { minRuns })) out.push(f.code);
+  for (const k of evolve.kindActionable(root, cfg, { minRuns })) out.push(`${k.kind}|${k.tag}`);
+  for (const f of Object.values(friction.counts(root, cfg))) {
+    if (!f.code.startsWith("other:") && f.runs >= minRuns) out.push(f.code);
+  }
+  return [...new Set(out)];
 }
 
 /** Thin seam so the stage table does not import friction.mjs directly. */

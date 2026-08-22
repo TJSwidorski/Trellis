@@ -32,11 +32,16 @@ sort them yourself, badly.
 | `03_cases` | Enumerate edge cases per node | `.trellis/cases.json` covering every planned node |
 | `04_tests` | Write the frozen tests | Every declared test file exists and is non-vacuous |
 | `05_build` | Deterministic runner; no model | `.trellis/REPORT.md` |
-| `06_triage` | Accept, reject, or re-spec | `.trellis/triage.json` |
+| `06_triage` | Accept, reject, or re-spec | `.trellis/triage.json`, plus a `triage.jsonl` and a friction record for this run |
+| `07_evolve` | **Periodic.** Turn recurring patterns into proposals | `.trellis/evolve.json` accounting for every shortlisted pattern |
 
 One session does one stage. At the end of a session the context is cleared or
 compacted, so **anything the next stage needs must be on disk before you stop.**
 Never rely on something you remember from earlier in the conversation.
+
+`07_evolve` is not in the default `trellis auto` chain. Evolution reads evidence
+that only moves across many runs, and every pass costs an expensive session, so it
+is reached deliberately with `trellis auto --stage 07_evolve`.
 
 ## What is not yours
 

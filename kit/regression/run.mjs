@@ -17,7 +17,7 @@ import {
   nodeFingerprint,
 } from "../lib/product.mjs";
 import { classify, writeProposal, PROTECTED, actionable, unknownCodes, autoAppliable } from "../lib/evolve.mjs";
-import { isRetryable, STAGES } from "../lib/driver.mjs";
+import { isRetryable, STAGES, DEFAULT_CHAIN } from "../lib/driver.mjs";
 import { resolveActive, blockedByAudit, neverActivated } from "../lib/skills.mjs";
 import { loadCodes, normaliseCode, allCodes, groupSimilar, CODES_DOC } from "../lib/codes.mjs";
 import { KINDS, FLAG_TO_KIND, COSTLY_KINDS } from "../lib/kinds.mjs";
@@ -389,7 +389,7 @@ check("blockedByAudit reports what is queued rather than dropping it silently", 
 check("the shipped registry parses and activates nothing unaudited", () => {
   const real = JSON.parse(fs.readFileSync(path.join(kitRoot, "SKILLS/REGISTRY.json"), "utf8"));
   assert(Array.isArray(real.entries) && real.entries.length > 0, "registry has no entries");
-  for (const stage of ["01_ingest", "02_slice", "03_cases", "04_tests", "06_triage"]) {
+  for (const stage of DEFAULT_CHAIN.filter((s) => s.prompt).map((s) => s.id)) {
     for (const a of resolveActive(real, { stage, sliceNodes: [{ kind: "frontend", surfaces: ["secrets"], lenses: ["security"] }] })) {
       const e = real.entries.find((x) => x.name === a.name);
       assert(["trusted-provenance", "audited"].includes(e.audit_status),
@@ -1024,6 +1024,90 @@ check("references/TOOLING.md exists and stays short enough to read every pass", 
   assert(fs.existsSync(p), "the decision table is missing");
   const lines = fs.readFileSync(p, "utf8").split("\n").length;
   assert(lines <= 150, `TOOLING.md is ${lines} lines; it enters an Opus context on every evolve pass`);
+});
+
+// ----------------------------------------------------------- the evolve stage
+
+const evolveVerify = STAGES.find((s) => s.id === "07_evolve").verify;
+
+check("ADVERSARIAL 07_evolve is not in the default auto chain", () => {
+  // Without this, adding a periodic stage silently makes every ordinary run
+  // spend an extra expensive session, and nothing else in the system would
+  // report it as a change.
+  assert(DEFAULT_CHAIN.map((s) => s.id).join(",") === "01_ingest,02_slice,03_cases,04_tests,05_build,06_triage",
+    `the default chain changed: ${DEFAULT_CHAIN.map((s) => s.id).join(",")}`);
+  assert(STAGES.some((s) => s.id === "07_evolve" && s.periodic),
+    "07_evolve must exist and be marked periodic");
+});
+
+/** A root with a shortlist-producing ledger and whatever evolve.json you pass. */
+function evolveRoot(evolveJson) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-evolve-"));
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  fs.mkdirSync(path.join(dir, "references"), { recursive: true });
+  fs.mkdirSync(path.join(dir, "evolution", "proposals"), { recursive: true });
+  fs.copyFileSync(path.join(kitRoot, CODES_DOC), path.join(dir, CODES_DOC));
+  // Three runs of exhausted nodes sharing a kind: one actionable pattern.
+  fs.writeFileSync(
+    path.join(dir, ".trellis", "ledger.jsonl"),
+    ["r1", "r2", "r3"].map((runId) =>
+      JSON.stringify({ runId, nodeId: "n01", tags: ["api"], status: "exhausted", landedTier: null,
+        survivingMutations: [], failureKinds: ["no-files"], attemptsByTier: {} })
+    ).join("\n") + "\n"
+  );
+  if (evolveJson !== undefined) {
+    fs.writeFileSync(path.join(dir, ".trellis", "evolve.json"), JSON.stringify(evolveJson));
+  }
+  return dir;
+}
+
+check("07_evolve passes when every shortlisted pattern is accounted for", () => {
+  const root = evolveRoot({ run: "r3", consideredCodes: ["no-files|api"], proposals: [], declined: [{ code: "no-files|api", row: "nothing", why: "one project's habit" }] });
+  const r = evolveVerify(root, CFG);
+  assert(r.ok, `expected pass, got: ${r.detail}`);
+});
+
+check("ADVERSARIAL 07_evolve fails when it omits a code the shortlist reports", () => {
+  // The stage-06 rule transplanted: silence on a shortlisted pattern is not a
+  // decline. Deciding to do nothing is fine; not mentioning it is not.
+  const root = evolveRoot({ run: "r3", consideredCodes: [], proposals: [], declined: [] });
+  const r = evolveVerify(root, CFG);
+  assert(!r.ok, "a pass that ignored the evidence it was shown was accepted");
+  assert(/no-files\|api/.test(r.detail), `detail should name what was ignored, got: ${r.detail}`);
+});
+
+check("ADVERSARIAL 07_evolve fails when considered codes are not all dispositioned", () => {
+  const root = evolveRoot({ run: "r3", consideredCodes: ["no-files|api"], proposals: [], declined: [] });
+  assert(!evolveVerify(root, CFG).ok,
+    "a considered pattern with neither a proposal nor a decline was accepted");
+});
+
+check("ADVERSARIAL 07_evolve fails when it names a proposal that does not exist", () => {
+  const root = evolveRoot({
+    run: "r3",
+    consideredCodes: ["no-files|api"],
+    proposals: ["evolution/proposals/999-imaginary.md"],
+    declined: [],
+  });
+  const r = evolveVerify(root, CFG);
+  assert(!r.ok, "a proposal that was never written was accepted as written");
+  assert(/do not exist/.test(r.detail), `detail should say so, got: ${r.detail}`);
+});
+
+check("every stage in STAGES has a contract with the canonical headings", () => {
+  // Closes the drift this repo already had four copies of. STAGES becomes the
+  // enforced registry rather than the nominal one.
+  for (const stage of STAGES) {
+    const p = path.join(kitRoot, "sessions", stage.id, "CONTEXT.md");
+    assert(fs.existsSync(p), `sessions/${stage.id}/CONTEXT.md does not exist`);
+    const text = fs.readFileSync(p, "utf8");
+    assert(text.startsWith(`# Stage ${stage.id.slice(0, 2)}`), `${stage.id} contract has the wrong title line`);
+    // 05_build is an anti-contract — no model runs it, so only Outputs applies.
+    const required = stage.run === "runner" ? ["## Outputs"] : ["## Inputs", "## Process", "## Outputs", "## Verify"];
+    for (const h of required) {
+      assert(text.includes(h), `sessions/${stage.id}/CONTEXT.md is missing ${h}`);
+    }
+  }
 });
 
 const fixDir = path.join(here, "fixtures");

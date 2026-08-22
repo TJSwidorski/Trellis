@@ -22,7 +22,7 @@ import {
   nodeFingerprint,
   PRODUCT_GRAPH_DEFAULT,
 } from "../lib/product.mjs";
-import { STAGES, runSession, recordSession, sessionStats, isRetryable, sleep, currentRunId } from "../lib/driver.mjs";
+import { STAGES, DEFAULT_CHAIN, runSession, recordSession, sessionStats, isRetryable, sleep, currentRunId } from "../lib/driver.mjs";
 import { actionable, unknownCodes, kindActionable, kindByTier, writeProposal, classify } from "../lib/evolve.mjs";
 import { loadCodes, allCodes, groupSimilar, bucketOf, normaliseCode, CODES_DOC } from "../lib/codes.mjs";
 import * as friction from "../lib/friction.mjs";
@@ -623,8 +623,10 @@ async function cmdAuto() {
     die("driver.enabled is false in trellis.config.json. Read the driver section before turning this on.");
   }
 
+  // Periodic stages are reachable only by name. Without this, adding one would
+  // silently make every ordinary run spend an extra expensive session.
   const only = flagVal("stage");
-  const stages = only ? STAGES.filter((s) => s.id === only) : STAGES;
+  const stages = only ? STAGES.filter((s) => s.id === only) : DEFAULT_CHAIN;
   if (!stages.length) die(`Unknown stage ${only}. One of: ${STAGES.map((s) => s.id).join(", ")}`);
 
   const stats = sessionStats(root);
@@ -734,6 +736,7 @@ function cmdEvolve() {
 
   if (flags.has("--unknown")) return reportUnknown(root, cfg, minRuns);
   if (flags.has("--retire")) return reportRetire(root, cfg, minRuns);
+  if (flags.has("--json")) return emitShortlist(root, cfg, minRuns);
 
   const scope = flags.has("--all-nodes") ? "all" : "costly";
   const found = actionable(root, cfg, { minRuns });
@@ -832,6 +835,57 @@ function readTriageRows(root, cfg) {
   return fs.readFileSync(p, "utf8").split("\n").filter(Boolean)
     .map((l) => { try { return JSON.parse(l); } catch { return null; } })
     .filter(Boolean);
+}
+
+/**
+ * The whole input to stage 07, and the reason its token budget is bounded by
+ * construction rather than by an instruction telling a model to be brief.
+ *
+ * A handful of rows of scalars. No prose, no logs, no transcripts. `--top` caps
+ * it; the default of 5 is a deliberate ceiling on how much can be considered in
+ * one pass, not a display convenience.
+ */
+function emitShortlist(root, cfg, minRuns) {
+  const top = flagInt("top") ?? 5;
+  const scope = flags.has("--all-nodes") ? "all" : "costly";
+
+  const rows = [
+    ...actionable(root, cfg, { minRuns }).map((f) => ({
+      source: "rejection",
+      code: f.code,
+      runs: f.runs,
+      occurrences: f.count,
+      nodes: f.nodes.length,
+    })),
+    ...kindActionable(root, cfg, { minRuns, scope }).map((k) => ({
+      source: "attempt-kind",
+      code: `${k.kind}|${k.tag}`,
+      runs: k.runs,
+      occurrences: k.attempts,
+      nodes: k.nodes,
+    })),
+    ...Object.values(friction.counts(root, cfg))
+      .filter((f) => !f.code.startsWith("other:") && f.runs >= minRuns)
+      .map((f) => ({
+        source: "friction",
+        code: f.code,
+        runs: f.runs,
+        occurrences: f.count,
+        targets: f.targets.slice(0, 3),
+      })),
+  ]
+    .sort((a, b) => b.runs - a.runs || b.occurrences - a.occurrences)
+    .slice(0, top);
+
+  // Suspects come from the vocabulary, so the stage has somewhere to start
+  // without reading anything else.
+  const codes = loadCodes(root);
+  for (const r of rows) {
+    const entry = codes.rejection?.[r.code] ?? codes.friction?.[r.code];
+    if (entry?.suspects?.length) r.suspects = entry.suspects;
+  }
+
+  process.stdout.write(JSON.stringify({ minRuns, scope, top, patterns: rows }, null, 2) + "\n");
 }
 
 /**
@@ -1209,6 +1263,7 @@ Product graph — authored outside Trellis, handed in complete:
 
 Autonomy and evolution:
   trellis auto [--stage id]   Drive the session pipeline headless, verifying on disk
+                                07_evolve is periodic: reachable only by --stage
     --force                     Re-run a stage even if its artifact already exists
   trellis sessions            Measured cost per stage from your own runs
   trellis evolve              Rejection codes and failure kinds with enough evidence
