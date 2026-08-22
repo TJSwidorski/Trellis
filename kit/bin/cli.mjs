@@ -724,9 +724,9 @@ async function cmdAuto() {
 // ------------------------------------------------------------------ evolve
 
 function cmdEvolve() {
-  const { root } = ctx();
-  const minRuns = flagInt("min-runs") ?? 3;
-  const found = actionable(root, { minRuns });
+  const { root, cfg } = ctx();
+  const minRuns = flagInt("min-runs") ?? cfg.evolve?.minRuns ?? 3;
+  const found = actionable(root, cfg, { minRuns });
 
   if (!found.length) {
     log.info(

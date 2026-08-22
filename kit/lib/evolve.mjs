@@ -55,11 +55,17 @@ export function classify(relPath) {
 
 // ------------------------------------------------------------------ evidence
 
+/** Where the cross-run triage record lives. Routed through config like every
+ *  other artifact — see ledgerPath in ledger.mjs, which this mirrors. */
+export function triagePath(root, cfg) {
+  return path.resolve(root, cfg?.paths?.state ?? ".trellis", "triage.jsonl");
+}
+
 // Triage records structured rejection codes, not prose. "the error handling is
 // sloppy" cannot be counted; REJECT:unhandled-error-path across nine runs is a
 // signal that the cases skill is missing a category.
-export function rejectionCounts(root) {
-  const p = path.resolve(root, ".trellis/triage.jsonl");
+export function rejectionCounts(root, cfg) {
+  const p = triagePath(root, cfg);
   if (!fs.existsSync(p)) return {};
   const counts = {};
   for (const line of fs.readFileSync(p, "utf8").split("\n").filter(Boolean)) {
@@ -84,8 +90,8 @@ export function rejectionCounts(root) {
 // A pattern is actionable when the same code appears across enough distinct runs.
 // Distinct runs, not distinct nodes: one bad slice producing the same code eight
 // times is one observation about that slice, not eight about Trellis.
-export function actionable(root, { minRuns = 3 } = {}) {
-  return Object.entries(rejectionCounts(root))
+export function actionable(root, cfg, { minRuns = 3 } = {}) {
+  return Object.entries(rejectionCounts(root, cfg))
     .filter(([, v]) => v.runs >= minRuns)
     .map(([code, v]) => ({ code, ...v }))
     .sort((a, b) => b.runs - a.runs);

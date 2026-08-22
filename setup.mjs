@@ -59,6 +59,7 @@ export const NOT_INSTALLED = [
   "setup.mjs",       // the installer does not install itself
   ".trellis-seed",   // empty, unreferenced
   ".bench",          // A/B harness output: scratch repos and REPORT.md
+  "tasks",           // this repo's own working notes; a target repo keeps its own
   ".git",
   "node_modules",
 ];
