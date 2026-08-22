@@ -21,6 +21,7 @@ import { isRetryable, STAGES } from "../lib/driver.mjs";
 import { resolveActive, blockedByAudit, neverActivated } from "../lib/skills.mjs";
 import { loadCodes, normaliseCode, allCodes, groupSimilar, CODES_DOC } from "../lib/codes.mjs";
 import { KINDS, FLAG_TO_KIND, COSTLY_KINDS } from "../lib/kinds.mjs";
+import * as friction from "../lib/friction.mjs";
 import { kindActionable, kindCounts } from "../lib/evolve.mjs";
 import os from "node:os";
 
@@ -535,56 +536,62 @@ check("ADVERSARIAL near-duplicate grouping is display-only, never summed", () =>
 
 const triageVerify = STAGES.find((s) => s.id === "06_triage").verify;
 
-/** A root with state.json, triage.json, and whatever triage.jsonl you pass. */
-function triageStageRoot({ runId = "run-1", decisions = [{ node: "n01", verdict: "accept" }], jsonl }) {
+/** A root with state.json, triage.json, and whatever jsonl records you pass. */
+function triageStageRoot({
+  runId = "run-1",
+  decisions = [{ node: "n01", verdict: "accept" }],
+  jsonl,
+  frictionRows = [{ run: "run-1", stage: "06_triage", kind: "none" }],
+}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-triage-"));
   fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
   const w = (f, o) => fs.writeFileSync(path.join(dir, ".trellis", f), JSON.stringify(o));
+  const wl = (f, rows) =>
+    fs.writeFileSync(
+      path.join(dir, ".trellis", f),
+      rows.map((r) => JSON.stringify(r)).join("\n") + (rows.length ? "\n" : "")
+    );
   if (runId !== null) w("state.json", { runId });
   w("triage.json", { decisions });
-  if (jsonl !== undefined) {
-    fs.writeFileSync(
-      path.join(dir, ".trellis", "triage.jsonl"),
-      jsonl.map((r) => JSON.stringify(r)).join("\n") + (jsonl.length ? "\n" : "")
-    );
-  }
+  if (jsonl !== undefined) wl("triage.jsonl", jsonl);
+  if (frictionRows !== undefined) wl("friction.jsonl", frictionRows);
   return dir;
 }
 
 check("triage passes when it leaves a jsonl record for this run", () => {
   const root = triageStageRoot({ jsonl: [{ run: "run-1", decisions: [reject("design-slop")] }] });
-  const r = triageVerify(root);
+  const r = triageVerify(root, CFG);
   assert(r.ok, `expected pass, got: ${r.detail}`);
 });
 
 check("ADVERSARIAL triage.json alone does not satisfy the stage", () => {
   const root = triageStageRoot({});
-  const r = triageVerify(root);
+  const r = triageVerify(root, CFG);
   assert(!r.ok, "a stage that wrote no cross-run evidence was accepted");
   assert(/triage\.jsonl/.test(r.detail), `detail should name the missing file, got: ${r.detail}`);
 });
 
 check("ADVERSARIAL an empty triage.jsonl does not satisfy the stage", () => {
   const root = triageStageRoot({ jsonl: [] });
-  assert(!triageVerify(root).ok, "an empty evidence file was accepted as evidence");
+  assert(!triageVerify(root, CFG).ok, "an empty evidence file was accepted as evidence");
 });
 
 check("ADVERSARIAL a triage record from a different run does not satisfy this one", () => {
   const root = triageStageRoot({ runId: "run-2", jsonl: [{ run: "run-1", decisions: [reject("design-slop")] }] });
-  const r = triageVerify(root);
+  const r = triageVerify(root, CFG);
   assert(!r.ok, "last run's evidence was accepted as this run's");
   assert(/run-2/.test(r.detail), `detail should name the run it wanted, got: ${r.detail}`);
 });
 
 check("ADVERSARIAL an unstamped triage record does not satisfy the stage", () => {
   const root = triageStageRoot({ jsonl: [{ decisions: [reject("design-slop")] }] });
-  assert(!triageVerify(root).ok,
+  assert(!triageVerify(root, CFG).ok,
     "a line with no run id was accepted — it can never be counted, so it is not evidence");
 });
 
 check("ADVERSARIAL a run-stamped record carrying no decisions does not satisfy the stage", () => {
   const root = triageStageRoot({ jsonl: [{ run: "run-1", decisions: [] }] });
-  assert(!triageVerify(root).ok, "an empty decision list was accepted as a triage record");
+  assert(!triageVerify(root, CFG).ok, "an empty decision list was accepted as a triage record");
 });
 
 // ------------------------------------------------------------ attempt kinds
@@ -789,6 +796,119 @@ check("ADVERSARIAL the arsenal is load-bearing, never advisory", () => {
     assert(classify(p) === "load-bearing",
       `${p} classified "${classify(p)}" — an arsenal change that auto-applies is one nobody saw`);
   }
+});
+
+// ---------------------------------------------------------------- friction
+//
+// You cannot verify a self-report. What these defend is the weaker thing that IS
+// achievable: silence becomes a signed statement, and a false statement shows up
+// as a pattern across runs rather than an accusation against one session.
+
+check("ADVERSARIAL an empty friction record set does not satisfy the stage", () => {
+  const root = triageStageRoot({
+    jsonl: [{ run: "run-1", decisions: [reject("design-slop")] }],
+    frictionRows: [],
+  });
+  const r = triageVerify(root, CFG);
+  assert(!r.ok, "a stage that said nothing about friction was accepted");
+  assert(/friction/.test(r.detail), `detail should name friction, got: ${r.detail}`);
+});
+
+check("ADVERSARIAL friction from another run or another stage does not satisfy this one", () => {
+  for (const wrong of [
+    { run: "run-0", stage: "06_triage", kind: "none" },
+    { run: "run-1", stage: "03_cases", kind: "none" },
+  ]) {
+    const root = triageStageRoot({
+      jsonl: [{ run: "run-1", decisions: [reject("design-slop")] }],
+      frictionRows: [wrong],
+    });
+    assert(!triageVerify(root, CFG).ok,
+      `a record for ${wrong.run}/${wrong.stage} satisfied run-1/06_triage`);
+  }
+});
+
+check("an explicit none satisfies the stage", () => {
+  const root = triageStageRoot({ jsonl: [{ run: "run-1", decisions: [reject("design-slop")] }] });
+  const r = triageVerify(root, CFG);
+  assert(r.ok, `asserting none should pass, got: ${r.detail}`);
+  assert(/none/.test(r.detail), `detail should record that none was asserted, got: ${r.detail}`);
+});
+
+check("ADVERSARIAL validate refuses records that could never be counted", () => {
+  const cases = [
+    [{ stage: "06_triage", kind: "invented-kind", code: "x" }, /not one of/],
+    [{ kind: "manual-edit", code: "x" }, /stage is required/],
+    [{ stage: "06_triage", kind: "manual-edit" }, /code is required/],
+    [{ stage: "06_triage", kind: "manual-edit", code: "x", count: 0 }, /count/],
+    [{ stage: "06_triage", kind: "manual-edit", code: "x", note: "z".repeat(200) }, /note/],
+  ];
+  for (const [rec, want] of cases) {
+    const errors = friction.validate(rec);
+    assert(errors.length > 0, `accepted an uncountable record: ${JSON.stringify(rec)}`);
+    assert(errors.some((e) => want.test(e)),
+      `rejected ${JSON.stringify(rec)} but not for the expected reason: ${errors.join("; ")}`);
+  }
+  assert(friction.validate({ stage: "06_triage", kind: "none" }).length === 0,
+    "a bare none-assertion must be valid — it is the whole mechanism");
+});
+
+check("ADVERSARIAL the per-stage-run record cap is enforced", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-friction-"));
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  const rec = { stage: "06_triage", kind: "manual-edit", code: "hand-tightened-contract" };
+  for (let i = 0; i < friction.MAX_PER_STAGE_RUN; i++) {
+    friction.append(dir, CFG, rec, { run: "run-1" });
+  }
+  let threw = false;
+  try { friction.append(dir, CFG, rec, { run: "run-1" }); } catch { threw = true; }
+  assert(threw, "the cap did not hold — verbosity must not be rewarded any more than silence is");
+  // The cap is per stage-run, so a different run is unaffected.
+  friction.append(dir, CFG, rec, { run: "run-2" });
+});
+
+check("ADVERSARIAL append stamps run itself and refuses an unattributable record", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-friction-"));
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  const row = friction.append(
+    dir, CFG,
+    { stage: "06_triage", kind: "manual-edit", code: "hand-tightened-contract", run: "forged", ts: "1999" },
+    { run: "run-1" }
+  );
+  assert(row.run === "run-1", `run was taken from the record instead of the caller: ${row.run}`);
+  assert(row.ts !== "1999", "ts was taken from the record instead of the clock");
+
+  let threw = false;
+  try { friction.append(dir, CFG, { stage: "06_triage", kind: "none" }, { run: null }); } catch { threw = true; }
+  assert(threw, "a record with no run id was written — it can never be counted, so it is not evidence");
+});
+
+check("ADVERSARIAL a contradicted none is counted but never fails the stage", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-friction-"));
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  for (const run of ["r1", "r2", "r3"]) {
+    friction.append(dir, CFG, { stage: "06_triage", kind: "none" }, { run });
+  }
+  const ledgerRecords = ["r1", "r2", "r3"].map((runId) => ({ runId, nodeId: "n01", status: "exhausted" }));
+  const found = friction.contradictions(dir, CFG, { ledgerRecords });
+  assert(found.length === 3,
+    `expected all three none-assertions to be contradicted, got ${found.length}`);
+
+  // The other half, and the one that keeps reporting honestly cheap: the stage
+  // still passes. Nothing a session says about friction can fail it.
+  for (const run of ["r1", "r2", "r3"]) {
+    const r = friction.assertedFor(dir, CFG, { run, stage: "06_triage" });
+    assert(r.ok, `asserting none failed the stage for ${run} — that makes silence the safe answer`);
+  }
+});
+
+check("ADVERSARIAL a run with no exhausted nodes is not a contradiction", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-friction-"));
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  friction.append(dir, CFG, { stage: "06_triage", kind: "none" }, { run: "r1" });
+  const ledgerRecords = [{ runId: "r1", nodeId: "n01", status: "merged" }];
+  assert(friction.contradictions(dir, CFG, { ledgerRecords }).length === 0,
+    "a smooth run was flagged as a contradiction — the detector must only fire on real friction");
 });
 
 const fixDir = path.join(here, "fixtures");

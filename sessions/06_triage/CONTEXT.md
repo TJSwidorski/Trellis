@@ -57,11 +57,36 @@ it.
   the `runId` from `.trellis/state.json`. Without `run` the line cannot be counted
   and the stage does not pass.
 - `.trellis/built.json` — accepted node ids, so the next slice skips them
+- One or more friction records, written by `trellis friction` (see below)
+
+## Friction
+
+Before you finish, record what was expensive about *doing this stage*, as opposed
+to what was wrong with the software. Rejection codes and failure kinds both
+describe the product. Neither can see you fixing an artifact by hand for the third
+run running, and that is the thing worth automating.
+
+```
+node kit/bin/cli.mjs friction --stage 06_triage \
+  --kind manual-edit --code hand-tightened-contract \
+  --target sessions/03_cases/CONTEXT.md --count 2
+```
+
+If there genuinely was none, say so:
+
+```
+node kit/bin/cli.mjs friction --stage 06_triage --none
+```
+
+`trellis codes` lists the friction codes alongside the rejection ones. Ten records
+per stage per run is the ceiling — a long list is as uninformative as an empty one.
 
 ## Verify
 
 Every node in the report that is exhausted or high-risk has a decision. Silence on
 a stuck node is not acceptance.
+
+A friction record for this run exists — reported or explicitly `none`.
 
 ## Evolution
 
@@ -75,3 +100,15 @@ You may not propose changes to `MISSION.md`, the gates, the schemas, the hooks, 
 the regression suite. `trellis classify <path>` will tell you which bucket a file
 is in. Advisory proposals auto-apply once regression is green; load-bearing ones
 wait for a human.
+
+## Do not
+
+Do not stretch a rejection code to fit. An unrecognised code is bucketed and
+harmless; a wrong one pushes an unrelated pattern toward a proposal that was never
+about it.
+
+**Reporting friction never fails this stage.** The check is that you reported
+*something*, not what you reported — an honest list of six costs you nothing, and
+`--none` passes exactly as cleanly. The one thing ever counted against the loop is
+asserting `none` on a run whose ledger shows exhausted nodes, and that is counted
+across runs as a pattern, never held against a single session.

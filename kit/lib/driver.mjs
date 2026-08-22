@@ -20,6 +20,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import * as friction from "./friction.mjs";
 
 // --------------------------------------------------------------- stage table
 
@@ -55,7 +56,7 @@ export const STAGES = [
   {
     id: "06_triage",
     prompt: "Read sessions/06_triage/CONTEXT.md and do exactly what it says. Nothing else.",
-    verify: (root) => triageRecordedEvidence(root),
+    verify: (root, cfg) => triageRecordedEvidence(root, cfg),
   },
 ];
 
@@ -148,7 +149,7 @@ function jsonlRowsForRun(root, rel, run) {
  * written no evidence at all — which is how `trellis evolve` could stay inert
  * forever while every stage reported success.
  */
-function triageRecordedEvidence(root) {
+function triageRecordedEvidence(root, cfg) {
   const base = artifactExists(root, ".trellis/triage.json", (j) => Array.isArray(j.decisions));
   if (!base.ok) return base;
 
@@ -164,7 +165,23 @@ function triageRecordedEvidence(root) {
   if (!decisions.length) {
     return { ok: false, detail: `.trellis/triage.jsonl line for run "${run}" carries no decisions` };
   }
-  return { ok: true, detail: `triage.json + ${decisions.length} decision(s) recorded for run ${run}` };
+
+  // Friction is a separate claim from the triage decisions and gets checked
+  // separately. `--none` satisfies it: what is required is a statement, not a
+  // grievance. Verifying that a statement exists is the most a driver can do —
+  // whether it is TRUE is settled across runs, in evolve, and never here.
+  const f = assertedFriction(root, cfg, { run, stage: "06_triage" });
+  if (!f.ok) return f;
+
+  return {
+    ok: true,
+    detail: `triage.json + ${decisions.length} decision(s) for run ${run}; friction: ${f.detail}`,
+  };
+}
+
+/** Thin seam so the stage table does not import friction.mjs directly. */
+function assertedFriction(root, cfg, { run, stage }) {
+  return friction.assertedFor(root, cfg ?? { paths: { state: ".trellis" } }, { run, stage });
 }
 
 // ------------------------------------------------------------------- spawning

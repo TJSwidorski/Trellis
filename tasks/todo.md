@@ -29,10 +29,10 @@ Order: 0 → 1 → 2 → 5 → 3 → 4 → 6
 - [x] `SKILLS/` added to LOAD_BEARING
 
 ## Commit 3 — friction stream
-- [ ] `kit/lib/friction.mjs` + `trellis friction`
-- [ ] driver verify predicate; `--none` assertion
-- [ ] contradiction detector
-- [ ] adversarial checks
+- [x] `kit/lib/friction.mjs` + `trellis friction`
+- [x] driver verify predicate; `--none` assertion
+- [x] contradiction detector
+- [x] adversarial checks
 
 ## Commit 4 — decision table + tooling proposals
 - [ ] `references/TOOLING.md`

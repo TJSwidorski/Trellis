@@ -24,7 +24,8 @@ import {
 } from "../lib/product.mjs";
 import { STAGES, runSession, recordSession, sessionStats, isRetryable, sleep, currentRunId } from "../lib/driver.mjs";
 import { actionable, unknownCodes, kindActionable, kindByTier, writeProposal, classify } from "../lib/evolve.mjs";
-import { loadCodes, allCodes, groupSimilar, bucketOf, CODES_DOC } from "../lib/codes.mjs";
+import { loadCodes, allCodes, groupSimilar, bucketOf, normaliseCode, CODES_DOC } from "../lib/codes.mjs";
+import * as friction from "../lib/friction.mjs";
 import {
   loadRegistry, resolveActive, materialise, blockedByAudit, missingPlugins,
   recordActivation, readActivations, neverActivated,
@@ -635,7 +636,7 @@ async function cmdAuto() {
   }
 
   for (const stage of stages) {
-    const pre = stage.verify(root);
+    const pre = stage.verify(root, cfg);
     if (pre.ok && !flags.has("--force")) {
       log.ok(`${stage.id} already satisfied (${pre.detail}) — skipping.`);
       continue;
@@ -681,7 +682,7 @@ async function cmdAuto() {
         }
       }
 
-      const check = stage.verify(root);
+      const check = stage.verify(root, cfg);
       recordSession(root, {
         stage: stage.id,
         attempt,
@@ -777,8 +778,60 @@ function cmdEvolve() {
     }
   }
 
+  reportFriction(root, cfg, minRuns);
+
   log.info("Opus writes the proposal from these in the triage session. It may not touch:");
   log.info("  MISSION.md, gate/verify/mutate/worktree, kit/schema/, kit/regression/, .claude/hooks/");
+}
+
+/**
+ * Self-reported friction, plus the contradictions that keep it honest.
+ *
+ * Bucketed codes are excluded from the actionable list here for the same reason
+ * they are excluded from rejections: a code nobody agreed on cannot trigger work.
+ */
+function reportFriction(root, cfg, minRuns) {
+  const counts = friction.counts(root, cfg);
+  const ripe = Object.values(counts)
+    .filter((f) => !f.code.startsWith("other:") && f.runs >= minRuns)
+    .sort((a, b) => b.runs - a.runs);
+
+  if (ripe.length) {
+    log.ok(`${ripe.length} friction pattern(s) reported across ${minRuns}+ runs:`);
+    for (const f of ripe) {
+      const where = f.targets.length ? `  on ${f.targets.slice(0, 3).join(", ")}` : "";
+      log.info(`  ${f.code.padEnd(30)} ${f.runs} runs, ${f.count} occurrences${where}`);
+    }
+    log.info("");
+  }
+
+  // The teeth behind `--none`. Counted across runs, never held against a session:
+  // a triage session can legitimately have a smooth time on a bad run.
+  const contradicted = friction.contradictions(root, cfg, {
+    ledgerRecords: ledger.read(root, cfg),
+    triageRows: readTriageRows(root, cfg),
+  });
+  const byStage = {};
+  for (const c of contradicted) (byStage[c.stage] ??= new Set()).add(c.run);
+  const stale = Object.entries(byStage).filter(([, runs]) => runs.size >= minRuns);
+
+  if (stale.length) {
+    log.warn(`friction.unreported-suspected in ${stale.length} stage(s):`);
+    for (const [stage, runs] of stale) {
+      log.info(`  ${stage.padEnd(30)} asserted 'none' on ${runs.size} runs that had exhausted nodes or rejections`);
+    }
+    log.info("  Not an accusation about any one session. A pattern this size means the");
+    log.info("  friction prompt is not landing, which is a contract problem.");
+    log.info("");
+  }
+}
+
+function readTriageRows(root, cfg) {
+  const p = path.join(root, cfg.paths?.state ?? ".trellis", "triage.jsonl");
+  if (!fs.existsSync(p)) return [];
+  return fs.readFileSync(p, "utf8").split("\n").filter(Boolean)
+    .map((l) => { try { return JSON.parse(l); } catch { return null; } })
+    .filter(Boolean);
 }
 
 /**
@@ -861,6 +914,49 @@ function reportRetire(root, cfg, minRuns) {
   log.info("These have provably never entered a context window. Either the activation rules are");
   log.info("wrong, or the entry is dead weight. Both are worth a proposal against SKILLS/REGISTRY.json.");
   log.info(log.dim("Manual-only entries are excluded: they activate when named, so silence is by design."));
+}
+
+/**
+ * Record work the session did by hand.
+ *
+ * A command rather than a file the session appends to, for one reason: `ts` and
+ * `run` are stamped here. Those are the two fields cross-run counting depends on
+ * and the two a hand-written line gets wrong.
+ */
+function cmdFriction() {
+  const { root, cfg } = ctx();
+  const stage = flagVal("stage");
+  if (!stage) die("Usage: trellis friction --stage <id> (--none | --kind <k> --code <c> [--target p] [--count n] [--note s])");
+
+  const run = currentRunId(root);
+  if (!run) die("No runId in .trellis/state.json. Friction is recorded against a run, or not at all.");
+
+  const rec = flags.has("--none")
+    ? { stage, kind: "none" }
+    : {
+        stage,
+        kind: flagVal("kind"),
+        code: normaliseCode(flagVal("code"), loadCodes(root), "friction"),
+        target: flagVal("target") ?? undefined,
+        count: flagInt("count") ?? undefined,
+        note: flagVal("note") ?? undefined,
+      };
+
+  let row;
+  try {
+    row = friction.append(root, cfg, rec, { run });
+  } catch (e) {
+    die(e.message);
+  }
+
+  if (row.kind === "none") {
+    log.ok(`${stage}: asserted no friction for run ${run}.`);
+    return;
+  }
+  log.ok(`${stage}: recorded ${row.kind}/${row.code}${row.target ? ` on ${row.target}` : ""}.`);
+  if (row.code?.startsWith("other:")) {
+    log.info(log.dim(`  bucketed — visible under 'evolve --unknown', never actionable until named in ${CODES_DOC}`));
+  }
 }
 
 function cmdCodes() {
@@ -1069,6 +1165,10 @@ Autonomy and evolution:
     --retire                    Skills that never once activated: the deletion signal
   trellis codes               The vocabulary triage records in
     --explain <code>            What it means and which artifact it probably indicts
+  trellis friction --stage <id>   Record work you did by hand (or --none)
+    --kind <k> --code <c>       manual-edit | repeated-read | missing-tool | ...
+    --target <path> --count <n> --note "<=140 chars"
+    --none                      Explicitly assert there was none. Never fails a stage.
   trellis classify <path>     Is this path protected, load-bearing, or advisory
   trellis regression          Fixtures that must still pass after any kit change
   trellis skills              Which skills load in a session, and why
@@ -1096,6 +1196,7 @@ const table = {
   sessions: cmdSessions,
   evolve: cmdEvolve,
   codes: cmdCodes,
+  friction: cmdFriction,
   classify: cmdClassifyPath,
   regression: cmdRegression,
   skills: cmdSkills,
