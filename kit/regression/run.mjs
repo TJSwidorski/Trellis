@@ -16,7 +16,7 @@ import {
   nextSlice,
   nodeFingerprint,
 } from "../lib/product.mjs";
-import { classify, writeProposal, PROTECTED, actionable, unknownCodes } from "../lib/evolve.mjs";
+import { classify, writeProposal, PROTECTED, actionable, unknownCodes, autoAppliable } from "../lib/evolve.mjs";
 import { isRetryable, STAGES } from "../lib/driver.mjs";
 import { resolveActive, blockedByAudit, neverActivated } from "../lib/skills.mjs";
 import { loadCodes, normaliseCode, allCodes, groupSimilar, CODES_DOC } from "../lib/codes.mjs";
@@ -909,6 +909,121 @@ check("ADVERSARIAL a run with no exhausted nodes is not a contradiction", () => 
   const ledgerRecords = [{ runId: "r1", nodeId: "n01", status: "merged" }];
   assert(friction.contradictions(dir, CFG, { ledgerRecords }).length === 0,
     "a smooth run was flagged as a contradiction — the detector must only fire on real friction");
+});
+
+// -------------------------------------------------------- tooling proposals
+//
+// The addition side of the loop. A tooling proposal is where a recurring pattern
+// turns into a standing cost, so the things that make that cost visible and
+// reversible have to be enforced rather than encouraged.
+
+function proposalRoot() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-propose-"));
+  fs.mkdirSync(path.join(dir, "evolution", "proposals"), { recursive: true });
+  return dir;
+}
+
+const toolingArgs = (over = {}) => ({
+  title: "add a graph differ skill",
+  targets: ["SKILLS/REGISTRY.json"],
+  kind: "tooling",
+  evidence: "missing-tool in 4 runs",
+  alternatives: "a check cannot do it because the comparison needs judgement",
+  cost: "12 skills today, 13 after",
+  reversal: "zero activations across 10 runs",
+  ...over,
+});
+
+check("ADVERSARIAL a tooling proposal without a retirement condition is refused", () => {
+  for (const missing of [undefined, "", "   "]) {
+    let threw = false;
+    try {
+      writeProposal(proposalRoot(), toolingArgs({ reversal: missing }));
+    } catch { threw = true; }
+    assert(threw,
+      `a tooling proposal with reversal=${JSON.stringify(missing)} was written. ` +
+        `The pre-commitment IS the deletion mechanism; without it the arsenal only grows.`);
+  }
+  // The same proposal WITH one is fine — the check must not be blanket refusal.
+  const r = writeProposal(proposalRoot(), toolingArgs());
+  assert(r.kind === "tooling", `expected a tooling proposal, got ${r.kind}`);
+});
+
+check("ADVERSARIAL an unknown proposal kind throws", () => {
+  let threw = false;
+  try { writeProposal(proposalRoot(), toolingArgs({ kind: "improvement" })); } catch { threw = true; }
+  assert(threw, "an unrecognised kind was accepted, so the template silently degraded to default");
+});
+
+check("a tooling proposal carries alternatives, cost, and retirement", () => {
+  const root = proposalRoot();
+  const r = writeProposal(root, toolingArgs());
+  const text = fs.readFileSync(path.join(root, r.file), "utf8");
+  for (const heading of ["## Alternatives considered", "## Cost", "## Retirement condition"]) {
+    assert(text.includes(heading), `tooling template is missing ${heading}`);
+  }
+  assert(/- \[ \] Does a contract fix or a plain check do this instead\?/.test(text),
+    "the reviewer checklist must lead with the cheaper-mechanism question");
+});
+
+check("the legacy argument shape still produces the mechanism template", () => {
+  // Pins the two call sites inside this file. If a required parameter ever
+  // appears, they break, and they live in a protected file.
+  const root = proposalRoot();
+  const r = writeProposal(root, {
+    title: "reword something",
+    targets: ["README.md"],
+    rationale: "x",
+    evidence: "y",
+    change: "z",
+  });
+  const text = fs.readFileSync(path.join(root, r.file), "utf8");
+  assert(r.kind === "mechanism", `default kind changed to ${r.kind}`);
+  assert(text.includes("## Why this fixes the cause, not the symptom"), "mechanism template changed shape");
+  assert(text.includes("## Proposed change"), "mechanism template lost its change section");
+  assert(!text.includes("## Retirement condition"), "mechanism proposals should not grow a tooling section");
+});
+
+check("ADVERSARIAL a proposal touching the vocabulary never auto-applies", () => {
+  // references/CODES.md is prose, so it classifies advisory and would otherwise
+  // apply with nobody in the path. It is also the definition of what counts as
+  // evidence, which makes it the one advisory file a loop could use to
+  // manufacture a threshold.
+  assert(classify(CODES_DOC) === "advisory", "precondition: CODES.md is advisory prose");
+  assert(!autoAppliable(CODES_DOC, { evolve: { autoApplyAdvisory: true } }),
+    "the vocabulary would auto-apply — the loop could widen its own definition of evidence");
+  assert(autoAppliable("README.md", { evolve: { autoApplyAdvisory: true } }),
+    "the carve-out must stay narrow; blanket review trains reviewers to skim");
+
+  const root = proposalRoot();
+  const r = writeProposal(root, {
+    title: "add a code", targets: [CODES_DOC], evidence: "e", rationale: "r", change: "c",
+  });
+  const text = fs.readFileSync(path.join(root, r.file), "utf8");
+  assert(/\*\*Applies:\*\* only when a human merges it/.test(text),
+    "a vocabulary proposal was marked auto-applying");
+  assert(r.held === true, "the proposal did not record that it is held");
+});
+
+check("ADVERSARIAL anything written by the evolve stage waits for a human", () => {
+  // Otherwise the system writes prose about how it should behave and that prose
+  // applies with nobody in the path.
+  const root = proposalRoot();
+  const r = writeProposal(root, {
+    title: "reword a reference", targets: ["references/conventions.md"],
+    evidence: "e", rationale: "r", change: "c", fromEvolveStage: true,
+  });
+  const text = fs.readFileSync(path.join(root, r.file), "utf8");
+  assert(r.tier === "advisory", "precondition: this target is advisory");
+  assert(r.held === true && /only when a human merges it/.test(text),
+    "model-authored advisory prose auto-applied — that is a closed loop with no human in it");
+});
+
+check("references/TOOLING.md exists and stays short enough to read every pass", () => {
+  const p = path.join(kitRoot, "references/TOOLING.md");
+  assert(fs.existsSync(p), "the decision table is missing");
+  const lines = fs.readFileSync(p, "utf8").split("\n").length;
+  assert(lines <= 150, `TOOLING.md is ${lines} lines; it enters an Opus context on every evolve pass`);
 });
 
 const fixDir = path.join(here, "fixtures");

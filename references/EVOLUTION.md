@@ -105,6 +105,18 @@ There is a real exception. Some corrections are judgement that cannot be reduced
 a rule, and editing the output is the right move. The distinguishing question is
 whether the same correction would apply next time. If yes, it belongs in the source.
 
+## What a pattern earns
+
+Evidence says *that* something recurs. It does not say what to do about it, and the
+choice — a check, a contract fix, a skill, a subagent, a plugin, nothing — goes
+wrong the same way every time: a skill feels like building a capability and a check
+feels like a chore, when a check costs zero context forever and a skill taxes every
+session's selection accuracy.
+
+`references/TOOLING.md` is the decision table, with the ordering rule and the
+retirement test each mechanism owes. A tooling proposal cannot be written without a
+retirement condition, because a loop that can only add is not a loop.
+
 ## Writing a proposal
 
 `evolution/proposals/NNN-title.md`, with evidence attached: run ids, ledger stats,

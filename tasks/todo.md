@@ -35,10 +35,10 @@ Order: 0 → 1 → 2 → 5 → 3 → 4 → 6
 - [x] adversarial checks
 
 ## Commit 4 — decision table + tooling proposals
-- [ ] `references/TOOLING.md`
-- [ ] `writeProposal({ kind })` + `trellis propose`
-- [ ] `NO_AUTO_APPLY` mitigation for CODES.md
-- [ ] adversarial checks
+- [x] `references/TOOLING.md`
+- [x] `writeProposal({ kind })` + `trellis propose`
+- [x] `NO_AUTO_APPLY` mitigation for CODES.md
+- [x] adversarial checks
 
 ## Commit 6 — 07_evolve stage
 - [ ] `sessions/07_evolve/CONTEXT.md`

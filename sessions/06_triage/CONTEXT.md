@@ -4,7 +4,7 @@
 
 - Layer 4 (working): `.trellis/REPORT.md`, `.trellis/plan.json`
 - Layer 3 (reference): `references/chiefs/` (per node `lenses`), `references/EVOLUTION.md`,
-  `references/CODES.md`
+  `references/CODES.md`, `references/TOOLING.md`
 
 ## Process
 
@@ -90,8 +90,14 @@ A friction record for this run exists — reported or explicitly `none`.
 
 ## Evolution
 
-Run `node kit/bin/cli.mjs evolve`. If a rejection code has appeared in three or
-more distinct runs, write a proposal under `evolution/proposals/`.
+Run `node kit/bin/cli.mjs evolve`. If a pattern has appeared in three or more
+distinct runs, write a proposal with `trellis propose` — through the command, never
+by hand-formatting markdown, because the command is what enforces the refusals.
+
+`references/TOOLING.md` decides *what* a pattern earns: a check, a contract fix, a
+skill, a subagent, a plugin, or nothing. Walk it top to bottom and stop at the
+first row that fits. The bias is strongly toward the cheap rows — a skill taxes
+every session's selection accuracy, and nothing in Trellis measures that.
 
 Fix the source, not the run. If you have tightened the same contract three times,
 the fix is in the skill that writes contracts, not in this run's contract.

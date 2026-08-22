@@ -286,7 +286,42 @@ export function kindActionable(root, cfg, { minRuns = 3, scope = "costly", histo
 
 // ------------------------------------------------------------------ proposal
 
-export function writeProposal(root, { title, targets, rationale, evidence, change }) {
+export const PROPOSAL_KINDS = Object.freeze(new Set(["mechanism", "tooling", "retirement"]));
+
+/**
+ * Advisory paths that still wait for a human.
+ *
+ * `references/CODES.md` is prose, so it classifies advisory and would auto-apply
+ * once regression is green. But it is the definition of what counts as evidence,
+ * and a loop that can widen its own vocabulary without review can manufacture a
+ * threshold. Narrow carve-out rather than reclassifying all of `references/`,
+ * which would put README typos in front of a human and train them to skim.
+ */
+export const NO_AUTO_APPLY = ["references/CODES.md"];
+
+export function autoAppliable(relPath, cfg) {
+  if (cfg?.evolve?.autoApplyAdvisory === false) return false;
+  if (classify(relPath) !== "advisory") return false;
+  return !NO_AUTO_APPLY.includes(relPath.replace(/\\/g, "/"));
+}
+
+export function writeProposal(
+  root,
+  {
+    title, targets, rationale, evidence, change,
+    // Defaulted, not required. The only existing callers are inside
+    // kit/regression/run.mjs, a PROTECTED file — a required parameter would force
+    // a human edit to protected code just to keep the suite compiling.
+    kind = "mechanism",
+    mechanism, alternatives, cost, reversal,
+    // Set by stage 07. See the stamp below.
+    fromEvolveStage = false,
+  }
+) {
+  if (!PROPOSAL_KINDS.has(kind)) {
+    throw new Error(`Unknown proposal kind "${kind}". One of: ${[...PROPOSAL_KINDS].join(", ")}`);
+  }
+
   const bad = targets.filter((t) => classify(t) === "protected");
   if (bad.length) {
     throw new Error(
@@ -295,9 +330,37 @@ export function writeProposal(root, { title, targets, rationale, evidence, chang
     );
   }
 
+  // The pre-commitment IS the deletion mechanism. A tooling proposal without a
+  // falsifiable retirement condition is an addition that can never be undone on
+  // evidence, and a loop that can only add is not a loop.
+  if (kind === "tooling" && !String(reversal ?? "").trim()) {
+    throw new Error(
+      "A tooling proposal must state a retirement condition — a mechanical test that would " +
+        "say this should be removed. Without one the arsenal only ever grows, and the cost of " +
+        "that growth appears in no metric. See references/TOOLING.md."
+    );
+  }
+
   const tier = targets.some((t) => classify(t) === "load-bearing" || classify(t) === "unclassified")
     ? "load-bearing"
     : "advisory";
+
+  // Two reasons an advisory proposal still waits for a human: it touches the
+  // vocabulary, or a model wrote it in 07_evolve. The second is the one that
+  // matters — otherwise the system writes prose about how it should behave and
+  // that prose applies with nobody in the path. You cannot un-apply instructions
+  // that quietly changed the loop's own instructions.
+  const heldTargets = targets.filter((t) => classify(t) === "advisory" && NO_AUTO_APPLY.includes(t.replace(/\\/g, "/")));
+  const held = tier === "advisory" && (fromEvolveStage || heldTargets.length > 0);
+  const applies =
+    tier === "load-bearing" || held
+      ? "only when a human merges it"
+      : "automatically once the regression suite is green";
+  const heldWhy = !held
+    ? null
+    : fromEvolveStage
+      ? "written by 07_evolve — model-authored prose does not auto-apply"
+      : `touches ${heldTargets.join(", ")}, which defines what counts as evidence`;
 
   const dir = path.resolve(root, "evolution/proposals");
   fs.mkdirSync(dir, { recursive: true });
@@ -305,37 +368,68 @@ export function writeProposal(root, { title, targets, rationale, evidence, chang
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 50);
   const file = path.join(dir, `${n}-${slug}.md`);
 
-  fs.writeFileSync(
-    file,
-    [
-      `# ${title}`,
-      "",
-      `- **Tier:** ${tier}`,
-      `- **Targets:** ${targets.join(", ")}`,
-      `- **Written:** ${new Date().toISOString()}`,
-      `- **Applies:** ${tier === "advisory" ? "automatically once the regression suite is green" : "only when a human merges it"}`,
-      "",
-      "## Evidence",
-      "",
-      evidence,
-      "",
-      "## Why this fixes the cause, not the symptom",
-      "",
-      rationale,
-      "",
-      "## Proposed change",
-      "",
-      change,
-      "",
-      "## Reviewer checklist",
-      "",
-      "- [ ] Does this weaken any gate, threshold, or acceptance condition?",
-      "- [ ] Would the adversarial fixtures still fail if this ships?",
-      "- [ ] Does it serve a MISSION.md invariant, or only make runs greener?",
-      "",
-    ].join("\n"),
-    "utf8"
-  );
+  const head = [
+    `# ${title}`,
+    "",
+    `- **Kind:** ${kind}`,
+    `- **Tier:** ${tier}`,
+    `- **Targets:** ${targets.join(", ")}`,
+    `- **Written:** ${new Date().toISOString()}`,
+    `- **Applies:** ${applies}`,
+    ...(heldWhy ? [`- **Held because:** ${heldWhy}`] : []),
+    "",
+    "## Evidence",
+    "",
+    evidence,
+    "",
+  ];
 
-  return { file: path.relative(root, file), tier };
+  const body =
+    kind === "tooling"
+      ? [
+          "## Alternatives considered",
+          "",
+          alternatives ?? "_(none named — this proposal is incomplete)_",
+          "",
+          "## Proposed mechanism",
+          "",
+          mechanism ?? change ?? "",
+          "",
+          "## Cost",
+          "",
+          cost ?? "_(not stated — the cost of a skill is invisible unless it is written down)_",
+          "",
+          "## Retirement condition",
+          "",
+          reversal,
+          "",
+        ]
+      : [
+          "## Why this fixes the cause, not the symptom",
+          "",
+          rationale ?? "",
+          "",
+          "## Proposed change",
+          "",
+          change ?? mechanism ?? "",
+          "",
+          ...(reversal ? ["## Retirement condition", "", reversal, ""] : []),
+        ];
+
+  const checklist = [
+    "## Reviewer checklist",
+    "",
+    ...(kind === "tooling"
+      ? ["- [ ] Does a contract fix or a plain check do this instead? (references/TOOLING.md)"]
+      : []),
+    "- [ ] Does this weaken any gate, threshold, or acceptance condition?",
+    "- [ ] Would the adversarial fixtures still fail if this ships?",
+    "- [ ] Does it serve a MISSION.md invariant, or only make runs greener?",
+    ...(kind === "tooling" ? ["- [ ] Is the retirement condition something `trellis evolve --retire` could actually check?"] : []),
+    "",
+  ];
+
+  fs.writeFileSync(file, [...head, ...body, ...checklist].join("\n"), "utf8");
+
+  return { file: path.relative(root, file), tier, kind, held };
 }

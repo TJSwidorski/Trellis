@@ -959,6 +959,59 @@ function cmdFriction() {
   }
 }
 
+/**
+ * Write a proposal through code rather than by formatting markdown.
+ *
+ * That is what makes the protected-path refusal, the tier derivation, the
+ * numbering, and the retirement-condition requirement actually binding. A model
+ * hand-writing a file under evolution/proposals/ bypasses all four.
+ *
+ * Long fields are read from files rather than argv, because a shell argument is
+ * the wrong place for three paragraphs.
+ */
+function cmdPropose() {
+  const { root } = ctx();
+  const title = flagVal("title");
+  const targets = (flagVal("targets") ?? "").split(",").map((t) => t.trim()).filter(Boolean);
+  if (!title || !targets.length) {
+    die('Usage: trellis propose --title "..." --targets a,b --kind mechanism|tooling|retirement ' +
+        "--evidence <file> [--change <file>] [--alternatives <file>] [--cost <file>] [--reversal <file>]");
+  }
+
+  const fromFile = (name) => {
+    const v = flagVal(name);
+    if (!v) return undefined;
+    const p = path.resolve(root, v);
+    if (fs.existsSync(p)) return fs.readFileSync(p, "utf8").trim();
+    return v; // short values inline are fine
+  };
+
+  let result;
+  try {
+    result = writeProposal(root, {
+      title,
+      targets,
+      kind: flagVal("kind") ?? "mechanism",
+      evidence: fromFile("evidence") ?? "_(no evidence attached — this proposal is incomplete)_",
+      rationale: fromFile("rationale"),
+      change: fromFile("change"),
+      mechanism: fromFile("mechanism"),
+      alternatives: fromFile("alternatives"),
+      cost: fromFile("cost"),
+      reversal: fromFile("reversal"),
+      fromEvolveStage: flags.has("--from-evolve-stage"),
+    });
+  } catch (e) {
+    die(e.message);
+  }
+
+  log.ok(`wrote ${result.file}`);
+  log.info(`  kind: ${result.kind}   tier: ${result.tier}`);
+  log.info(`  ${result.tier === "advisory" && !result.held
+    ? "auto-applies once regression is green"
+    : "waits for a human merge"}`);
+}
+
 function cmdCodes() {
   const { root } = ctx();
   const codes = loadCodes(root);
@@ -1169,6 +1222,8 @@ Autonomy and evolution:
     --kind <k> --code <c>       manual-edit | repeated-read | missing-tool | ...
     --target <path> --count <n> --note "<=140 chars"
     --none                      Explicitly assert there was none. Never fails a stage.
+  trellis propose             Write a proposal through code (enforces the refusals)
+    --kind tooling              Requires alternatives, cost, and a retirement condition
   trellis classify <path>     Is this path protected, load-bearing, or advisory
   trellis regression          Fixtures that must still pass after any kit change
   trellis skills              Which skills load in a session, and why
@@ -1197,6 +1252,7 @@ const table = {
   evolve: cmdEvolve,
   codes: cmdCodes,
   friction: cmdFriction,
+  propose: cmdPropose,
   classify: cmdClassifyPath,
   regression: cmdRegression,
   skills: cmdSkills,
