@@ -125,11 +125,19 @@ export function rejectionCounts(root, cfg) {
   const p = triagePath(root, cfg);
   if (!fs.existsSync(p)) return {};
   const codes = loadCodes(root);
-  const counts = {};
+  // Object.create(null): the keys come from a file a human can edit, and a
+  // decision coded "__proto__" reached Object.prototype and mutated it
+  // process-wide before throwing.
+  const counts = Object.create(null);
   for (const line of fs.readFileSync(p, "utf8").split("\n").filter(Boolean)) {
     let row;
     try { row = JSON.parse(line); } catch { continue; }
-    for (const d of row.decisions ?? []) {
+    // A malformed line is not evidence, and it is also not a reason to take down
+    // `trellis evolve` and stage-07 verify with it. `null` survives JSON.parse,
+    // and `decisions` is whatever the file says it is.
+    if (!row || typeof row !== "object" || !Array.isArray(row.decisions)) continue;
+    for (const d of row.decisions) {
+      if (!d || typeof d !== "object") continue;
       if (d.verdict !== "reject" || !d.code) continue;
       // Normalise at read time, not write time. Sessions past wrote what they
       // wrote; the vocabulary can grow later and old records pool correctly the
@@ -199,11 +207,30 @@ export function unknownCodes(root, cfg) {
  * population, and choosing it dissolves the `test-failure` problem without a
  * blocklist that someone would later have to maintain.
  */
+/**
+ * `survivingMutations` is a COUNT in the ledger, not an array.
+ *
+ * ledger.recordsFor writes `(s.survivingMutations || []).length`. This read
+ * `?.length` on it, which is `undefined` on a number, so the clause was dead
+ * against every record the ledger has ever written — nodes that landed with a
+ * live mutant, the exact population the scoping comment says matters most, were
+ * silently outside it. The regression fixture used `[]`, a shape recordsFor
+ * never produces, so nothing caught the mismatch.
+ *
+ * Accept both, because state.json holds the array form and a future caller may
+ * pass one.
+ */
+function survivorCount(rec) {
+  const v = rec?.survivingMutations;
+  if (Array.isArray(v)) return v.length;
+  return Number.isFinite(v) ? v : 0;
+}
+
 function isCostly(rec) {
   return (
     rec.status === "exhausted" ||
     rec.landedTier === "strong" ||
-    (rec.survivingMutations?.length ?? 0) > 0
+    survivorCount(rec) > 0
   );
 }
 

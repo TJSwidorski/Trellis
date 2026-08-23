@@ -16,7 +16,7 @@ import {
   nextSlice,
   nodeFingerprint,
 } from "../lib/product.mjs";
-import { classify, writeProposal, PROTECTED, actionable, unknownCodes, autoAppliable } from "../lib/evolve.mjs";
+import { classify, writeProposal, PROTECTED, actionable, unknownCodes, autoAppliable, rejectionCounts as rejectionCountsFn } from "../lib/evolve.mjs";
 import { isRetryable, STAGES, DEFAULT_CHAIN } from "../lib/driver.mjs";
 import { resolveActive, blockedByAudit, neverActivated } from "../lib/skills.mjs";
 import { loadCodes, normaliseCode, allCodes, groupSimilar, CODES_DOC } from "../lib/codes.mjs";
@@ -27,6 +27,7 @@ import os from "node:os";
 import { spawnSync } from "node:child_process";
 import { changedPaths } from "../lib/worktree.mjs";
 import { matchAny } from "../lib/paths.mjs";
+import { recordsFor } from "../lib/ledger.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 let pass = 0;
@@ -728,12 +729,14 @@ check("ADVERSARIAL test-failure and pass are never treated as costly", () => {
 
 /** Ledger records, shaped like ledger.recordsFor output. */
 const ledgerRec = (over = {}) => ({
+  // Shape pinned against recordsFor() by the check below — survivingMutations is
+  // a COUNT, not an array, which is how a dead clause hid for a whole commit.
   runId: "r1",
   nodeId: "n01",
   tags: ["api"],
   status: "merged",
   landedTier: "cheap",
-  survivingMutations: [],
+  survivingMutations: 0,
   failureKinds: [],
   attemptsByTier: {},
   ...over,
@@ -782,6 +785,51 @@ check("ADVERSARIAL one node retried within a run counts once per run", () => {
   const e = kindCounts(null, CFG, { history }).get("timeout|api");
   assert(e.runs === 2 && e.nodes === 2,
     `three retries in one run inflated the count: ${JSON.stringify(e)}`);
+});
+
+check("ADVERSARIAL the costly-node fixtures match what the ledger actually writes", () => {
+  // The fixtures below are hand-built. If their shape drifts from recordsFor's
+  // output, every check using them tests a fiction — which is exactly how the
+  // surviving-mutation clause stayed dead: the fixture used [], the ledger
+  // writes a number, and `?.length` on a number is undefined.
+  const state = {
+    runId: "r1", project: "p",
+    nodes: { n01: { status: "merged", tier: "cheap", attempts: [{ tier: "cheap", ok: true, kind: "pass" }], survivingMutations: ["m1", "m2"] } },
+  };
+  const [real] = recordsFor(state, new Map([["n01", { id: "n01", tags: ["api"], write: [], tests: [], deps: [] }]]));
+  assert(real !== undefined, "recordsFor produced nothing for a merged node");
+  assert(typeof real.survivingMutations === "number",
+    `recordsFor writes survivingMutations as ${typeof real.survivingMutations}; fixtures must match`);
+  assert(typeof ledgerRec().survivingMutations === typeof real.survivingMutations,
+    `fixture survivingMutations is ${typeof ledgerRec().survivingMutations}, ledger writes ${typeof real.survivingMutations}`);
+  for (const k of ["status", "landedTier", "failureKinds", "attemptsByTier", "tags", "runId", "nodeId"]) {
+    assert(k in real, `recordsFor no longer emits ${k}; the aggregation reads it`);
+  }
+});
+
+check("a node that landed with a live mutant counts as costly", () => {
+  // Built through recordsFor, not by hand, so the shape cannot drift.
+  const history = ["r1", "r2", "r3"].map((runId) => {
+    const state = {
+      runId, project: "p",
+      nodes: { n01: { status: "merged", tier: "cheap", survivingMutations: ["m1"],
+        attempts: [{ tier: "cheap", ok: false, kind: "out-of-scope" }, { tier: "cheap", ok: true, kind: "pass" }] } },
+    };
+    return recordsFor(state, new Map([["n01", { id: "n01", tags: ["api"], write: [], tests: [], deps: [] }]]))[0];
+  });
+  assert(history[0].survivingMutations > 0, "precondition: the fixture has a live mutant");
+  const found = kindActionable(null, CFG, { minRuns: 3, history });
+  assert(found.length === 1 && found[0].kind === "out-of-scope",
+    `a node that merged with a surviving mutant was not treated as costly: ${JSON.stringify(found)}`);
+});
+
+check("a node that landed on the strong tier counts as costly", () => {
+  const history = ["r1", "r2", "r3"].map((runId) =>
+    ledgerRec({ runId, status: "merged", landedTier: "strong", failureKinds: ["timeout"] })
+  );
+  const found = kindActionable(null, CFG, { minRuns: 3, history });
+  assert(found.length === 1 && found[0].kind === "timeout",
+    `needing the top tier is expensive and must be in the population: ${JSON.stringify(found)}`);
 });
 
 check("ADVERSARIAL an unrecognised kind is dropped rather than counted", () => {
@@ -977,6 +1025,74 @@ check("ADVERSARIAL a contradicted none is counted but never fails the stage", ()
     const r = friction.assertedFor(dir, CFG, { run, stage: "06_triage" });
     assert(r.ok, `asserting none failed the stage for ${run} — that makes silence the safe answer`);
   }
+});
+
+/** A friction root carrying a real CODES.md, written by hand as a human could. */
+function frictionRoot(rows) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-fr-"));
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  fs.mkdirSync(path.join(dir, "references"), { recursive: true });
+  fs.copyFileSync(path.join(kitRoot, CODES_DOC), path.join(dir, CODES_DOC));
+  fs.writeFileSync(
+    path.join(dir, ".trellis", "friction.jsonl"),
+    rows.map((r) => JSON.stringify(r)).join("\n") + "\n"
+  );
+  return dir;
+}
+
+check("ADVERSARIAL an invented friction code never clears the threshold", () => {
+  // friction.jsonl is a plain file a human can edit (MISSION invariant 5), so
+  // the CLI normalising on write proves nothing about what counts on read. This
+  // exact payload used to produce { runs: 3, count: 297 } and land on the
+  // shortlist pointing at a protected file.
+  const root = frictionRoot(["r1", "r2", "r3"].map((run) => ({
+    ts: "t", run, stage: "06_triage", kind: "missing-tool",
+    code: "gate.mjs is too strict", count: 99, target: "kit/lib/gate.mjs",
+  })));
+  const c = friction.counts(root, CFG);
+  const keys = Object.keys(c);
+  assert(keys.length === 1 && keys[0].startsWith("other:"),
+    `free text reached the shortlist uncoded: ${JSON.stringify(keys)}`);
+  assert(c[keys[0]].count <= friction.MAX_PER_STAGE_RUN * 3,
+    `a hand-written count of 99 was taken at face value (${c[keys[0]].count}); ` +
+      `occurrences order the shortlist, so it reorders what stage 07 may see`);
+});
+
+check("a known friction code still counts under its own name", () => {
+  const root = frictionRoot(["r1", "r2", "r3"].map((run) => ({
+    ts: "t", run, stage: "06_triage", kind: "manual-edit", code: "hand-tightened-contract",
+  })));
+  const c = friction.counts(root, CFG);
+  assert(c["hand-tightened-contract"]?.runs === 3,
+    `the normalisation swallowed a legitimate code: ${JSON.stringify(Object.keys(c))}`);
+});
+
+check("ADVERSARIAL a code named __proto__ is neutralised, not executed", () => {
+  const root = frictionRoot([
+    { ts: "t", run: "r1", stage: "06_triage", kind: "missing-tool", code: "__proto__", count: 5 },
+    { ts: "t", run: "r2", stage: "06_triage", kind: "missing-tool", code: "constructor" },
+  ]);
+  const c = friction.counts(root, CFG);   // used to throw
+  assert(!Object.hasOwn(Object.prototype, "count"),
+    "Object.prototype was mutated process-wide by a line in a data file");
+  for (const k of Object.keys(c)) {
+    assert(k.startsWith("other:"), `${k} was treated as a known code`);
+  }
+});
+
+check("ADVERSARIAL a malformed evidence line does not take the command down", () => {
+  // A torn or hand-edited file must degrade, not throw: this reader backs
+  // `trellis evolve` and the 07_evolve verify predicate.
+  const root = triageRoot([
+    null,
+    { run: "r1", decisions: { not: "an array" } },
+    { run: "r1" },
+    "a string",
+    { run: "r2", decisions: [null, { verdict: "reject" }, { verdict: "reject", code: "design-slop" }] },
+  ]);
+  const counts = rejectionCountsFn(root, CFG);   // must not throw
+  assert(counts["design-slop"]?.runs === 1, `the one good decision was lost: ${JSON.stringify(counts)}`);
+  assert(!Object.hasOwn(Object.prototype, "count"), "Object.prototype was mutated");
 });
 
 check("ADVERSARIAL a run with no exhausted nodes is not a contradiction", () => {

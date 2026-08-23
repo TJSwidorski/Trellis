@@ -15,6 +15,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { loadCodes, normaliseCode } from "./codes.mjs";
 
 /**
  * The closed set of friction shapes.
@@ -138,16 +139,42 @@ export function assertedFor(root, cfg, { run, stage }) {
   };
 }
 
-/** Counts by code across distinct runs, same discipline as every other source. */
-export function counts(root, cfg) {
-  const out = {};
+/**
+ * Counts by code across distinct runs, same discipline as every other source.
+ *
+ * Normalising here — at READ time — is the whole point, and it was missing.
+ * `cmdFriction` normalises what it writes, but friction.jsonl is a plain file a
+ * human can edit (MISSION invariant 5) and nothing else re-checked it. A
+ * hand-written line reading `"code": "gate.mjs is too strict"` across three runs
+ * produced a pattern that cleared the threshold and landed on the shortlist,
+ * pointing at a protected file. That is precisely the threshold evasion the
+ * vocabulary exists to prevent, and rejectionCounts already does it right —
+ * see the comment there for why read-time is the correct moment.
+ *
+ * `Object.create(null)` because the accumulator is keyed by codes read from a
+ * file: a line with `"code": "__proto__"` used to walk into Object.prototype and
+ * mutate it process-wide before throwing. Normalisation above now neutralises
+ * that payload on its own, so this is depth rather than the active defence — and
+ * deliberately so, since it is the thing that still holds if normalisation is
+ * ever bypassed. No regression check distinguishes the two; that is accurate
+ * rather than an oversight.
+ */
+export function counts(root, cfg, { codes = null } = {}) {
+  const vocab = codes ?? loadCodes(root);
+  const out = Object.create(null);
   for (const r of read(root, cfg)) {
     if (r.kind === "none" || !r.code) continue;
-    out[r.code] ??= { code: r.code, count: 0, runs: new Set(), stages: new Set(), targets: new Set() };
-    out[r.code].count += r.count ?? 1;
-    if (r.run) out[r.code].runs.add(r.run);
-    if (r.stage) out[r.code].stages.add(r.stage);
-    if (r.target) out[r.code].targets.add(r.target);
+    const code = normaliseCode(r.code, vocab, "friction");
+    if (!code) continue;
+    out[code] ??= { code, count: 0, runs: new Set(), stages: new Set(), targets: new Set() };
+    // A hand-written `count` is not a licence to outweigh everything else: the
+    // shortlist sorts on occurrences, so an unbounded value here reorders which
+    // patterns stage 07 is allowed to see.
+    const n = Number.isInteger(r.count) && r.count > 0 ? Math.min(r.count, MAX_PER_STAGE_RUN) : 1;
+    out[code].count += n;
+    if (r.run) out[code].runs.add(r.run);
+    if (r.stage) out[code].stages.add(r.stage);
+    if (r.target) out[code].targets.add(r.target);
   }
   return Object.fromEntries(
     Object.entries(out).map(([k, v]) => [
@@ -184,7 +211,7 @@ export function contradictions(root, cfg, { ledgerRecords = [], triageRows = [] 
   }
   const rejectsByRun = {};
   for (const row of triageRows) {
-    const n = (row.decisions ?? []).filter((d) => d.verdict === "reject").length;
+    const n = (Array.isArray(row?.decisions) ? row.decisions : []).filter((d) => d?.verdict === "reject").length;
     if (n) rejectsByRun[row.run] = (rejectsByRun[row.run] ?? 0) + n;
   }
 
