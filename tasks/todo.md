@@ -94,3 +94,44 @@ Outcome correlation for skills (does a skill make runs better?) is out of scope.
 It confounds badly — skills activate on the slices that are already hard, the same
 asymmetry `ledger.mjs:92-95` documents for tiers. The activation log makes it
 possible later if enough runs accumulate.
+
+---
+
+## Audit round (adversarial, fresh-context subagents)
+
+Three cold subagents reviewed the branch and the system. They found real
+defects, including in the work above. Six fix commits.
+
+| Commit | What it closed |
+| --- | --- |
+| `18d0da7` | **`changedPaths()` corrupted the first path.** `git()` trimmed stdout; an unstaged modification's porcelain status has a leading space, so the first path lost a character. A tampered frozen test sorting first went undetected, and every node that *modified* a file was falsely reverted out-of-scope and burned to exhaustion. Pre-existing; invisible to all 137 checks because every fixture creates new files. |
+| `a8f5f08` | **`classify()` was walked around by any alternate spelling.** `./MISSION.md` wrote a proposal against the mission statement. The guarding check was a tautology iterating `PROTECTED` against itself; six of eight entries could be deleted with the suite green. |
+| `ee89bf2` | `friction.counts` never normalised, so invented free text cleared the threshold; `isCostly`'s surviving-mutation clause was dead against real ledger records; a malformed line crashed `evolve`. |
+| `6e3a053` | 07_evolve was permanently deadlockable (verify enumerated the full shortlist, contract fed `--top 5`); any readable file counted as a proposal; a stale artifact satisfied the stage forever. |
+| `106125c` | Proposal numbering recycled numbers and overwrote; `--from-evolve-stage` was attested by the party it constrains; bench call site missed; `COSTLY_KINDS` deleted as dead theatre; three unguarded behaviours covered. |
+| `d33321b` | Gate ran worker code with the provider API key in its env; a node with no frozen test was a warning, not an error. Both pre-existing, both against MISSION invariants. |
+
+Regression 85 -> 110 checks. Every fix was confirmed load-bearing by reverting
+it and watching a named check go red.
+
+**Process note.** The mutation-testing agent ran concurrently with two agents
+reading the same working tree, and briefly left mutants in tracked files. That
+was a mistake in how I fanned them out: mutation testing must run against a
+copy or alone. Tree verified clean afterwards.
+
+**Still open — not addressed, deliberately**
+
+- Glob matching is case-sensitive on a case-insensitive filesystem, so
+  `.GIT/config` and `KIT/lib/x` pass a `denyWrite` that blocks the lowercase
+  forms. `classify()` is now case-insensitive; `paths.mjs` is not.
+- `package.json`, `conftest.py`, `jest.config.js` etc. are not in `denyWrite`,
+  so a node with a broad write scope can still author the command its own gate
+  runs. The no-tests fix narrows this but does not close it.
+- `testsExistAndAreNonVacuous` (stage 04's driver check) never calls
+  `verifyTests`; it checks file size >= 120 bytes.
+- Writes to gitignored paths are invisible to `changedPaths`, so they bypass
+  scope checking, frozen-test detection, and revert.
+- `node.read` is unvalidated: a node can read outside the repo into a prompt.
+- `verify-tests` copies `.env` into the system temp dir and runs the gate there.
+- `--resume` silently discards a run after any graph edit.
+- `verify-tests` is JavaScript-only and does not say so.
