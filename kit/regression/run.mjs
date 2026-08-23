@@ -24,6 +24,9 @@ import { KINDS, FLAG_TO_KIND, COSTLY_KINDS } from "../lib/kinds.mjs";
 import * as friction from "../lib/friction.mjs";
 import { kindActionable, kindCounts } from "../lib/evolve.mjs";
 import os from "node:os";
+import { spawnSync } from "node:child_process";
+import { changedPaths } from "../lib/worktree.mjs";
+import { matchAny } from "../lib/paths.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 let pass = 0;
@@ -1108,6 +1111,88 @@ check("every stage in STAGES has a contract with the canonical headings", () => 
       assert(text.includes(h), `sessions/${stage.id}/CONTEXT.md is missing ${h}`);
     }
   }
+});
+
+// -------------------------------------------------- what the gate can see
+//
+// changedPaths() is the input to BOTH scope enforcement and frozen-test
+// detection. If it returns a wrong path, the gate silently stops protecting the
+// oracle. These use a real git repo because the bug that motivated them was
+// invisible to every synthetic fixture in this file: fixtures create new files,
+// and only MODIFIED files carry the leading-space status that triggered it.
+
+function gitRepoWith(files, modify = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-wt-"));
+  const g = (...args) => spawnSync("git", args, { cwd: dir, encoding: "utf8" });
+  g("init", "-q", ".");
+  g("config", "user.email", "a@b.c");
+  g("config", "user.name", "t");
+  for (const [rel, body] of Object.entries(files)) {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(dir, rel), body);
+  }
+  g("add", "-A");
+  g("commit", "-qm", "init");
+  for (const [rel, body] of Object.entries(modify)) fs.writeFileSync(path.join(dir, rel), body);
+
+  // A fixture that produced no change would make every assertion below pass
+  // against an empty list. That is the exact shape of the vacuous test this
+  // whole section exists to replace, so the helper refuses to return one.
+  if (Object.keys(modify).length) {
+    const porcelain = spawnSync("git", ["status", "--porcelain"], { cwd: dir, encoding: "utf8" }).stdout;
+    if (!porcelain.trim()) {
+      throw new Error("fixture produced no git changes — the assertions would pass vacuously");
+    }
+  }
+  return dir;
+}
+
+check("ADVERSARIAL changedPaths reports modified files exactly, first record included", () => {
+  // "a_tests" sorts before "src", so the tampered oracle is the FIRST porcelain
+  // record — the position where the path used to lose its first character.
+  const dir = gitRepoWith(
+    { "a_tests/t.mjs": "assert(real)\n", "src/a.mjs": "original\n" },
+    { "a_tests/t.mjs": "assert(true)\n", "src/a.mjs": "changed\n" }
+  );
+  const got = changedPaths(dir).sort();
+  assert(got.length === 2, `expected 2 changed paths, got ${JSON.stringify(got)}`);
+  assert(got[0] === "a_tests/t.mjs" && got[1] === "src/a.mjs",
+    `changedPaths corrupted a path: ${JSON.stringify(got)}. ` +
+      `A wrong path here means a tampered test no longer matches node.tests, and the gate ` +
+      `runs against an oracle the worker edited.`);
+});
+
+check("ADVERSARIAL a tampered frozen test is still detected when it sorts first", () => {
+  // The consequence, stated as the gate states it: the intersection of changed
+  // paths with node.tests must be non-empty.
+  const dir = gitRepoWith(
+    { "a_tests/t.mjs": "assert(real)\n", "src/a.mjs": "original\n" },
+    { "a_tests/t.mjs": "assert(true)\n" }
+  );
+  const touchedTests = changedPaths(dir).filter((p) => matchAny(p, ["a_tests/**"]));
+  assert(touchedTests.length === 1,
+    `frozen-test tampering went undetected: changed=${JSON.stringify(changedPaths(dir))}`);
+});
+
+check("ADVERSARIAL a modified in-scope file is not misreported as out-of-scope", () => {
+  // The other half. Every refactor/fix node modifies existing files; a corrupted
+  // path fails the write-scope check, gets "reverted" against a path that does
+  // not exist, and the node burns every tier to exhaustion on a harness bug.
+  const dir = gitRepoWith({ "src/a.mjs": "original\n" }, { "src/a.mjs": "changed\n" });
+  const outOfScope = changedPaths(dir).filter((p) => !matchAny(p, ["src/**"]));
+  assert(outOfScope.length === 0,
+    `an in-scope modification was reported out of scope: ${JSON.stringify(outOfScope)}`);
+});
+
+check("changedPaths still sees untracked files and rename sources", () => {
+  const dir = gitRepoWith({ "src/a.mjs": "original\n" });
+  fs.writeFileSync(path.join(dir, "src", "new.mjs"), "added\n");
+  const g = (...a) => spawnSync("git", a, { cwd: dir, encoding: "utf8" });
+  g("mv", "src/a.mjs", "src/b.mjs");
+  const got = changedPaths(dir);
+  assert(got.includes("src/new.mjs"), `untracked file missed: ${JSON.stringify(got)}`);
+  assert(got.includes("src/a.mjs") && got.includes("src/b.mjs"),
+    `rename must report both sides so neither escapes scope checking: ${JSON.stringify(got)}`);
 });
 
 const fixDir = path.join(here, "fixtures");

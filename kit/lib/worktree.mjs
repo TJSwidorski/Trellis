@@ -3,17 +3,28 @@ import fs from "node:fs";
 import path from "node:path";
 import { norm } from "./paths.mjs";
 
+/**
+ * `raw: true` suppresses the trim on stdout.
+ *
+ * Trimming is right for the callers that read a single value — a branch name, a
+ * SHA, a toplevel path. It is catastrophic for `--porcelain -z`, where each
+ * record is `XY<space>path` and the status of an unstaged modification begins
+ * with a SPACE. Trimming ate that space, shifted the first record by one
+ * character, and handed every consumer a path with its first letter missing.
+ */
 export function git(cwd, args, opts = {}) {
+  const { raw = false, ...spawnOpts } = opts;
   const r = spawnSync("git", args, {
     cwd,
     encoding: "utf8",
     shell: false,
     maxBuffer: 32 * 1024 * 1024,
-    ...opts,
+    ...spawnOpts,
   });
+  const stdout = r.stdout || "";
   return {
     code: r.status ?? -1,
-    out: (r.stdout || "").trim(),
+    out: raw ? stdout : stdout.trim(),
     err: (r.stderr || "").trim(),
     ok: r.status === 0,
   };
@@ -47,9 +58,20 @@ export function branchName(nodeId) {
  * Every change in the worktree, including untracked files.
  * `git diff --name-only HEAD` misses untracked files entirely — a worker could
  * add a whole new module and the gate would never see it. Porcelain does not.
+ *
+ * `raw: true` is load-bearing, not a detail. Records are `XY<space>path`, and an
+ * unstaged modification has the status " M" — a LEADING SPACE. Trimming stdout
+ * removed it, so `entry.slice(3)` dropped the first character of the first path.
+ * Two consequences, both silent: a tampered test file whose path sorted first no
+ * longer matched `node.tests` and the gate ran against a worker-edited oracle,
+ * and any node that MODIFIED an existing file saw its correct work reported
+ * out-of-scope and burned every tier to exhaustion.
+ *
+ * The whole test suite missed it because every fixture creates new files, and
+ * untracked records ("??") have no leading space.
  */
 export function changedPaths(wt) {
-  const out = git(wt, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]).out;
+  const out = git(wt, ["status", "--porcelain=v1", "-z", "--untracked-files=all"], { raw: true }).out;
   if (!out) return [];
   const parts = out.split("\0").filter(Boolean);
   const files = [];
