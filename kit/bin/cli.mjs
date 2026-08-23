@@ -22,8 +22,8 @@ import {
   nodeFingerprint,
   PRODUCT_GRAPH_DEFAULT,
 } from "../lib/product.mjs";
-import { STAGES, DEFAULT_CHAIN, runSession, recordSession, sessionStats, isRetryable, sleep, currentRunId } from "../lib/driver.mjs";
-import { actionable, unknownCodes, kindActionable, kindByTier, writeProposal, classify } from "../lib/evolve.mjs";
+import { STAGES, DEFAULT_CHAIN, EVOLVE_TOP, runSession, recordSession, sessionStats, isRetryable, sleep, currentRunId } from "../lib/driver.mjs";
+import { actionable, unknownCodes, kindActionable, kindByTier, writeProposal, classify, shortlist } from "../lib/evolve.mjs";
 import { loadCodes, allCodes, groupSimilar, bucketOf, normaliseCode, CODES_DOC } from "../lib/codes.mjs";
 import * as friction from "../lib/friction.mjs";
 import {
@@ -846,46 +846,20 @@ function readTriageRows(root, cfg) {
  * one pass, not a display convenience.
  */
 function emitShortlist(root, cfg, minRuns) {
-  const top = flagInt("top") ?? 5;
+  // The cap must match what the 07_evolve verify predicate enumerates, or the
+  // stage is asked to account for patterns it was never shown. Both call
+  // evolve.shortlist(); EVOLVE_TOP is the number the predicate holds it to.
+  const top = flagInt("top") ?? EVOLVE_TOP;
   const scope = flags.has("--all-nodes") ? "all" : "costly";
+  const patterns = shortlist(root, cfg, { minRuns, scope, top });
 
-  const rows = [
-    ...actionable(root, cfg, { minRuns }).map((f) => ({
-      source: "rejection",
-      code: f.code,
-      runs: f.runs,
-      occurrences: f.count,
-      nodes: f.nodes.length,
-    })),
-    ...kindActionable(root, cfg, { minRuns, scope }).map((k) => ({
-      source: "attempt-kind",
-      code: `${k.kind}|${k.tag}`,
-      runs: k.runs,
-      occurrences: k.attempts,
-      nodes: k.nodes,
-    })),
-    ...Object.values(friction.counts(root, cfg))
-      .filter((f) => !f.code.startsWith("other:") && f.runs >= minRuns)
-      .map((f) => ({
-        source: "friction",
-        code: f.code,
-        runs: f.runs,
-        occurrences: f.count,
-        targets: f.targets.slice(0, 3),
-      })),
-  ]
-    .sort((a, b) => b.runs - a.runs || b.occurrences - a.occurrences)
-    .slice(0, top);
-
-  // Suspects come from the vocabulary, so the stage has somewhere to start
-  // without reading anything else.
-  const codes = loadCodes(root);
-  for (const r of rows) {
-    const entry = codes.rejection?.[r.code] ?? codes.friction?.[r.code];
-    if (entry?.suspects?.length) r.suspects = entry.suspects;
+  if (top !== EVOLVE_TOP) {
+    process.stderr.write(
+      `note: --top ${top} differs from the ${EVOLVE_TOP} the 07_evolve gate checks; ` +
+        `the stage is still held to ${EVOLVE_TOP}.\n`
+    );
   }
-
-  process.stdout.write(JSON.stringify({ minRuns, scope, top, patterns: rows }, null, 2) + "\n");
+  process.stdout.write(JSON.stringify({ minRuns, scope, top, patterns }, null, 2) + "\n");
 }
 
 /**

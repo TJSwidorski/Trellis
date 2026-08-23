@@ -205,6 +205,16 @@ function evolveConsideredEverything(root, cfg) {
   if (!base.ok) return base;
 
   const j = readJson(root, ".trellis/evolve.json");
+
+  // Attribute the artifact to this run, the way triage is attributed. Without
+  // it a stale evolve.json from an earlier pass satisfies the stage forever —
+  // and cmdAuto pre-checks verify and skips, so the stage would never run again.
+  const run = currentRunId(root);
+  if (!run) return { ok: false, detail: "state.json has no runId to attribute the evolve pass to" };
+  if (j.run !== run) {
+    return { ok: false, detail: `evolve.json is stamped run "${j.run}", not this run "${run}"` };
+  }
+
   const considered = new Set(j.consideredCodes);
   const proposals = Array.isArray(j.proposals) ? j.proposals : [];
   const declined = Array.isArray(j.declined) ? j.declined : [];
@@ -219,6 +229,24 @@ function evolveConsideredEverything(root, cfg) {
     };
   }
 
+  // A decline has to say what it declined, or the arithmetic below is satisfied
+  // by any array of the right length — `declined: [1,2,3]` used to pass.
+  const badDeclines = declined.filter((d) => !d || typeof d !== "object" || !d.code || !d.why);
+  if (badDeclines.length) {
+    return {
+      ok: false,
+      detail: `${badDeclines.length} decline(s) lack a code and a reason; a decline must name what it declined`,
+    };
+  }
+  const declinedCodes = new Set(declined.map((d) => d.code));
+  if (declinedCodes.size !== declined.length) {
+    return { ok: false, detail: "the same code was declined more than once" };
+  }
+  const strayDeclines = [...declinedCodes].filter((c) => !considered.has(c));
+  if (strayDeclines.length) {
+    return { ok: false, detail: `declined codes that were never considered: ${strayDeclines.join(", ")}` };
+  }
+
   if (considered.size !== proposals.length + declined.length) {
     return {
       ok: false,
@@ -228,9 +256,20 @@ function evolveConsideredEverything(root, cfg) {
     };
   }
 
-  const missing = proposals.filter((p) => !fs.existsSync(path.resolve(root, p)));
-  if (missing.length) {
-    return { ok: false, detail: `evolve.json names proposals that do not exist: ${missing.join(", ")}` };
+  // A proposal is a file writeProposal made, in the place it makes them. Any
+  // readable path used to count: `proposals: ["references/CODES.md"]` passed.
+  const badProposals = [];
+  for (const p of proposals) {
+    const n = evolve.normaliseTarget(p);
+    if (!n.ok) { badProposals.push(`${p} (${n.reason})`); continue; }
+    if (!n.rel.startsWith("evolution/proposals/") || !n.rel.endsWith(".md")) {
+      badProposals.push(`${p} (not a proposal under evolution/proposals/)`);
+      continue;
+    }
+    if (!fs.existsSync(path.resolve(root, n.rel))) badProposals.push(`${p} (does not exist)`);
+  }
+  if (badProposals.length) {
+    return { ok: false, detail: `evolve.json names things that are not written proposals: ${badProposals.join(", ")}` };
   }
 
   return {
@@ -239,15 +278,18 @@ function evolveConsideredEverything(root, cfg) {
   };
 }
 
-/** Codes the mechanical shortlist currently reports, for the verify above. */
+/**
+ * Exactly the codes the stage was shown — same builder, same cap.
+ *
+ * This used to enumerate the whole shortlist while the contract fed the stage
+ * `--json --top N`. With more than N actionable patterns the stage was required
+ * to account for codes it could not see, and could never pass. Both now call
+ * evolve.shortlist(), so a cap change cannot desynchronise them again.
+ */
+export const EVOLVE_TOP = 5;
+
 function evolveShortlistCodes(root, cfg, minRuns) {
-  const out = [];
-  for (const f of evolve.actionable(root, cfg, { minRuns })) out.push(f.code);
-  for (const k of evolve.kindActionable(root, cfg, { minRuns })) out.push(`${k.kind}|${k.tag}`);
-  for (const f of Object.values(friction.counts(root, cfg))) {
-    if (!f.code.startsWith("other:") && f.runs >= minRuns) out.push(f.code);
-  }
-  return [...new Set(out)];
+  return evolve.shortlist(root, cfg, { minRuns, top: EVOLVE_TOP }).map((r) => r.code);
 }
 
 /** Thin seam so the stage table does not import friction.mjs directly. */

@@ -17,12 +17,12 @@ import {
   nodeFingerprint,
 } from "../lib/product.mjs";
 import { classify, writeProposal, PROTECTED, actionable, unknownCodes, autoAppliable, rejectionCounts as rejectionCountsFn } from "../lib/evolve.mjs";
-import { isRetryable, STAGES, DEFAULT_CHAIN } from "../lib/driver.mjs";
+import { isRetryable, STAGES, DEFAULT_CHAIN, EVOLVE_TOP } from "../lib/driver.mjs";
 import { resolveActive, blockedByAudit, neverActivated } from "../lib/skills.mjs";
 import { loadCodes, normaliseCode, allCodes, groupSimilar, CODES_DOC } from "../lib/codes.mjs";
 import { KINDS, FLAG_TO_KIND, COSTLY_KINDS } from "../lib/kinds.mjs";
 import * as friction from "../lib/friction.mjs";
-import { kindActionable, kindCounts } from "../lib/evolve.mjs";
+import { kindActionable, kindCounts, shortlist } from "../lib/evolve.mjs";
 import os from "node:os";
 import { spawnSync } from "node:child_process";
 import { changedPaths } from "../lib/worktree.mjs";
@@ -1239,24 +1239,35 @@ check("ADVERSARIAL 07_evolve is not in the default auto chain", () => {
 });
 
 /** A root with a shortlist-producing ledger and whatever evolve.json you pass. */
-function evolveRoot(evolveJson) {
+function evolveRoot(evolveJson, { tags = ["api"] } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-evolve-"));
   fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
   fs.mkdirSync(path.join(dir, "references"), { recursive: true });
   fs.mkdirSync(path.join(dir, "evolution", "proposals"), { recursive: true });
   fs.copyFileSync(path.join(kitRoot, CODES_DOC), path.join(dir, CODES_DOC));
-  // Three runs of exhausted nodes sharing a kind: one actionable pattern.
-  fs.writeFileSync(
-    path.join(dir, ".trellis", "ledger.jsonl"),
-    ["r1", "r2", "r3"].map((runId) =>
-      JSON.stringify({ runId, nodeId: "n01", tags: ["api"], status: "exhausted", landedTier: null,
-        survivingMutations: [], failureKinds: ["no-files"], attemptsByTier: {} })
-    ).join("\n") + "\n"
-  );
+  fs.writeFileSync(path.join(dir, ".trellis", "state.json"), JSON.stringify({ runId: "r3" }));
+  // Three runs of exhausted nodes per tag: one actionable pattern per tag.
+  const rows = [];
+  for (const runId of ["r1", "r2", "r3"]) {
+    for (const tag of tags) {
+      rows.push(JSON.stringify(ledgerRec({
+        runId, nodeId: `n-${tag}`, tags: [tag], status: "exhausted", landedTier: null,
+        failureKinds: ["no-files"],
+      })));
+    }
+  }
+  fs.writeFileSync(path.join(dir, ".trellis", "ledger.jsonl"), rows.join("\n") + "\n");
   if (evolveJson !== undefined) {
     fs.writeFileSync(path.join(dir, ".trellis", "evolve.json"), JSON.stringify(evolveJson));
   }
   return dir;
+}
+
+/** A real proposal on disk, written the way the stage is told to write one. */
+function realProposal(root, title = "fix the slicer") {
+  return writeProposal(root, {
+    title, targets: ["sessions/02_slice/CONTEXT.md"], evidence: "e", rationale: "r", change: "c",
+  }).file.replace(/\\/g, "/");
 }
 
 check("07_evolve passes when every shortlisted pattern is accounted for", () => {
@@ -1289,7 +1300,77 @@ check("ADVERSARIAL 07_evolve fails when it names a proposal that does not exist"
   });
   const r = evolveVerify(root, CFG);
   assert(!r.ok, "a proposal that was never written was accepted as written");
-  assert(/do not exist/.test(r.detail), `detail should say so, got: ${r.detail}`);
+  assert(/not written proposals/.test(r.detail), `detail should say so, got: ${r.detail}`);
+});
+
+check("ADVERSARIAL any readable file does not count as a proposal", () => {
+  // `proposals: ["references/CODES.md"]` used to pass: the check was only that
+  // the path existed. A proposal is a file writeProposal made, where it makes
+  // them — anything else is a claim of completion rather than proof of it.
+  for (const fake of ["references/CODES.md", "evolution/proposals/../../MISSION.md", "evolution/proposals/notes.txt"]) {
+    const root = evolveRoot({ run: "r3", consideredCodes: ["no-files|api"], proposals: [fake], declined: [] });
+    fs.writeFileSync(path.join(root, "MISSION.md"), "x");
+    fs.writeFileSync(path.join(root, "evolution", "proposals", "notes.txt"), "x");
+    assert(!evolveVerify(root, CFG).ok, `"${fake}" was accepted as a written proposal`);
+  }
+});
+
+check("ADVERSARIAL a decline must name what it declined", () => {
+  // Without this the arithmetic is satisfied by an array of the right length:
+  // `declined: [1,2,3]` used to pass.
+  for (const declined of [[1], [{}], [{ code: "no-files|api" }], [{ why: "x" }]]) {
+    const root = evolveRoot({ run: "r3", consideredCodes: ["no-files|api"], proposals: [], declined });
+    assert(!evolveVerify(root, CFG).ok, `a decline of ${JSON.stringify(declined)} was accepted`);
+  }
+  // ...and a decline for something never considered is not accounting either.
+  const stray = evolveRoot({
+    run: "r3", consideredCodes: ["no-files|api"], proposals: [],
+    declined: [{ code: "something-else", why: "x" }],
+  });
+  assert(!evolveVerify(stray, CFG).ok, "a decline for an unconsidered code was accepted");
+});
+
+check("ADVERSARIAL a stale evolve.json from an earlier pass does not satisfy the stage", () => {
+  // cmdAuto pre-checks verify and skips when it passes, so an unattributed
+  // artifact would retire the stage permanently.
+  const root = evolveRoot({
+    run: "r1", consideredCodes: ["no-files|api"], proposals: [],
+    declined: [{ code: "no-files|api", row: "nothing", why: "x" }],
+  });
+  const r = evolveVerify(root, CFG);
+  assert(!r.ok, "last pass's artifact satisfied this run");
+  assert(/r3/.test(r.detail), `detail should name the run it wanted, got: ${r.detail}`);
+});
+
+check("ADVERSARIAL 07_evolve is not deadlocked by more patterns than it is shown", () => {
+  // The verify predicate used to enumerate the WHOLE shortlist while the stage
+  // contract feeds it `--json --top N`. With more than N actionable patterns the
+  // stage was required to account for codes it could not see, and could never
+  // pass again. Both now call evolve.shortlist().
+  const tags = ["t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8"];
+  const probe = evolveRoot(undefined, { tags });
+  const shown = shortlist(probe, CFG, { minRuns: 3, top: EVOLVE_TOP }).map((r) => r.code);
+  assert(shown.length === EVOLVE_TOP,
+    `precondition: expected the cap to bite, got ${shown.length} of ${tags.length}`);
+
+  const root = evolveRoot({
+    run: "r3",
+    consideredCodes: shown,
+    proposals: [],
+    declined: shown.map((code) => ({ code, row: "nothing", why: "one project's habit" })),
+  }, { tags });
+  const r = evolveVerify(root, CFG);
+  assert(r.ok, `accounting for exactly what the stage was shown still failed: ${r.detail}`);
+});
+
+check("a real proposal written by writeProposal is accepted", () => {
+  const root = evolveRoot(undefined);
+  const file = realProposal(root);
+  fs.writeFileSync(path.join(root, ".trellis", "evolve.json"), JSON.stringify({
+    run: "r3", consideredCodes: ["no-files|api"], proposals: [file], declined: [],
+  }));
+  const r = evolveVerify(root, CFG);
+  assert(r.ok, `a genuine proposal was rejected: ${r.detail}`);
 });
 
 check("every stage in STAGES has a contract with the canonical headings", () => {

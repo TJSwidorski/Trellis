@@ -13,6 +13,7 @@ import path from "node:path";
 import { loadCodes, normaliseCode, isBucketed } from "./codes.mjs";
 import * as ledger from "./ledger.mjs";
 import { isKnownKind } from "./kinds.mjs";
+import * as friction from "./friction.mjs";
 
 // Never proposable. See MISSION.md. Prefix match on repo-relative paths.
 export const PROTECTED = [
@@ -356,6 +357,55 @@ export function kindActionable(root, cfg, { minRuns = 3, scope = "costly", histo
     .filter((e) => isKnownKind(e.kind))
     .filter((e) => e.runs >= minRuns)
     .sort((a, b) => b.runs - a.runs || b.attempts - a.attempts);
+}
+
+/**
+ * The shortlist: every source, one ranking, one cap.
+ *
+ * This exists as one function because it used to exist as two. `emitShortlist`
+ * in the CLI sliced to `--top`, and the stage-07 verify predicate enumerated the
+ * whole thing — so the moment more than `top` patterns were actionable, the
+ * stage was required to account for codes it was structurally forbidden from
+ * seeing, and could never pass again. Any duplicate of this ranking will drift
+ * the same way; call this instead.
+ */
+export function shortlist(root, cfg, { minRuns = 3, scope = "costly", top = 5, codes = null } = {}) {
+  const vocab = codes ?? loadCodes(root);
+  const rows = [
+    ...actionable(root, cfg, { minRuns }).map((f) => ({
+      source: "rejection",
+      code: f.code,
+      runs: f.runs,
+      occurrences: f.count,
+      nodes: f.nodes.length,
+    })),
+    ...kindActionable(root, cfg, { minRuns, scope }).map((k) => ({
+      source: "attempt-kind",
+      code: `${k.kind}|${k.tag}`,
+      runs: k.runs,
+      occurrences: k.attempts,
+      nodes: k.nodes,
+    })),
+    ...Object.values(friction.counts(root, cfg, { codes: vocab }))
+      .filter((f) => !isBucketed(f.code) && f.runs >= minRuns)
+      .map((f) => ({
+        source: "friction",
+        code: f.code,
+        runs: f.runs,
+        occurrences: f.count,
+        targets: f.targets.slice(0, 3),
+      })),
+  ]
+    // Deterministic: the verify predicate and the stage must agree on WHICH
+    // patterns made the cut, so ties cannot be broken by array order.
+    .sort((a, b) => b.runs - a.runs || b.occurrences - a.occurrences || a.code.localeCompare(b.code))
+    .slice(0, top);
+
+  for (const r of rows) {
+    const entry = vocab.rejection?.[r.code] ?? vocab.friction?.[r.code];
+    if (entry?.suspects?.length) r.suspects = entry.suspects;
+  }
+  return rows;
 }
 
 // ------------------------------------------------------------------ proposal
