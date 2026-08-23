@@ -197,10 +197,71 @@ check("ADVERSARIAL wrong schema string is rejected", () => {
   assert(errors.length > 0, "unknown schema version was accepted");
 });
 
-check("ADVERSARIAL every protected path classifies as protected", () => {
-  for (const p of PROTECTED) {
+// The requirement comes from MISSION.md, not from the constant under test.
+//
+// The previous version of this check iterated PROTECTED and asserted each of its
+// own members classified protected — it imported the constant and asserted it
+// equalled itself. Deleting kit/schema/, .claude/hooks/, gate.mjs or verify.mjs
+// from the boundary left the suite green. Six of eight protected paths could be
+// removed and nothing noticed.
+//
+// MISSION.md is the authority (no proposal may edit it), so parse the set from
+// there and hold the implementation to it.
+const MISSION_PROTECTED = (() => {
+  // kitRoot is declared further down; resolve independently rather than reorder.
+  const text = fs.readFileSync(path.resolve(here, "../..", "MISSION.md"), "utf8");
+  const block = /## The protected set[\s\S]*?```\n([\s\S]*?)```/.exec(text);
+  if (!block) throw new Error("MISSION.md no longer states a protected set — that IS the finding");
+  return block[1].split("\n").map((l) => l.trim()).filter(Boolean);
+})();
+
+check("ADVERSARIAL every path MISSION.md protects is actually protected", () => {
+  assert(MISSION_PROTECTED.length >= 8,
+    `MISSION.md lists only ${MISSION_PROTECTED.length} protected paths; the set shrank`);
+  for (const p of MISSION_PROTECTED) {
     const probe = p.endsWith("/") ? `${p}anything.mjs` : p;
-    assert(classify(probe) === "protected", `${probe} was not protected`);
+    assert(classify(probe) === "protected",
+      `MISSION.md protects ${p}, but classify("${probe}") says "${classify(probe)}"`);
+    // The directory itself, not just things under it.
+    assert(classify(p.replace(/\/$/, "")) === "protected",
+      `${p} without its trailing slash classifies "${classify(p.replace(/\/$/, ""))}"`);
+  }
+});
+
+check("ADVERSARIAL an alternate spelling of a protected path does not escape", () => {
+  // Every one of these classified "unclassified" before, and writeProposal
+  // happily wrote a proposal targeting the mission statement.
+  const spellings = [
+    "./MISSION.md",
+    ".\\MISSION.md",
+    "MISSION.md/",
+    "kit/schema",
+    "kit//schema//graph.schema.json",
+    "kit/./regression/run.mjs",
+    ".claude/hooks",
+    "KIT/LIB/GATE.MJS",
+  ];
+  for (const s of spellings) {
+    assert(classify(s) === "protected", `classify("${s}") === "${classify(s)}" — the boundary was walked around`);
+  }
+  // Traversal and absolute paths are refused outright rather than resolved.
+  for (const s of ["a/../kit/lib/gate.mjs", "references/../kit/regression/run.mjs", "C:/x/kit/lib/gate.mjs", "/etc/passwd", "\\\\server\\share\\x"]) {
+    assert(classify(s) === "invalid", `classify("${s}") === "${classify(s)}" — expected refusal`);
+  }
+});
+
+check("ADVERSARIAL writeProposal refuses every alternate spelling too", () => {
+  // classify() being right is necessary but not sufficient — the refusal is what
+  // MISSION.md actually promises.
+  for (const t of ["./MISSION.md", "kit/schema", "KIT/LIB/GATE.MJS", "a/../kit/lib/gate.mjs", "/etc/passwd"]) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-prot-"));
+    fs.mkdirSync(path.join(dir, "evolution", "proposals"), { recursive: true });
+    let threw = false;
+    try { writeProposal(dir, { title: "weaken it", targets: [t], rationale: "x", evidence: "x", change: "x" }); }
+    catch { threw = true; }
+    const written = fs.readdirSync(path.join(dir, "evolution", "proposals"));
+    assert(threw, `writeProposal accepted target "${t}"`);
+    assert(written.length === 0, `writeProposal wrote ${written.join(", ")} for target "${t}"`);
   }
 });
 
@@ -231,7 +292,20 @@ check("ADVERSARIAL proposal touching MISSION.md is refused", () => {
 });
 
 check("ADVERSARIAL unknown path fails closed to load-bearing", () => {
+  // The name states an invariant about the TIER. Asserting classify() returns
+  // the string "unclassified" is an identity check that leaves the invariant
+  // itself unguarded, so assert the consequence: it must not auto-apply.
   assert(classify("some/new/thing.mjs") === "unclassified", "unclassified path changed meaning");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-unc-"));
+  fs.mkdirSync(path.join(dir, "evolution", "proposals"), { recursive: true });
+  const r = writeProposal(dir, {
+    title: "touch something unrecognised", targets: ["some/new/thing.mjs"],
+    rationale: "x", evidence: "x", change: "x",
+  });
+  assert(r.tier === "load-bearing",
+    `an unclassified target produced tier "${r.tier}" — it must fail closed to a human merge`);
+  assert(!autoAppliable("some/new/thing.mjs", { evolve: { autoApplyAdvisory: true } }),
+    "an unclassified target was treated as auto-appliable");
 });
 
 check("ADVERSARIAL rate-limit text is recognised as retryable", () => {
@@ -993,8 +1067,13 @@ check("ADVERSARIAL a proposal touching the vocabulary never auto-applies", () =>
   // evidence, which makes it the one advisory file a loop could use to
   // manufacture a threshold.
   assert(classify(CODES_DOC) === "advisory", "precondition: CODES.md is advisory prose");
-  assert(!autoAppliable(CODES_DOC, { evolve: { autoApplyAdvisory: true } }),
-    "the vocabulary would auto-apply — the loop could widen its own definition of evidence");
+  // Every spelling, not just the canonical one. `references//CODES.md` used to
+  // classify advisory AND auto-apply, because the carve-out compared exact
+  // strings while classify() compared prefixes.
+  for (const spelling of [CODES_DOC, "references//CODES.md", "references/./CODES.md", "REFERENCES/CODES.MD", ".\\references\\CODES.md"]) {
+    assert(!autoAppliable(spelling, { evolve: { autoApplyAdvisory: true } }),
+      `"${spelling}" auto-applies — the loop can widen its own definition of evidence`);
+  }
   assert(autoAppliable("README.md", { evolve: { autoApplyAdvisory: true } }),
     "the carve-out must stay narrow; blanket review trains reviewers to skim");
 

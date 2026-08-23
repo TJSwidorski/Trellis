@@ -1129,6 +1129,11 @@ function cmdClassifyPath() {
   log.info(`${p} -> ${c}`);
   if (c === "protected") log.warn("No proposal may touch this.");
   if (c === "unclassified") log.warn("Treated as load-bearing (fail closed).");
+  if (c === "invalid") {
+    log.warn("Not a usable target. Name paths as plain repo-relative paths —");
+    log.warn("no leading slash or drive letter, and no '..' segments.");
+    process.exit(1);
+  }
 }
 
 // ---------------------------------------------------------------- sessions

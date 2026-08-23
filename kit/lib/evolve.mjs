@@ -53,13 +53,60 @@ export const ADVISORY = [
   "kit/roles/",
 ];
 
+/**
+ * Reduce a target to one canonical repo-relative spelling, or refuse it.
+ *
+ * The boundary used to prefix-match the raw string, so every alternate spelling
+ * of a protected path walked straight through it: `./MISSION.md` classified
+ * `unclassified` and a proposal to rewrite the mission statement was written to
+ * disk. `kit/schema` without the trailing slash missed `kit/schema/`.
+ * `references//CODES.md` missed the vocabulary carve-out and auto-applied.
+ *
+ * A path this cannot canonicalise is REFUSED rather than normalised. `..` is
+ * never resolved away — `references/../kit/regression/` is not a request to
+ * touch the regression suite that we should quietly permit, it is a request
+ * nobody should be making, and resolving it would mean the boundary's answer
+ * depended on a traversal an attacker chose.
+ */
+export function normaliseTarget(raw) {
+  const s = String(raw ?? "").trim();
+  if (!s) return { ok: false, reason: "empty path" };
+  if (s.includes("\0")) return { ok: false, reason: "null byte in path" };
+  if (path.isAbsolute(s) || /^[a-zA-Z]:/.test(s) || /^[\\/]{2}/.test(s)) {
+    return { ok: false, reason: `not repo-relative: ${s}` };
+  }
+  const parts = s.replace(/\\/g, "/").split("/").filter((seg) => seg !== "" && seg !== ".");
+  if (parts.includes("..")) return { ok: false, reason: `parent traversal: ${s}` };
+  if (!parts.length) return { ok: false, reason: "empty path" };
+  return { ok: true, rel: parts.join("/") };
+}
+
+/**
+ * Segment-aware containment, case-insensitive.
+ *
+ * Case-insensitive because this repo runs on Windows and macOS, where
+ * `KIT/LIB/GATE.MJS` opens the very file the boundary exists to protect. Over-
+ * classifying on a case-sensitive filesystem is the safe direction to be wrong.
+ *
+ * Segment-aware so `kit/lib/gate.mjs.bak` is not swallowed by `kit/lib/gate.mjs`
+ * and `kit/schema` still matches the entry `kit/schema/`.
+ */
+function under(p, base) {
+  const a = p.toLowerCase();
+  const b = base.replace(/\/+$/, "").toLowerCase();
+  return a === b || a.startsWith(b + "/");
+}
+
 export function classify(relPath) {
-  const p = relPath.replace(/\\/g, "/");
-  if (PROTECTED.some((x) => p === x || p.startsWith(x))) return "protected";
+  const n = normaliseTarget(relPath);
+  // Not a classification, a refusal. writeProposal treats it as unproposable.
+  if (!n.ok) return "invalid";
+  const p = n.rel;
+  if (PROTECTED.some((x) => under(p, x))) return "protected";
   // Advisory is checked before load-bearing so references/ and .claude/skills/
   // are not swallowed by a broader prefix later.
-  if (ADVISORY.some((x) => p === x || p.startsWith(x))) return "advisory";
-  if (LOAD_BEARING.some((x) => p === x || p.startsWith(x))) return "load-bearing";
+  if (ADVISORY.some((x) => under(p, x))) return "advisory";
+  if (LOAD_BEARING.some((x) => under(p, x))) return "load-bearing";
   return "unclassified";
 }
 
@@ -299,10 +346,17 @@ export const PROPOSAL_KINDS = Object.freeze(new Set(["mechanism", "tooling", "re
  */
 export const NO_AUTO_APPLY = ["references/CODES.md"];
 
+/** Is this target on the held list, whatever spelling it arrived in? */
+function isHeld(relPath) {
+  const n = normaliseTarget(relPath);
+  if (!n.ok) return true; // unproposable; certainly not auto-appliable
+  return NO_AUTO_APPLY.some((x) => under(n.rel, x));
+}
+
 export function autoAppliable(relPath, cfg) {
   if (cfg?.evolve?.autoApplyAdvisory === false) return false;
   if (classify(relPath) !== "advisory") return false;
-  return !NO_AUTO_APPLY.includes(relPath.replace(/\\/g, "/"));
+  return !isHeld(relPath);
 }
 
 export function writeProposal(
@@ -322,11 +376,27 @@ export function writeProposal(
     throw new Error(`Unknown proposal kind "${kind}". One of: ${[...PROPOSAL_KINDS].join(", ")}`);
   }
 
+  if (!Array.isArray(targets) || !targets.length) {
+    throw new Error("A proposal must name at least one target path.");
+  }
+
   const bad = targets.filter((t) => classify(t) === "protected");
   if (bad.length) {
     throw new Error(
       `Refusing to write a proposal touching protected paths: ${bad.join(", ")}\n` +
         `These are the immutable core. Editing them is a human decision, not a refinement.`
+    );
+  }
+
+  // A target that cannot be canonicalised is refused outright rather than
+  // classified. Absolute paths, `..`, and null bytes are how every alternate
+  // spelling of a protected path used to walk past the check above.
+  const unusable = targets.map((t) => [t, normaliseTarget(t)]).filter(([, n]) => !n.ok);
+  if (unusable.length) {
+    throw new Error(
+      `Refusing to write a proposal with unusable targets:\n` +
+        unusable.map(([t, n]) => `  ${t} — ${n.reason}`).join("\n") +
+        `\nName targets as plain repo-relative paths.`
     );
   }
 
@@ -350,7 +420,7 @@ export function writeProposal(
   // matters — otherwise the system writes prose about how it should behave and
   // that prose applies with nobody in the path. You cannot un-apply instructions
   // that quietly changed the loop's own instructions.
-  const heldTargets = targets.filter((t) => classify(t) === "advisory" && NO_AUTO_APPLY.includes(t.replace(/\\/g, "/")));
+  const heldTargets = targets.filter((t) => classify(t) === "advisory" && isHeld(t));
   const held = tier === "advisory" && (fromEvolveStage || heldTargets.length > 0);
   const applies =
     tier === "load-bearing" || held
