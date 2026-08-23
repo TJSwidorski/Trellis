@@ -1027,7 +1027,11 @@ function cmdPropose() {
       alternatives: fromFile("alternatives"),
       cost: fromFile("cost"),
       reversal: fromFile("reversal"),
-      fromEvolveStage: flags.has("--from-evolve-stage"),
+      // The driver stamps TRELLIS_STAGE when it spawns a session, so this is
+      // decided by the harness rather than attested by the session it binds.
+      // The flag stays as an override for a human writing one by hand.
+      fromEvolveStage:
+        flags.has("--from-evolve-stage") || process.env.TRELLIS_STAGE === "07_evolve",
     });
   } catch (e) {
     die(e.message);

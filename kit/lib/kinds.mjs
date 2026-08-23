@@ -50,28 +50,6 @@ export const KINDS = Object.freeze(
   ])
 );
 
-/**
- * Kinds that say something about Trellis rather than about one attempt.
- *
- * Deliberately excludes `test-failure`: a worker whose code did not pass the test
- * is the loop working, not a defect in the loop. It also excludes `pass`, and
- * `env-failure`, which is the operator's machine rather than the system.
- */
-export const COSTLY_KINDS = Object.freeze(
-  new Set([
-    "no-op",
-    "no-gate",
-    "timeout",
-    "test-tampering",
-    "out-of-scope",
-    "no-files",
-    "traversal",
-    "denied",
-    "malformed",
-    "provider-error",
-  ])
-);
-
 export function isKnownKind(k) {
   return typeof k === "string" && KINDS.has(k);
 }

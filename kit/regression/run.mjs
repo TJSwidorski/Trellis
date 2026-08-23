@@ -16,18 +16,18 @@ import {
   nextSlice,
   nodeFingerprint,
 } from "../lib/product.mjs";
-import { classify, writeProposal, PROTECTED, actionable, unknownCodes, autoAppliable, rejectionCounts as rejectionCountsFn } from "../lib/evolve.mjs";
+import { classify, writeProposal, PROTECTED, actionable, unknownCodes, autoAppliable, rejectionCounts as rejectionCountsFn, triagePath } from "../lib/evolve.mjs";
 import { isRetryable, STAGES, DEFAULT_CHAIN, EVOLVE_TOP } from "../lib/driver.mjs";
-import { resolveActive, blockedByAudit, neverActivated } from "../lib/skills.mjs";
+import { resolveActive, blockedByAudit, neverActivated, materialise, activationPath } from "../lib/skills.mjs";
 import { loadCodes, normaliseCode, allCodes, groupSimilar, CODES_DOC } from "../lib/codes.mjs";
-import { KINDS, FLAG_TO_KIND, COSTLY_KINDS } from "../lib/kinds.mjs";
+import { KINDS, FLAG_TO_KIND } from "../lib/kinds.mjs";
 import * as friction from "../lib/friction.mjs";
 import { kindActionable, kindCounts, shortlist } from "../lib/evolve.mjs";
 import os from "node:os";
 import { spawnSync } from "node:child_process";
 import { changedPaths } from "../lib/worktree.mjs";
 import { matchAny } from "../lib/paths.mjs";
-import { recordsFor } from "../lib/ledger.mjs";
+import { recordsFor, ledgerPath } from "../lib/ledger.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 let pass = 0;
@@ -718,13 +718,6 @@ check("ADVERSARIAL the kinds table matches the literals in the source, both ways
       `A kind the aggregation does not know about is evidence that silently vanishes.`);
   assert(onlyInTable.length === 0,
     `KINDS lists kinds no longer assigned anywhere: ${onlyInTable.join(", ")}`);
-});
-
-check("ADVERSARIAL test-failure and pass are never treated as costly", () => {
-  for (const k of ["test-failure", "pass", "env-failure"]) {
-    assert(!COSTLY_KINDS.has(k),
-      `${k} in COSTLY_KINDS would drown every other signal in the loop working correctly`);
-  }
 });
 
 /** Ledger records, shaped like ledger.recordsFor output. */
@@ -1469,6 +1462,102 @@ check("changedPaths still sees untracked files and rename sources", () => {
   assert(got.includes("src/new.mjs"), `untracked file missed: ${JSON.stringify(got)}`);
   assert(got.includes("src/a.mjs") && got.includes("src/b.mjs"),
     `rename must report both sides so neither escapes scope checking: ${JSON.stringify(got)}`);
+});
+
+// ------------------------------------------- things the last audit found bare
+//
+// Each of these guards something a mutation proved was unguarded: the mutant
+// survived all three suites.
+
+check("ADVERSARIAL every evidence file honours cfg.paths.state", () => {
+  // Every fixture in this file sets state: ".trellis", so hard-coding the
+  // default back into the path helpers was invisible — the commit that added
+  // the config routing shipped with no test of it.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-state-"));
+  const cfg = { paths: { state: "evidence" } };
+  fs.mkdirSync(path.join(dir, "evidence"), { recursive: true });
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+
+  for (const [name, fn] of [
+    ["triage.jsonl", triagePath],
+    ["friction.jsonl", friction.frictionPath],
+    ["skills.jsonl", activationPath],
+    ["ledger.jsonl", ledgerPath],
+  ]) {
+    const p = fn(dir, cfg).replace(/\\/g, "/");
+    assert(p.endsWith(`evidence/${name}`),
+      `${name} resolved to ${p} — cfg.paths.state was ignored`);
+    assert(!p.includes("/.trellis/"), `${name} fell back to the default state dir`);
+  }
+
+  // And end to end: a record written under the configured dir is read back.
+  friction.append(dir, cfg, { stage: "06_triage", kind: "manual-edit", code: "hand-tightened-contract" }, { run: "r1" });
+  assert(fs.existsSync(path.join(dir, "evidence", "friction.jsonl")), "friction.jsonl was not written under evidence/");
+  assert(!fs.existsSync(path.join(dir, ".trellis", "friction.jsonl")), "friction.jsonl leaked into .trellis/");
+  assert(friction.read(dir, cfg).length === 1, "the record could not be read back from the configured dir");
+});
+
+check("ADVERSARIAL materialise only removes directories it wrote", () => {
+  // Its docblock promises a hand-placed project skill is never destroyed by a
+  // stage transition. Making it delete everything under .claude/skills/ left all
+  // three suites green.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-mat-"));
+  const dest = path.join(dir, ".claude", "skills");
+  fs.mkdirSync(path.join(dest, "hand-placed"), { recursive: true });
+  fs.writeFileSync(path.join(dest, "hand-placed", "SKILL.md"), "mine\n");
+  fs.mkdirSync(path.join(dir, "SKILLS", "skills", "shipped"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "SKILLS", "skills", "shipped", "SKILL.md"), "theirs\n");
+
+  materialise(dir, [{ name: "shipped", kind: "skill", reason: "always" }]);
+  assert(fs.existsSync(path.join(dest, "hand-placed", "SKILL.md")),
+    "a hand-placed skill was destroyed by a stage transition");
+  assert(fs.existsSync(path.join(dest, "shipped", "SKILL.md")), "the active skill was not materialised");
+
+  // ...and the next stage, wanting nothing, removes only what it put there.
+  materialise(dir, []);
+  assert(fs.existsSync(path.join(dest, "hand-placed", "SKILL.md")), "hand-placed skill removed on the second pass");
+  assert(!fs.existsSync(path.join(dest, "shipped")), "a skill it wrote was left behind after deactivation");
+});
+
+check("ADVERSARIAL writeProposal never overwrites an existing proposal", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-num-"));
+  const dir = path.join(root, "evolution", "proposals");
+  fs.mkdirSync(dir, { recursive: true });
+  const args = (title) => ({ title, targets: ["README.md"], evidence: "e", rationale: "r", change: "c" });
+
+  const first = writeProposal(root, args("fix the slicer")).file;
+  writeProposal(root, args("other thing"));
+  // The obvious reviewer action: mark one as merged.
+  fs.renameSync(path.join(root, first), path.join(root, `${first}.merged`));
+
+  const third = writeProposal(root, args("a third thing")).file;
+  const numOf = (f) => /(\d{3})-/.exec(path.basename(f))?.[1];
+  assert(numOf(third) === "003",
+    `numbering reused ${numOf(third)} after a proposal was renamed; numbers must never be recycled`);
+
+  // The overwrite this protects against: same title again, same slug, same
+  // number. Under count-based numbering that silently replaced a live file.
+  const again = writeProposal(root, args("other thing")).file;
+  assert(numOf(again) === "004", `re-proposing a title reused number ${numOf(again)}`);
+  const bodies = fs.readdirSync(dir).filter((f) => f.endsWith(".md"));
+  assert(bodies.length === 3, `a proposal was overwritten: found ${bodies.join(", ")}`);
+  assert(new Set(bodies.map(numOf)).size === bodies.length, `duplicate numbers on disk: ${bodies.join(", ")}`);
+
+  // A title with no usable characters must not collapse to a bare number.
+  const odd = writeProposal(root, args("!!! ???")).file;
+  assert(/\d{3}-[a-z]/.test(odd), `a title of punctuation produced "${odd}"`);
+});
+
+check("ADVERSARIAL friction's per-stage cap is per stage, not just per run", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-cap2-"));
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  const rec = (stage) => ({ stage, kind: "manual-edit", code: "hand-tightened-contract" });
+  for (let i = 0; i < friction.MAX_PER_STAGE_RUN; i++) friction.append(dir, CFG, rec("06_triage"), { run: "r1" });
+  // A different stage in the SAME run has its own budget.
+  friction.append(dir, CFG, rec("03_cases"), { run: "r1" });
+  let threw = false;
+  try { friction.append(dir, CFG, rec("06_triage"), { run: "r1" }); } catch { threw = true; }
+  assert(threw, "the cap is not being applied per stage");
 });
 
 const fixDir = path.join(here, "fixtures");

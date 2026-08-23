@@ -511,9 +511,25 @@ export function writeProposal(
 
   const dir = path.resolve(root, "evolution/proposals");
   fs.mkdirSync(dir, { recursive: true });
-  const n = String(fs.readdirSync(dir).filter((f) => f.endsWith(".md")).length + 1).padStart(3, "0");
-  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 50);
+
+  // Number from the highest number present, not from the count of .md files.
+  // Counting meant that renaming 001 to 001-....md.merged — the obvious thing a
+  // reviewer does — made the next proposal reuse 002 and silently overwrite it.
+  // Evidence disappeared and the call still returned success.
+  const existing = fs.readdirSync(dir);
+  const highest = existing.reduce((max, f) => {
+    const m = /^(\d+)-/.exec(f);
+    return m ? Math.max(max, Number(m[1])) : max;
+  }, 0);
+  const n = String(highest + 1).padStart(3, "0");
+
+  const slug =
+    title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 50) || "proposal";
   const file = path.join(dir, `${n}-${slug}.md`);
+  // Belt and braces: never clobber, whatever the numbering concluded.
+  if (fs.existsSync(file)) {
+    throw new Error(`Refusing to overwrite ${path.relative(root, file)}. Rename it or retitle the proposal.`);
+  }
 
   const head = [
     `# ${title}`,

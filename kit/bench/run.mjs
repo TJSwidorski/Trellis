@@ -23,6 +23,12 @@ import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { meterSession, summariseArm, compare, WINDOW } from "./meter.mjs";
 import { STAGES } from "../lib/driver.mjs";
+import { loadConfig } from "../lib/config.mjs";
+
+// verify(root, cfg) — the second argument is not optional in spirit: 06_triage
+// and 07_evolve route through cfg.paths.state. Omitting it silently read the
+// default location and, for 07, threw.
+const cfgFor = (dir) => { try { return loadConfig(dir); } catch { return undefined; } };
 import { renderReport } from "./report.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -200,7 +206,7 @@ async function armB(specText, kitRoot, graphPath) {
       // orchestrator tokens. Spending nothing is not the same as doing
       // something: a run that dispatched zero nodes (missing OPENROUTER_API_KEY,
       // dead model slug) left no REPORT.md and 06_triage would then triage air.
-      const built = STAGES.find((s) => s.id === stage.id)?.verify(dir);
+      const built = STAGES.find((s) => s.id === stage.id)?.verify(dir, cfgFor(dir));
       console.log(`  ${built?.ok ? "✓" : "✗"} ${stage.id} — ${built?.detail ?? "no verify defined"}`);
       if (!DRY && built && !built.ok) {
         console.error(`\nSTOPPING: the build stage produced no report.`);
@@ -221,7 +227,7 @@ async function armB(specText, kitRoot, graphPath) {
     // Verify on disk, exactly as kit/lib/driver.mjs does. Without this the bench
     // happily ran every stage against declined writes and reported a completed
     // run. A stage that produced no artifact did not happen, whatever it cost.
-    const check = STAGES.find((s) => s.id === stage.id)?.verify(dir);
+    const check = STAGES.find((s) => s.id === stage.id)?.verify(dir, cfgFor(dir));
     const w = windowGuard(metered, WINDOW_CAP);
     console.log(`  ${check?.ok ? "✓" : "✗"} ${stage.id} — ${check?.detail ?? "no verify defined"} (${(r.ms / 1000).toFixed(0)}s)`);
     console.log(`  window: this stage ${(metered.at(-1).window.pct * 100).toFixed(1)}%, run so far ${(w.used * 100).toFixed(1)}% of a 5h window`);

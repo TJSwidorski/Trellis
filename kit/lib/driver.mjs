@@ -327,7 +327,12 @@ export function runSession(root, stage, cfg) {
 
     const child = spawn(cfg.driver.command, args, {
       cwd: root,
-      env: process.env,
+      // TRELLIS_STAGE lets a command know which stage invoked it without the
+      // session having to say so. `trellis propose` uses it to decide that a
+      // proposal is model-authored and must wait for a human — a decision that
+      // was previously made by a CLI flag the session was merely asked to pass,
+      // i.e. attested by exactly the party it constrains.
+      env: { ...process.env, TRELLIS_STAGE: stage.id },
       stdio: ["ignore", "pipe", "pipe"],
     });
 
