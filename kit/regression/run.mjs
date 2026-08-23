@@ -16,6 +16,8 @@ import {
   nextSlice,
   nodeFingerprint,
 } from "../lib/product.mjs";
+import { validateGraph } from "../lib/graph.mjs";
+import { gateEnv } from "../lib/gate.mjs";
 import { classify, writeProposal, PROTECTED, actionable, unknownCodes, autoAppliable, rejectionCounts as rejectionCountsFn, triagePath } from "../lib/evolve.mjs";
 import { isRetryable, STAGES, DEFAULT_CHAIN, EVOLVE_TOP } from "../lib/driver.mjs";
 import { resolveActive, blockedByAudit, neverActivated, materialise, activationPath } from "../lib/skills.mjs";
@@ -1558,6 +1560,60 @@ check("ADVERSARIAL friction's per-stage cap is per stage, not just per run", () 
   let threw = false;
   try { friction.append(dir, CFG, rec("06_triage"), { run: "r1" }); } catch { threw = true; }
   assert(threw, "the cap is not being applied per stage");
+});
+
+// ----------------------------------------------- what the gate hands a worker
+
+check("ADVERSARIAL the gate does not hand the provider key to worker-authored code", () => {
+  // The gate runs code a cheap model just wrote, with shell:true, as the host
+  // user. Every path check happens before that point and none of them constrain
+  // what the command does once it starts — so the credential funding the run
+  // should not be sitting in its environment.
+  const cfg = {
+    tiers: [{ name: "cheap", apiKeyEnv: "OPENROUTER_API_KEY" }, { name: "strong", apiKeyEnv: "ANTHROPIC_API_KEY" }],
+    gate: { stripEnv: ["MY_DEPLOY_TOKEN"] },
+  };
+  const base = { OPENROUTER_API_KEY: "sk-canary", ANTHROPIC_API_KEY: "sk-canary2", MY_DEPLOY_TOKEN: "t", PATH: "/usr/bin" };
+  const env = gateEnv(cfg, base);
+  for (const leaked of ["OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "MY_DEPLOY_TOKEN"]) {
+    assert(!(leaked in env), `${leaked} is readable by the gate command`);
+  }
+  assert(env.PATH === "/usr/bin", "stripping removed more than it should — the gate still needs to run");
+});
+
+check("ADVERSARIAL the shipped config's tier keys are the ones actually stripped", () => {
+  // Guards the wiring, not just the helper: a tier added to the config with a
+  // new apiKeyEnv must be covered without anyone remembering to update a list.
+  const cfg = JSON.parse(fs.readFileSync(path.join(kitRoot, "trellis.config.json"), "utf8"));
+  const named = (cfg.tiers ?? []).map((t) => t.apiKeyEnv).filter(Boolean);
+  assert(named.length > 0, "the shipped config names no apiKeyEnv; this check has stopped meaning anything");
+  const env = gateEnv(cfg, Object.fromEntries(named.map((n) => [n, "secret"])));
+  assert(Object.keys(env).length === 0, `these survived stripping: ${Object.keys(env).join(", ")}`);
+});
+
+check("ADVERSARIAL a node with no frozen test cannot validate", () => {
+  // MISSION invariant 1: nothing merges that was not proven against an oracle
+  // written before the implementation existed. A node with tests: [] was a
+  // WARNING, so it validated, ran, and merged on a gate command that proved
+  // whatever the project's test runner happened to say — including nothing.
+  const g = {
+    schema: "trellis.graph/1",
+    nodes: [{ id: "n01", title: "t", role: "implementer", write: ["src/**"], tests: [], gate: "npm test", deps: [] }],
+  };
+  const { errors } = validateGraph(g, { boundaries: { denyWrite: [] } }, kitRoot, { requireTests: true });
+  assert(errors.some((e) => /test/i.test(e) && /n01/.test(e)),
+    `a node with no frozen test validated clean: errors=${JSON.stringify(errors)}`);
+});
+
+check("--plan keeps the no-test case a warning, so planning still works", () => {
+  // The escape hatch has to stay: at slice time the tests do not exist yet.
+  const g = {
+    schema: "trellis.graph/1",
+    nodes: [{ id: "n01", title: "t", role: "implementer", write: ["src/**"], tests: [], gate: "npm test", deps: [] }],
+  };
+  const { errors, warnings } = validateGraph(g, { boundaries: { denyWrite: [] } }, kitRoot, { requireTests: false });
+  assert(!errors.some((e) => /n01/.test(e) && /test/i.test(e)), `--plan should not hard-fail: ${JSON.stringify(errors)}`);
+  assert(warnings.some((w) => /test/i.test(w)), "the missing test should still be warned about");
 });
 
 const fixDir = path.join(here, "fixtures");

@@ -96,7 +96,18 @@ export function validateGraph(graph, cfg, repoRoot, { requireTests = true } = {}
       }
     }
     if (!n.tests || n.tests.length === 0) {
-      warnings.push(`${at}: no "tests" declared. The gate will run but nothing pins behaviour to a contract.`);
+      // MISSION invariant 1: nothing merges that was not proven against an
+      // oracle written before the implementation existed. As a warning this was
+      // not an invariant, it was a preference — such a node validated, ran, and
+      // merged on whatever its gate command happened to say, which for a worker
+      // that could reach package.json was whatever it wanted it to say.
+      //
+      // Still a warning under --plan, because at slice time the tests do not
+      // exist yet and that is the whole point of the flag.
+      const msg =
+        `${at}: no "tests" declared. Nothing pins behaviour to a contract, so the gate ` +
+        `proves only that some command exited 0. Declare a frozen test, or drop the node.`;
+      (requireTests ? errors : warnings).push(msg);
     }
   }
 

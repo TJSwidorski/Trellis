@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { exec } from "./gate.mjs";
+import { exec, gateEnv } from "./gate.mjs";
 import { detectEnvFailure } from "./envfail.mjs";
 import { norm } from "./paths.mjs";
 
@@ -143,7 +143,7 @@ export async function verifyTests(cfg, graph, nodes, root, { log = () => {} } = 
         fs.writeFileSync(abs, buildStub([...names]));
       }
 
-      const r = await exec(node.gate, scratch, cfg.gate.timeoutMs);
+      const r = await exec(node.gate, scratch, cfg.gate.timeoutMs, gateEnv(cfg));
       if (r.code === 0) {
         findings.push({
           nodeId: node.id,

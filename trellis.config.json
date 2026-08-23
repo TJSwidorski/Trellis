@@ -96,6 +96,8 @@
   "gate": {
     "defaultCommand": null,
     "timeoutMs": 300000,
+    "$stripEnv": "Environment variables removed before the gate command runs. Tier apiKeyEnv names are stripped automatically; add anything else the project must not expose to code a worker just wrote.",
+    "stripEnv": [],
     "feedbackChars": 4000
   },
 

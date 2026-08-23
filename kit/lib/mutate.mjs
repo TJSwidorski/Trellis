@@ -3,7 +3,7 @@ import path from "node:path";
 import os from "node:os";
 import { chatWithBackoff } from "./provider.mjs";
 import { parseBlocks } from "./extract.mjs";
-import { exec } from "./gate.mjs";
+import { exec, gateEnv } from "./gate.mjs";
 import { copyRepo } from "./verify.mjs";
 import { safeRelative, matchAny } from "./paths.mjs";
 
@@ -99,7 +99,7 @@ export async function checkMutations(cfg, node, worktree, root, { onStep } = {})
         continue;
       }
 
-      const r = await exec(node.gate, scratch, cfg.gate.timeoutMs);
+      const r = await exec(node.gate, scratch, cfg.gate.timeoutMs, gateEnv(cfg));
       checked++;
       if (r.code === 0) {
         survivors.push({
