@@ -19,8 +19,10 @@ Get-ChildItem -Recurse -Filter package.json | Select-Object -First 1 FullName
 npm test
 ```
 
-You should see three suites pass: `18/18 unit checks`, `38 regression checks`, and
-`31/31` end-to-end. They spin up a fake model server and throwaway git repos and
+You should see three suites pass: `21/21 unit checks`, `126 regression checks`, and
+`31/31` end-to-end. (An *installed* copy reports 126 minus 3: the checks that
+verify the installer itself need `setup.mjs`, which the installer does not
+install.) They spin up a fake model server and throwaway git repos and
 run the whole scheduler offline — parallel nodes, retries, tier escalation,
 test-tamper rejection, exhaustion, blocking, the review hold, environment-failure
 detection, and the skill audit gate. No API key needed.
@@ -56,14 +58,17 @@ package.json        trellis.config.json    trellis.code-workspace
 .gitignore
 ```
 
-The target repo must be a git repo, on a clean `main`, with at least one commit.
+The target repo must be a git repo, on a clean base branch, with at least one commit.
 
 ```powershell
-git status          # must be clean
-git rev-parse --abbrev-ref HEAD   # must be main (or set baseBranch in config)
+git status                          # must be clean
+git rev-parse --abbrev-ref HEAD     # must match baseBranch in trellis.config.json
 ```
 
-If your default branch isn't `main`, change `baseBranch` in `trellis.config.json`.
+`baseBranch` defaults to `main`. A repo created with plain `git init` on an older
+git is on `master`, and `doctor` will fail on the mismatch — either rename the
+branch (`git branch -m main`) or set `baseBranch` to what you actually use. This
+is the single most common first-run stumble and it is not a real problem.
 
 ---
 
