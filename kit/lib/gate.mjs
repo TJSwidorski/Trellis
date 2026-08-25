@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { changedPaths, revertPaths } from "./worktree.mjs";
+import { changedPaths, revertPaths, ignoredPaths } from "./worktree.mjs";
 import { matchDeny, matchAllow } from "./paths.mjs";
 import { detectEnvFailure, envFailureMessage } from "./envfail.mjs";
 
@@ -23,7 +23,14 @@ export async function runGate(cfg, node, worktree) {
     };
   }
 
-  const tampered = changed.filter((p) => matchDeny(p, node.tests || []));
+  // Ignored paths are invisible to `git status` even with --untracked-files=all,
+  // so a write into one used to escape all three checks below. Included for
+  // DETECTION only and never for the revert list: these entries can be whole
+  // collapsed directories, and reverting node_modules/ would be its own outage.
+  const ignored = ignoredPaths(worktree);
+  const seen = [...changed, ...ignored];
+
+  const tampered = seen.filter((p) => matchDeny(p, node.tests || []));
   if (tampered.length) {
     revertPaths(worktree, tampered);
     return {
@@ -34,6 +41,21 @@ export async function runGate(cfg, node, worktree) {
         `The tests are the specification. Do not change them — change your implementation so the ` +
         `existing tests pass exactly as written.`,
       changed,
+    };
+  }
+
+  // A denied path reached through an ignored one is still a denied path — and
+  // it is the interesting case, because it is the one that was invisible.
+  const deniedIgnored = ignored.filter((p) => matchDeny(p, cfg.boundaries.denyWrite));
+  if (deniedIgnored.length) {
+    return {
+      ok: false,
+      kind: "out-of-scope",
+      feedback:
+        `These paths are ignored by git and outside your write scope: ${deniedIgnored.join(", ")}.\n` +
+        `They were not reverted — git does not track them — so remove them yourself and ` +
+        `keep your changes inside: ${(node.write || []).join(", ")}.`,
+      changed: seen,
     };
   }
 

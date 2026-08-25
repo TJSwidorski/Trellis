@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { norm, globsOverlap, matchAny, matchDeny } from "./paths.mjs";
+import { isIgnored } from "./worktree.mjs";
 import { scopeBullets, findSpec } from "./spec.mjs";
 
 const ROLES = ["implementer", "fixer", "refactorer", "tester"];
@@ -93,6 +94,16 @@ export function validateGraph(graph, cfg, repoRoot, { requireTests = true } = {}
       }
       if (matchDeny(t, n.write || [])) {
         errors.push(`${at}: test file "${t}" is also in "write". Tests are frozen — a worker that can edit its own test has no gate.`);
+      }
+      // An ignored oracle is an invisible oracle: `git status` omits ignored
+      // files even with --untracked-files=all, so edits to it would not appear
+      // in the gate's frozen-test check. Cheaper to forbid here than to detect
+      // there, and there is no legitimate reason to gitignore a frozen test.
+      if (fs.existsSync(tp) && isIgnored(repoRoot, t)) {
+        errors.push(
+          `${at}: test file "${t}" is ignored by git. The gate cannot see edits to an ignored ` +
+            `file, so a worker could rewrite this oracle undetected. Un-ignore it.`
+        );
       }
     }
     if (!n.tests || n.tests.length === 0) {

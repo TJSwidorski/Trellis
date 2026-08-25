@@ -27,7 +27,8 @@ import * as friction from "../lib/friction.mjs";
 import { kindActionable, kindCounts, shortlist } from "../lib/evolve.mjs";
 import os from "node:os";
 import { spawnSync } from "node:child_process";
-import { changedPaths } from "../lib/worktree.mjs";
+import { changedPaths, ignoredPaths } from "../lib/worktree.mjs";
+import { runGate } from "../lib/gate.mjs";
 import { matchAny, matchDeny, matchAllow, FS_CASE_INSENSITIVE } from "../lib/paths.mjs";
 import { recordsFor, ledgerPath } from "../lib/ledger.mjs";
 import { isCheckable, SOFT_FINDINGS } from "../lib/verify.mjs";
@@ -47,6 +48,20 @@ function check(name, fn) {
 
 function assert(cond, msg) {
   if (!cond) throw new Error(msg);
+}
+
+// An async check whose rejection is recorded as a failure rather than escaping
+// as an unhandled promise. `check()` is sync: handing it an async fn would make
+// every assertion inside invisible, which is the failure mode this file exists
+// to prevent.
+const pending = [];
+function checkAsync(name, fn) {
+  pending.push(
+    Promise.resolve()
+      .then(fn)
+      .then(() => { pass++; })
+      .catch((e) => { failures.push(`${name}: ${e.message}`); })
+  );
 }
 
 // --------------------------------------------------------------- fixtures
@@ -1734,6 +1749,49 @@ check("ADVERSARIAL stage 04 actually runs verify-tests rather than claiming it",
   assert(/verify-tests/.test(r.detail), `detail should show verify-tests ran, got: ${r.detail}`);
 });
 
+// ------------------------------------------- what git is hiding from the gate
+
+check("ADVERSARIAL a write into a gitignored path is not invisible", () => {
+  // `--untracked-files=all` still omits ignored files, so a write into one
+  // escaped the scope check, the frozen check, and the revert — and if it was
+  // the only write, the gate reported "no-op" rather than noticing.
+  const dir = gitRepoWith({ ".gitignore": "dist/\n", "src/a.mjs": "x\n" });
+  fs.mkdirSync(path.join(dir, "dist"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "dist", "evil.mjs"), "// smuggled\n");
+
+  assert(changedPaths(dir).length === 0, "precondition: git status genuinely cannot see it");
+  const ignored = ignoredPaths(dir);
+  assert(ignored.some((p) => p.startsWith("dist")),
+    `the ignored write was not reported at all: ${JSON.stringify(ignored)}`);
+});
+
+checkAsync("ADVERSARIAL an ignored write that hits denyWrite fails the gate", async () => {
+  const dir = gitRepoWith({ ".gitignore": ".env\n", "src/a.mjs": "x\n" }, { "src/a.mjs": "changed\n" });
+  fs.writeFileSync(path.join(dir, ".env"), "OPENROUTER_API_KEY=stolen\n");
+  const node = { id: "n01", write: ["src/**"], tests: [], gate: null };
+  const cfg = { boundaries: { denyWrite: [".env", ".git/**"] }, gate: { timeoutMs: 1000 } };
+  return runGate(cfg, node, dir).then((r) => {
+    assert(!r.ok && r.kind === "out-of-scope",
+      `writing a denied ignored path passed the gate: ${JSON.stringify(r.kind)}`);
+    assert(/\.env/.test(r.feedback), `feedback should name the file, got: ${r.feedback}`);
+  });
+});
+
+check("ADVERSARIAL a frozen test may not be gitignored", () => {
+  // An ignored oracle is an invisible oracle. Forbidden at validation, because
+  // detecting the tampering afterwards is strictly harder.
+  const dir = gitRepoWith({ ".gitignore": "tests/\n", "src/a.mjs": "x\n" });
+  fs.mkdirSync(path.join(dir, "tests"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "tests", "a.test.mjs"), "assert(1)\n");
+  const g = {
+    schema: "trellis.graph/1",
+    nodes: [{ id: "n01", title: "t", goal: "g", write: ["src/**"], tests: ["tests/a.test.mjs"], gate: "node x" }],
+  };
+  const { errors } = validateGraph(g, { boundaries: { denyWrite: [] }, gate: {} }, dir, { requireTests: true });
+  assert(errors.some((e) => /ignored by git/.test(e)),
+    `a gitignored oracle validated clean: ${JSON.stringify(errors)}`);
+});
+
 const fixDir = path.join(here, "fixtures");
 if (fs.existsSync(fixDir)) {
   for (const f of fs.readdirSync(fixDir).filter((x) => x.endsWith(".json"))) {
@@ -1754,6 +1812,8 @@ if (fs.existsSync(fixDir)) {
 }
 
 // -------------------------------------------------------------------- report
+
+await Promise.all(pending);
 
 if (failures.length) {
   console.error(`\nREGRESSION FAILED — ${failures.length} of ${pass + failures.length} checks\n`);

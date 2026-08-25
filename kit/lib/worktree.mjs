@@ -89,6 +89,45 @@ export function changedPaths(wt) {
   return [...new Set(files)];
 }
 
+/**
+ * Paths git is ignoring, which `changedPaths` cannot see.
+ *
+ * `--untracked-files=all` still omits ignored files, so a write into an ignored
+ * path was invisible to the gate: it escaped the scope check, the frozen-test
+ * check, and the revert. Screening in extract.mjs is path-based rather than
+ * git-based and still catches an out-of-scope block, so this is the second
+ * layer rather than the only one — but the second layer is exactly what is
+ * supposed to catch a file the first layer was talked into allowing.
+ *
+ * `--ignored=traditional` collapses whole ignored directories to a single entry
+ * (`node_modules/`), which is the point: `matching` enumerates every file inside
+ * them and can run to hundreds of thousands of paths on a normal project. The
+ * caller only needs to know that something ignored was touched and roughly
+ * where, never to revert it — reverting node_modules would be its own outage.
+ */
+export function ignoredPaths(wt) {
+  const out = git(
+    wt,
+    // --untracked-files must be on: ignored files ARE untracked, so `-uno`
+    // suppresses the very entries this function exists to surface.
+    ["status", "--porcelain=v1", "-z", "--ignored=traditional", "--untracked-files=normal"],
+    { raw: true }
+  ).out;
+  if (!out) return [];
+  const files = [];
+  for (const entry of out.split("\0").filter(Boolean)) {
+    if (entry.slice(0, 2) !== "!!") continue;
+    const file = norm(entry.slice(3));
+    if (file) files.push(file);
+  }
+  return [...new Set(files)];
+}
+
+/** Is this path ignored by git? One question, one answer. */
+export function isIgnored(wt, rel) {
+  return git(wt, ["check-ignore", "-q", "--", rel]).code === 0;
+}
+
 export function createWorktree(root, cfg, nodeId) {
   const dir = path.join(root, cfg.paths.worktrees, nodeId);
   const branch = branchName(nodeId);
