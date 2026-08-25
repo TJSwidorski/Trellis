@@ -31,6 +31,7 @@ import { changedPaths, ignoredPaths } from "../lib/worktree.mjs";
 import { runGate } from "../lib/gate.mjs";
 import { matchAny, matchDeny, matchAllow, FS_CASE_INSENSITIVE } from "../lib/paths.mjs";
 import { recordsFor, ledgerPath } from "../lib/ledger.mjs";
+import { initState, resumePlan, nodeHash } from "../lib/state.mjs";
 import { isCheckable, SOFT_FINDINGS, copyRepo } from "../lib/verify.mjs";
 import { buildPrompt } from "../lib/worker.mjs";
 
@@ -1846,6 +1847,62 @@ check("ADVERSARIAL verify-tests does not copy secrets into the system temp dir",
   assert(fs.existsSync(path.join(dest, "src", "a.mjs")), "the copy is useless if the source did not come with it");
   for (const secret of [".env", "id_rsa.pem", ".claude/settings.json"]) {
     assert(!fs.existsSync(path.join(dest, secret)), `${secret} was copied into the world-readable scratch dir`);
+  }
+});
+
+// --------------------------------------------- a resume must not burn the run
+
+const rnode = (id, over = {}) => ({ id, title: id, goal: "g", write: [`src/${id}.mjs`], tests: [`tests/${id}.test.mjs`], gate: "true", deps: [], ...over });
+
+function stateFor(nodes) {
+  const g = { __hash: "h0", project: "p", nodes };
+  const s = initState("/tmp/x", { paths: { state: ".trellis" }, project: "p", baseBranch: "main" }, g);
+  for (const id of Object.keys(s.nodes)) s.nodes[id].status = "merged";
+  return s;
+}
+
+check("a resume after an unrelated edit keeps the nodes that did not change", () => {
+  // One edited contract used to send every merged node back to pending and
+  // rebuild the lot, at real cost, behind a single log.warn.
+  const before = [rnode("a"), rnode("b"), rnode("c")];
+  const state = stateFor(before);
+  const after = { __hash: "h1", nodes: [rnode("a"), rnode("b", { goal: "changed" }), rnode("c")] };
+  const { dirty, keep } = resumePlan(state, after);
+  assert(keep.includes("a") && keep.includes("c"), `unrelated nodes were discarded: keep=${keep}`);
+  assert(dirty.length === 1 && dirty[0] === "b", `expected only b to be rebuilt, got ${dirty}`);
+});
+
+check("ADVERSARIAL a node built against a changed dependency is rebuilt", () => {
+  // b was proven against a version of a that no longer exists. Keeping it would
+  // be claiming a proof that never happened.
+  const before = [rnode("a"), rnode("b", { deps: ["a"] }), rnode("c", { deps: ["b"] })];
+  const state = stateFor(before);
+  const after = { __hash: "h1", nodes: [rnode("a", { goal: "changed" }), rnode("b", { deps: ["a"] }), rnode("c", { deps: ["b"] })] };
+  const { dirty, keep } = resumePlan(state, after);
+  assert(dirty.includes("a") && dirty.includes("b") && dirty.includes("c"),
+    `the change did not propagate downstream: dirty=${dirty}`);
+  assert(keep.length === 0, `something downstream of a changed node was kept: ${keep}`);
+});
+
+check("cosmetic edits do not rebuild anything", () => {
+  // A title or a tag changes nothing about what a worker is asked to do, and a
+  // run should not be discarded because someone fixed a typo.
+  const before = [rnode("a"), rnode("b")];
+  const state = stateFor(before);
+  const after = { __hash: "h1", nodes: [rnode("a", { title: "nicer name" }), rnode("b", { tags: ["api"] })] };
+  const { dirty } = resumePlan(state, after);
+  assert(dirty.length === 0, `a cosmetic edit forced a rebuild: ${dirty}`);
+});
+
+check("ADVERSARIAL every field a worker sees or is graded against moves the hash", () => {
+  const base = rnode("a");
+  for (const [field, value] of [
+    ["goal", "different"], ["acceptance", "x"], ["notes", "x"], ["role", "fixer"],
+    ["write", ["src/other.mjs"]], ["read", ["src/dep.mjs"]], ["tests", ["tests/other.test.mjs"]],
+    ["gate", "npm test"], ["deps", ["b"]], ["mutations", ["off by one"]],
+  ]) {
+    assert(nodeHash({ ...base, [field]: value }) !== nodeHash(base),
+      `changing "${field}" left the hash unchanged, so a resume would keep work proven against the old contract`);
   }
 });
 

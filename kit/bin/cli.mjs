@@ -317,8 +317,31 @@ function resumeOrInit(root, cfg, graph, { resume = false, retryFailed = false } 
     log.info(log.dim(`Resuming run ${state.runId}`));
     return state;
   }
-  if (state && !st.resumable(state, graph)) {
+  // The graph changed. Salvage everything the change did not invalidate rather
+  // than throwing the run away: a single edited contract used to send every
+  // merged node back to pending, rebuilding them all at real cost, behind one
+  // warning line.
+  if (state && resume && !st.resumable(state, graph)) {
+    const { dirty, keep, gone } = st.resumePlan(state, graph);
+    if (keep.length) {
+      const fresh = st.initState(root, cfg, graph);
+      fresh.runId = state.runId;
+      fresh.startedAt = state.startedAt;
+      for (const id of keep) {
+        if (state.nodes[id]) fresh.nodes[id] = { ...state.nodes[id], hash: fresh.nodes[id].hash };
+      }
+      log.warn(`graph.json changed. Keeping ${keep.length} node(s); rebuilding ${dirty.length}.`);
+      if (dirty.length) log.info(log.dim(`  rebuilding: ${dirty.slice(0, 8).join(", ")}${dirty.length > 8 ? "…" : ""}`));
+      if (gone.length) log.info(log.dim(`  no longer in the graph: ${gone.join(", ")}`));
+      log.info(log.dim("  A node is rebuilt when its own contract changed, or when one it depends on did."));
+      // Its worktree and branch are stale for anything being rebuilt.
+      for (const id of dirty) removeWorktree(root, cfg, id, { quiet: true });
+      return fresh;
+    }
+    log.warn("graph.json changed and no node survived the change — starting a fresh run.");
+  } else if (state && !st.resumable(state, graph)) {
     log.warn("graph.json changed since the last run — starting a fresh run.");
+    log.info(log.dim("  Pass --resume to keep the nodes the change did not invalidate."));
   }
   return st.initState(root, cfg, graph);
 }
@@ -457,6 +480,8 @@ function cmdReject() {
   st.saveState(root, cfg, state);
   log.info("");
   log.info(log.dim("If you changed its contract, run validate first, then run --resume."));
+  log.info(log.dim("A resume keeps every node the change did not invalidate, and rebuilds only"));
+  log.info(log.dim("the ones whose contract moved plus anything downstream of them."));
 }
 
 // ------------------------------------------------------------------ status
