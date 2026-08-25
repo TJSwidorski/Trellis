@@ -119,19 +119,39 @@ reading the same working tree, and briefly left mutants in tracked files. That
 was a mistake in how I fanned them out: mutation testing must run against a
 copy or alone. Tree verified clean afterwards.
 
-**Still open — not addressed, deliberately**
+**All eight open items are now closed.** Second fix round:
 
-- Glob matching is case-sensitive on a case-insensitive filesystem, so
-  `.GIT/config` and `KIT/lib/x` pass a `denyWrite` that blocks the lowercase
-  forms. `classify()` is now case-insensitive; `paths.mjs` is not.
-- `package.json`, `conftest.py`, `jest.config.js` etc. are not in `denyWrite`,
-  so a node with a broad write scope can still author the command its own gate
-  runs. The no-tests fix narrows this but does not close it.
-- `testsExistAndAreNonVacuous` (stage 04's driver check) never calls
-  `verifyTests`; it checks file size >= 120 bytes.
-- Writes to gitignored paths are invisible to `changedPaths`, so they bypass
-  scope checking, frozen-test detection, and revert.
-- `node.read` is unvalidated: a node can read outside the repo into a prompt.
-- `verify-tests` copies `.env` into the system temp dir and runs the gate there.
-- `--resume` silently discards a run after any graph edit.
-- `verify-tests` is JavaScript-only and does not say so.
+| Commit | What it closed |
+| --- | --- |
+| `8c1c666` | Case folding at the deny boundary, plus denyWrite covering runner config (package.json, conftest.py, Makefile...). **Found already uncommitted in the working tree at session start — not my work; reviewed, mutation-tested, and committed so it was not lost.** |
+| `a42e54a` | Stage 04 now RUNS verify-tests instead of claiming it, and checks tests per node rather than by flattened total. verify-tests scoped honestly to JS/TS — a foreign-language test is reported unchecked, not broken — and stops printing "non-vacuous" when nothing was proven. |
+| `32ea702` | Ignored writes are visible to the gate (detection only, never reverted); a gitignored frozen test is refused at validation. |
+| `08781c2` | `node.read` validated at read time and in validate; copyRepo stops copying .env and friends into world-readable temp. |
+| `2a5a2a5` | Resume is per node with dependant propagation, instead of discarding a whole run over one edit. |
+
+Regression 110 → 126 checks. Every fix confirmed by reverting it and watching a
+named check go red.
+
+**Judgement calls worth knowing about**
+
+- `package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml` are now denied at
+  every depth. A node can no longer add a dependency; that became a human's
+  edit. Deliberate, and the cost is real.
+- Stage 04 now runs every gate against a stub copy, so `trellis auto` takes
+  meaningfully longer. That is the price of the stage proving what it is named
+  after.
+- `matchAllow` folding tracks the filesystem, so its mutation is only
+  distinguishable on a case-sensitive one. The check is platform-correct but
+  cannot be exercised both ways from Windows.
+
+**Genuinely still open**
+
+- The gate still executes worker-authored code as the host user with
+  `shell: true`. Stripping the provider key narrowed the blast radius; it is not
+  a sandbox and does not claim to be. Real containment means a container or a
+  seccomp/AppArmor profile, which is a design decision rather than a patch.
+- Non-vacuity is proven for JavaScript and TypeScript only. Other languages are
+  now reported as unchecked rather than silently miscounted, but they are still
+  unchecked.
+- `ignoredPaths` uses `--ignored=traditional`, so an ignored write inside an
+  already-ignored directory is reported as the directory, not the file.
