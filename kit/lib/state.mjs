@@ -49,6 +49,9 @@ export function initState(root, cfg, graph) {
     s.nodes[n.id] = {
       status: STATUS.PENDING, attempts: [], tier: null, branch: null, reason: null,
       survivingMutations: [], routing: null,
+      // What this node's contract said when it was built, so a later resume can
+      // tell which nodes actually changed instead of discarding the whole run.
+      hash: nodeHash(n),
     };
   }
   return s;
@@ -70,6 +73,58 @@ export function saveState(root, cfg, state) {
 
 export function resumable(state, graph) {
   return Boolean(state && state.graphHash === graph.__hash);
+}
+
+/**
+ * A hash of the fields that determine what a worker is asked to do.
+ *
+ * Deliberately not the whole node: `title` and `tags` change nothing about the
+ * work, and a run should not be discarded because someone fixed a typo in a
+ * title. Everything a worker sees or is graded against is included.
+ */
+export function nodeHash(node) {
+  const material = JSON.stringify([
+    node.goal ?? null, node.acceptance ?? null, node.notes ?? null, node.role ?? null,
+    [...(node.write ?? [])].sort(), [...(node.read ?? [])].sort(),
+    [...(node.tests ?? [])].sort(), node.gate ?? null,
+    [...(node.deps ?? [])].sort(), [...(node.mutations ?? [])].sort(),
+  ]);
+  return crypto.createHash("sha256").update(material).digest("hex").slice(0, 16);
+}
+
+/**
+ * Which nodes a resume may keep, and which must be rebuilt.
+ *
+ * The old rule was all-or-nothing on a hash of the entire graph FILE: change one
+ * node's contract and every merged node in the run went back to pending and was
+ * rebuilt from scratch. Real money, silently, behind a single log.warn — and
+ * `trellis reject` explicitly told you to edit a contract and then --resume,
+ * which is exactly the sequence that triggered it.
+ *
+ * A node is rebuilt if its own contract changed, or if anything it depends on
+ * did. The second half matters: a node built against an old version of its
+ * dependency was proven against something that no longer exists.
+ */
+export function resumePlan(state, graph) {
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const dirty = new Set();
+
+  for (const n of graph.nodes) {
+    const prior = state.nodes?.[n.id];
+    if (!prior || prior.hash !== nodeHash(n)) dirty.add(n.id);
+  }
+  // Propagate to dependants until it settles.
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const n of graph.nodes) {
+      if (dirty.has(n.id)) continue;
+      if ((n.deps ?? []).some((d) => dirty.has(d))) { dirty.add(n.id); changed = true; }
+    }
+  }
+
+  const gone = Object.keys(state.nodes ?? {}).filter((id) => !byId.has(id));
+  const keep = graph.nodes.map((n) => n.id).filter((id) => !dirty.has(id));
+  return { dirty: [...dirty], keep, gone };
 }
 
 export function rollup(state) {

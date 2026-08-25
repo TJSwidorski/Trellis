@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { norm, globsOverlap, matchAny } from "./paths.mjs";
+import { norm, globsOverlap, matchAny, matchDeny, safeRelative } from "./paths.mjs";
+import { isIgnored } from "./worktree.mjs";
 import { scopeBullets, findSpec } from "./spec.mjs";
 
 const ROLES = ["implementer", "fixer", "refactorer", "tester"];
@@ -79,8 +80,24 @@ export function validateGraph(graph, cfg, repoRoot, { requireTests = true } = {}
 
     // Write paths must not collide with hard boundaries.
     for (const w of n.write || []) {
-      if (matchAny(w, cfg.boundaries.denyWrite)) {
+      if (matchDeny(w, cfg.boundaries.denyWrite)) {
         errors.push(`${at}: write path "${w}" is inside a denied boundary.`);
+      }
+    }
+
+    // `read` was never inspected at all. Its contents go straight into the
+    // prompt POSTed to the provider, so a path outside the tree or inside a
+    // denied boundary exfiltrates whatever it names. Caught here as well as at
+    // read time, because a graph that ASKS for it is worth rejecting loudly.
+    if (n.read && !Array.isArray(n.read)) {
+      errors.push(`${at}: "read" must be an array of repo-relative paths.`);
+    }
+    for (const r of Array.isArray(n.read) ? n.read : []) {
+      const safe = safeRelative(repoRoot, String(r).replace(/[*?].*$/, "") || ".");
+      if (!safe.ok) {
+        errors.push(`${at}: read path "${r}" ${safe.reason}. Reads are inlined into the worker prompt.`);
+      } else if (matchDeny(r, cfg.boundaries.denyWrite)) {
+        errors.push(`${at}: read path "${r}" is inside a denied boundary; its contents would be sent to the provider.`);
       }
     }
 
@@ -91,12 +108,33 @@ export function validateGraph(graph, cfg, repoRoot, { requireTests = true } = {}
         const msg = `${at}: test file "${t}" does not exist. /trellis-tests writes these; they must exist before \`run\`.`;
         (requireTests ? errors : warnings).push(msg);
       }
-      if (matchAny(t, n.write || [])) {
+      if (matchDeny(t, n.write || [])) {
         errors.push(`${at}: test file "${t}" is also in "write". Tests are frozen — a worker that can edit its own test has no gate.`);
+      }
+      // An ignored oracle is an invisible oracle: `git status` omits ignored
+      // files even with --untracked-files=all, so edits to it would not appear
+      // in the gate's frozen-test check. Cheaper to forbid here than to detect
+      // there, and there is no legitimate reason to gitignore a frozen test.
+      if (fs.existsSync(tp) && isIgnored(repoRoot, t)) {
+        errors.push(
+          `${at}: test file "${t}" is ignored by git. The gate cannot see edits to an ignored ` +
+            `file, so a worker could rewrite this oracle undetected. Un-ignore it.`
+        );
       }
     }
     if (!n.tests || n.tests.length === 0) {
-      warnings.push(`${at}: no "tests" declared. The gate will run but nothing pins behaviour to a contract.`);
+      // MISSION invariant 1: nothing merges that was not proven against an
+      // oracle written before the implementation existed. As a warning this was
+      // not an invariant, it was a preference — such a node validated, ran, and
+      // merged on whatever its gate command happened to say, which for a worker
+      // that could reach package.json was whatever it wanted it to say.
+      //
+      // Still a warning under --plan, because at slice time the tests do not
+      // exist yet and that is the whole point of the flag.
+      const msg =
+        `${at}: no "tests" declared. Nothing pins behaviour to a contract, so the gate ` +
+        `proves only that some command exited 0. Declare a frozen test, or drop the node.`;
+      (requireTests ? errors : warnings).push(msg);
     }
   }
 

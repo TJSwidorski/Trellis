@@ -59,6 +59,7 @@ export const NOT_INSTALLED = [
   "setup.mjs",       // the installer does not install itself
   ".trellis-seed",   // empty, unreferenced
   ".bench",          // A/B harness output: scratch repos and REPORT.md
+  "tasks",           // this repo's own working notes; a target repo keeps its own
   ".git",
   "node_modules",
 ];
@@ -70,7 +71,12 @@ let justInstalled = false;
 // Paths the orchestrator is told to read but which are created at runtime rather
 // than shipped. Referencing these is correct; their absence at install time is
 // not a defect.
-const RUNTIME_PATHS = [".trellis", ".worktrees", "run.jsonl", "REPORT.md", "graph.json"];
+const RUNTIME_PATHS = [
+  ".trellis", ".worktrees", "run.jsonl", "REPORT.md", "graph.json",
+  // The cross-run evidence files. Written by triage and by `trellis friction`
+  // as runs happen; absent on a fresh install, and that is correct.
+  "triage.jsonl", "friction.jsonl", "skills.jsonl", "ledger.jsonl", "evolve.json",
+];
 
 /**
  * Every backtick-quoted path-looking token in a doc file.

@@ -10,7 +10,7 @@ import * as st from "../lib/state.mjs";
 import * as log from "../lib/log.mjs";
 import { run } from "../lib/runner.mjs";
 import { writeReport } from "../lib/report.mjs";
-import { verifyTests } from "../lib/verify.mjs";
+import { verifyTests, SOFT_FINDINGS } from "../lib/verify.mjs";
 import { normalizeNode } from "../lib/graph.mjs";
 import * as ledger from "../lib/ledger.mjs";
 import { explain as explainRouting } from "../lib/routing.mjs";
@@ -22,9 +22,14 @@ import {
   nodeFingerprint,
   PRODUCT_GRAPH_DEFAULT,
 } from "../lib/product.mjs";
-import { STAGES, runSession, recordSession, sessionStats, isRetryable, sleep } from "../lib/driver.mjs";
-import { actionable, writeProposal, classify } from "../lib/evolve.mjs";
-import { loadRegistry, resolveActive, materialise, blockedByAudit, missingPlugins } from "../lib/skills.mjs";
+import { STAGES, DEFAULT_CHAIN, EVOLVE_TOP, runSession, recordSession, sessionStats, isRetryable, sleep, currentRunId } from "../lib/driver.mjs";
+import { actionable, unknownCodes, kindActionable, kindByTier, writeProposal, classify, shortlist } from "../lib/evolve.mjs";
+import { loadCodes, allCodes, groupSimilar, bucketOf, normaliseCode, CODES_DOC } from "../lib/codes.mjs";
+import * as friction from "../lib/friction.mjs";
+import {
+  loadRegistry, resolveActive, materialise, blockedByAudit, missingPlugins,
+  recordActivation, readActivations, neverActivated,
+} from "../lib/skills.mjs";
 
 const argv = process.argv.slice(2);
 const cmd = argv[0];
@@ -222,18 +227,30 @@ async function cmdVerifyTests() {
     log: (id, msg) => log.node(id, log.green(msg)),
   });
 
-  const hard = findings.filter((f) => f.kind !== "no-tests" && f.kind !== "unstubbable");
-  const soft = findings.filter((f) => f.kind === "no-tests" || f.kind === "unstubbable");
+  const hard = findings.filter((f) => !SOFT_FINDINGS.has(f.kind));
+  const soft = findings.filter((f) => SOFT_FINDINGS.has(f.kind));
 
   log.info("");
-  for (const f of soft) log.warn(`${f.nodeId}: ${f.message}`);
+  for (const f of soft) log.warn(`${f.nodeId} [${f.kind}]: ${f.message}`);
   for (const f of hard) log.fail(`${f.nodeId} [${f.kind}]: ${f.message}`);
 
   log.info("");
   if (hard.length) {
     die(`${hard.length} node(s) have tests that cannot be trusted as an acceptance oracle.`);
   }
-  log.ok("Every gate rejects a null stub. Tests are non-vacuous.");
+
+  // Do not claim more than was established. A run where every node was skipped
+  // for language reasons used to print the same success line as one where every
+  // gate was actually proven to reject a stub.
+  const unchecked = new Set(soft.map((f) => f.nodeId));
+  const proven = nodes.size - unchecked.size;
+  if (proven === 0) {
+    log.warn(`No node's non-vacuity was established (${unchecked.size} unchecked). Nothing here is proven.`);
+  } else if (unchecked.size) {
+    log.ok(`${proven} of ${nodes.size} node(s) reject a null stub; ${unchecked.size} could not be checked.`);
+  } else {
+    log.ok("Every gate rejects a null stub. Tests are non-vacuous.");
+  }
   log.info(log.dim("Mutation checks run automatically after each node passes during `run`."));
   return 0;
 }
@@ -300,8 +317,31 @@ function resumeOrInit(root, cfg, graph, { resume = false, retryFailed = false } 
     log.info(log.dim(`Resuming run ${state.runId}`));
     return state;
   }
-  if (state && !st.resumable(state, graph)) {
+  // The graph changed. Salvage everything the change did not invalidate rather
+  // than throwing the run away: a single edited contract used to send every
+  // merged node back to pending, rebuilding them all at real cost, behind one
+  // warning line.
+  if (state && resume && !st.resumable(state, graph)) {
+    const { dirty, keep, gone } = st.resumePlan(state, graph);
+    if (keep.length) {
+      const fresh = st.initState(root, cfg, graph);
+      fresh.runId = state.runId;
+      fresh.startedAt = state.startedAt;
+      for (const id of keep) {
+        if (state.nodes[id]) fresh.nodes[id] = { ...state.nodes[id], hash: fresh.nodes[id].hash };
+      }
+      log.warn(`graph.json changed. Keeping ${keep.length} node(s); rebuilding ${dirty.length}.`);
+      if (dirty.length) log.info(log.dim(`  rebuilding: ${dirty.slice(0, 8).join(", ")}${dirty.length > 8 ? "…" : ""}`));
+      if (gone.length) log.info(log.dim(`  no longer in the graph: ${gone.join(", ")}`));
+      log.info(log.dim("  A node is rebuilt when its own contract changed, or when one it depends on did."));
+      // Its worktree and branch are stale for anything being rebuilt.
+      for (const id of dirty) removeWorktree(root, cfg, id, { quiet: true });
+      return fresh;
+    }
+    log.warn("graph.json changed and no node survived the change — starting a fresh run.");
+  } else if (state && !st.resumable(state, graph)) {
     log.warn("graph.json changed since the last run — starting a fresh run.");
+    log.info(log.dim("  Pass --resume to keep the nodes the change did not invalidate."));
   }
   return st.initState(root, cfg, graph);
 }
@@ -440,6 +480,8 @@ function cmdReject() {
   st.saveState(root, cfg, state);
   log.info("");
   log.info(log.dim("If you changed its contract, run validate first, then run --resume."));
+  log.info(log.dim("A resume keeps every node the change did not invalidate, and rebuilds only"));
+  log.info(log.dim("the ones whose contract moved plus anything downstream of them."));
 }
 
 // ------------------------------------------------------------------ status
@@ -618,8 +660,10 @@ async function cmdAuto() {
     die("driver.enabled is false in trellis.config.json. Read the driver section before turning this on.");
   }
 
+  // Periodic stages are reachable only by name. Without this, adding one would
+  // silently make every ordinary run spend an extra expensive session.
   const only = flagVal("stage");
-  const stages = only ? STAGES.filter((s) => s.id === only) : STAGES;
+  const stages = only ? STAGES.filter((s) => s.id === only) : DEFAULT_CHAIN;
   if (!stages.length) die(`Unknown stage ${only}. One of: ${STAGES.map((s) => s.id).join(", ")}`);
 
   const stats = sessionStats(root);
@@ -631,7 +675,7 @@ async function cmdAuto() {
   }
 
   for (const stage of stages) {
-    const pre = stage.verify(root);
+    const pre = stage.verify(root, cfg);
     if (pre.ok && !flags.has("--force")) {
       log.ok(`${stage.id} already satisfied (${pre.detail}) — skipping.`);
       continue;
@@ -677,7 +721,7 @@ async function cmdAuto() {
         }
       }
 
-      const check = stage.verify(root);
+      const check = stage.verify(root, cfg);
       recordSession(root, {
         stage: stage.id,
         attempt,
@@ -724,25 +768,373 @@ async function cmdAuto() {
 // ------------------------------------------------------------------ evolve
 
 function cmdEvolve() {
-  const { root } = ctx();
-  const minRuns = flagInt("min-runs") ?? 3;
-  const found = actionable(root, { minRuns });
+  const { root, cfg } = ctx();
+  const minRuns = flagInt("min-runs") ?? cfg.evolve?.minRuns ?? 3;
 
-  if (!found.length) {
+  if (flags.has("--unknown")) return reportUnknown(root, cfg, minRuns);
+  if (flags.has("--retire")) return reportRetire(root, cfg, minRuns);
+  if (flags.has("--json")) return emitShortlist(root, cfg, minRuns);
+
+  const scope = flags.has("--all-nodes") ? "all" : "costly";
+  const found = actionable(root, cfg, { minRuns });
+  const kinds = kindActionable(root, cfg, { minRuns, scope });
+
+  if (!found.length && !kinds.length) {
     log.info(
-      `No rejection code has appeared in ${minRuns}+ distinct runs yet. ` +
-        `Self-improvement stays inert until there is evidence.`
+      `Nothing has appeared in ${minRuns}+ distinct runs yet — not a rejection code, ` +
+        `not a failure kind. Self-improvement stays inert until there is evidence.`
     );
     return;
   }
 
-  log.ok(`${found.length} pattern(s) with enough evidence to act on:`);
-  for (const f of found) {
-    log.info(`  ${f.code.padEnd(30)} ${f.runs} runs, ${f.count} rejections, ${f.nodes.length} distinct nodes`);
+  if (found.length) {
+    log.ok(`${found.length} rejection pattern(s) with enough evidence to act on:`);
+    for (const f of found) {
+      log.info(`  ${f.code.padEnd(30)} ${f.runs} runs, ${f.count} rejections, ${f.nodes.length} distinct nodes`);
+    }
+    log.info("");
   }
-  log.info("");
+
+  if (kinds.length) {
+    log.ok(`${kinds.length} failure-kind pattern(s) on nodes that cost something:`);
+    for (const k of kinds) {
+      const lift = k.baseline > 0 ? ` (${(k.share / k.baseline).toFixed(1)}x baseline)` : "";
+      log.info(`  ${`${k.kind}|${k.tag}`.padEnd(38)} ${k.runs} runs, ${k.attempts} attempts${lift}`);
+    }
+
+    // A kind that clusters on ONE tier is a fact about the prompt or the extract
+    // format, not about the product. Different signal, different fix.
+    const perTier = [...kindByTier(root, cfg, { scope }).values()].filter((t) => t.runs >= minRuns);
+    if (perTier.length) {
+      log.info("");
+      log.info("  by tier — a kind that only one tier emits is about the prompt, not the product:");
+      for (const t of perTier) log.info(`    ${`${t.kind}|${t.tier}`.padEnd(36)} ${t.runs} runs, ${t.attempts} attempts`);
+    }
+    log.info("");
+    if (scope === "costly") {
+      log.info(`  Scoped to exhausted / strong-tier / mutation-surviving nodes. --all-nodes widens it,`);
+      log.info(`  which mostly shows the ladder working: retries that later landed.`);
+      log.info("");
+    }
+  }
+
+  reportFriction(root, cfg, minRuns);
+
   log.info("Opus writes the proposal from these in the triage session. It may not touch:");
   log.info("  MISSION.md, gate/verify/mutate/worktree, kit/schema/, kit/regression/, .claude/hooks/");
+}
+
+/**
+ * Self-reported friction, plus the contradictions that keep it honest.
+ *
+ * Bucketed codes are excluded from the actionable list here for the same reason
+ * they are excluded from rejections: a code nobody agreed on cannot trigger work.
+ */
+function reportFriction(root, cfg, minRuns) {
+  const counts = friction.counts(root, cfg);
+  const ripe = Object.values(counts)
+    .filter((f) => !f.code.startsWith("other:") && f.runs >= minRuns)
+    .sort((a, b) => b.runs - a.runs);
+
+  if (ripe.length) {
+    log.ok(`${ripe.length} friction pattern(s) reported across ${minRuns}+ runs:`);
+    for (const f of ripe) {
+      const where = f.targets.length ? `  on ${f.targets.slice(0, 3).join(", ")}` : "";
+      log.info(`  ${f.code.padEnd(30)} ${f.runs} runs, ${f.count} occurrences${where}`);
+    }
+    log.info("");
+  }
+
+  // The teeth behind `--none`. Counted across runs, never held against a session:
+  // a triage session can legitimately have a smooth time on a bad run.
+  const contradicted = friction.contradictions(root, cfg, {
+    ledgerRecords: ledger.read(root, cfg),
+    triageRows: readTriageRows(root, cfg),
+  });
+  const byStage = {};
+  for (const c of contradicted) (byStage[c.stage] ??= new Set()).add(c.run);
+  const stale = Object.entries(byStage).filter(([, runs]) => runs.size >= minRuns);
+
+  if (stale.length) {
+    log.warn(`friction.unreported-suspected in ${stale.length} stage(s):`);
+    for (const [stage, runs] of stale) {
+      log.info(`  ${stage.padEnd(30)} asserted 'none' on ${runs.size} runs that had exhausted nodes or rejections`);
+    }
+    log.info("  Not an accusation about any one session. A pattern this size means the");
+    log.info("  friction prompt is not landing, which is a contract problem.");
+    log.info("");
+  }
+}
+
+function readTriageRows(root, cfg) {
+  const p = path.join(root, cfg.paths?.state ?? ".trellis", "triage.jsonl");
+  if (!fs.existsSync(p)) return [];
+  return fs.readFileSync(p, "utf8").split("\n").filter(Boolean)
+    .map((l) => { try { return JSON.parse(l); } catch { return null; } })
+    .filter(Boolean);
+}
+
+/**
+ * The whole input to stage 07, and the reason its token budget is bounded by
+ * construction rather than by an instruction telling a model to be brief.
+ *
+ * A handful of rows of scalars. No prose, no logs, no transcripts. `--top` caps
+ * it; the default of 5 is a deliberate ceiling on how much can be considered in
+ * one pass, not a display convenience.
+ */
+function emitShortlist(root, cfg, minRuns) {
+  // The cap must match what the 07_evolve verify predicate enumerates, or the
+  // stage is asked to account for patterns it was never shown. Both call
+  // evolve.shortlist(); EVOLVE_TOP is the number the predicate holds it to.
+  const top = flagInt("top") ?? EVOLVE_TOP;
+  const scope = flags.has("--all-nodes") ? "all" : "costly";
+  const patterns = shortlist(root, cfg, { minRuns, scope, top });
+
+  if (top !== EVOLVE_TOP) {
+    process.stderr.write(
+      `note: --top ${top} differs from the ${EVOLVE_TOP} the 07_evolve gate checks; ` +
+        `the stage is still held to ${EVOLVE_TOP}.\n`
+    );
+  }
+  process.stdout.write(JSON.stringify({ minRuns, scope, top, patterns }, null, 2) + "\n");
+}
+
+/**
+ * Vocabulary pressure.
+ *
+ * Nothing here can trigger a proposal no matter how often it recurs — that is the
+ * point. It is a list for a human to read and decide whether to name.
+ */
+function reportUnknown(root, cfg, minRuns) {
+  const unknown = unknownCodes(root, cfg);
+  if (!unknown.length) {
+    log.info("No unrecognised rejection codes. Everything recorded so far is in the vocabulary.");
+    return;
+  }
+
+  log.info(`${unknown.length} unrecognised code(s), bucketed and never actionable:`);
+  for (const u of unknown) {
+    const ready = u.runs >= minRuns ? "  <- clears the threshold" : "";
+    log.info(`  ${u.code.padEnd(34)} ${u.runs} runs, ${u.count} rejections${ready}`);
+  }
+
+  // Display-only grouping. Deliberately not folded into the counts above: if
+  // near-matches counted as one code, a threshold could be reached by varying
+  // spelling, which is the manipulation the run-count discipline exists to stop.
+  const groups = groupSimilar(unknown.map((u) => u.code)).filter((g) => g.members.length > 1);
+  if (groups.length) {
+    log.info("");
+    log.info("Possibly the same idea spelled differently (shown, never summed):");
+    for (const g of groups) log.info(`  ${g.members.join("  ~  ")}`);
+  }
+
+  const ripe = unknown.filter((u) => u.runs >= minRuns);
+  if (ripe.length) {
+    log.info("");
+    log.warn(`${ripe.length} bucket(s) clear ${minRuns} runs. To make one actionable, a human adds it to:`);
+    log.info(`  ${CODES_DOC}   (prose section + an entry in the codes:begin block)`);
+  }
+}
+
+/**
+ * The other half of self-improvement: what should stop existing.
+ *
+ * A loop that can only add is not a loop. Every skill taxes selection accuracy in
+ * every session it is eligible for, and that cost appears in no per-node metric —
+ * so nothing else in the system will ever notice it.
+ *
+ * Zero activations is the one deletion signal that needs no judgement: the rules
+ * never matched, so the skill provably never entered a context window.
+ */
+function reportRetire(root, cfg, minRuns) {
+  const registry = loadRegistry(root);
+  const activations = readActivations(root, cfg);
+  const { ready, runs, skills, unreachable } = neverActivated(registry, activations, { minRuns });
+
+  // Reachability is a registry bug, not a usage fact, so it is reported whether
+  // or not there is enough run data to say anything about usage.
+  if (unreachable.length) {
+    log.warn(`${unreachable.length} entr(y/ies) can never activate at all — no automatic rule, no manual opt-in:`);
+    for (const u of unreachable) log.info(`  ${u.name.padEnd(28)} ${u.kind}`);
+    log.info("  That is a registry bug rather than dead weight: give it a rule or drop it.");
+    log.info("");
+  }
+
+  if (!ready) {
+    log.info(
+      `Only ${runs} run(s) of activation data. Retirement needs ${minRuns}+ distinct runs — ` +
+        `a skill that happened not to match once is not a fact about the skill.`
+    );
+    return;
+  }
+
+  if (!skills.length) {
+    log.ok(`Every automatically-activating entry fired at least once across ${runs} runs.`);
+    return;
+  }
+
+  log.warn(`${skills.length} entr(y/ies) never activated across ${runs} runs:`);
+  for (const s of skills) log.info(`  ${s.name.padEnd(28)} ${s.kind}, ${s.rules.join("+")}`);
+  log.info("");
+  log.info("These have provably never entered a context window. Either the activation rules are");
+  log.info("wrong, or the entry is dead weight. Both are worth a proposal against SKILLS/REGISTRY.json.");
+  log.info(log.dim("Manual-only entries are excluded: they activate when named, so silence is by design."));
+}
+
+/**
+ * Record work the session did by hand.
+ *
+ * A command rather than a file the session appends to, for one reason: `ts` and
+ * `run` are stamped here. Those are the two fields cross-run counting depends on
+ * and the two a hand-written line gets wrong.
+ */
+function cmdFriction() {
+  const { root, cfg } = ctx();
+  const stage = flagVal("stage");
+  if (!stage) die("Usage: trellis friction --stage <id> (--none | --kind <k> --code <c> [--target p] [--count n] [--note s])");
+
+  const run = currentRunId(root);
+  if (!run) die("No runId in .trellis/state.json. Friction is recorded against a run, or not at all.");
+
+  const rec = flags.has("--none")
+    ? { stage, kind: "none" }
+    : {
+        stage,
+        kind: flagVal("kind"),
+        code: normaliseCode(flagVal("code"), loadCodes(root), "friction"),
+        target: flagVal("target") ?? undefined,
+        count: flagInt("count") ?? undefined,
+        note: flagVal("note") ?? undefined,
+      };
+
+  let row;
+  try {
+    row = friction.append(root, cfg, rec, { run });
+  } catch (e) {
+    die(e.message);
+  }
+
+  if (row.kind === "none") {
+    log.ok(`${stage}: asserted no friction for run ${run}.`);
+    return;
+  }
+  log.ok(`${stage}: recorded ${row.kind}/${row.code}${row.target ? ` on ${row.target}` : ""}.`);
+  if (row.code?.startsWith("other:")) {
+    log.info(log.dim(`  bucketed — visible under 'evolve --unknown', never actionable until named in ${CODES_DOC}`));
+  }
+}
+
+/**
+ * Write a proposal through code rather than by formatting markdown.
+ *
+ * That is what makes the protected-path refusal, the tier derivation, the
+ * numbering, and the retirement-condition requirement actually binding. A model
+ * hand-writing a file under evolution/proposals/ bypasses all four.
+ *
+ * Long fields are read from files rather than argv, because a shell argument is
+ * the wrong place for three paragraphs.
+ */
+function cmdPropose() {
+  const { root } = ctx();
+  const title = flagVal("title");
+  const targets = (flagVal("targets") ?? "").split(",").map((t) => t.trim()).filter(Boolean);
+  if (!title || !targets.length) {
+    die('Usage: trellis propose --title "..." --targets a,b --kind mechanism|tooling|retirement ' +
+        "--evidence <file> [--change <file>] [--alternatives <file>] [--cost <file>] [--reversal <file>]");
+  }
+
+  const fromFile = (name) => {
+    const v = flagVal(name);
+    if (!v) return undefined;
+    const p = path.resolve(root, v);
+    if (fs.existsSync(p)) return fs.readFileSync(p, "utf8").trim();
+    return v; // short values inline are fine
+  };
+
+  let result;
+  try {
+    result = writeProposal(root, {
+      title,
+      targets,
+      kind: flagVal("kind") ?? "mechanism",
+      evidence: fromFile("evidence") ?? "_(no evidence attached — this proposal is incomplete)_",
+      rationale: fromFile("rationale"),
+      change: fromFile("change"),
+      mechanism: fromFile("mechanism"),
+      alternatives: fromFile("alternatives"),
+      cost: fromFile("cost"),
+      reversal: fromFile("reversal"),
+      // The driver stamps TRELLIS_STAGE when it spawns a session, so this is
+      // decided by the harness rather than attested by the session it binds.
+      // The flag stays as an override for a human writing one by hand.
+      fromEvolveStage:
+        flags.has("--from-evolve-stage") || process.env.TRELLIS_STAGE === "07_evolve",
+    });
+  } catch (e) {
+    die(e.message);
+  }
+
+  log.ok(`wrote ${result.file}`);
+  log.info(`  kind: ${result.kind}   tier: ${result.tier}`);
+  log.info(`  ${result.tier === "advisory" && !result.held
+    ? "auto-applies once regression is green"
+    : "waits for a human merge"}`);
+}
+
+function cmdCodes() {
+  const { root } = ctx();
+  const codes = loadCodes(root);
+  if (codes.missing) die(`${CODES_DOC} not found. That file is the vocabulary.`);
+
+  const one = flagVal("explain");
+  if (one) {
+    const family = Object.hasOwn(codes.rejection, one)
+      ? "rejection"
+      : Object.hasOwn(codes.friction, one)
+        ? "friction"
+        : null;
+    if (!family) {
+      log.fail(`"${one}" is not in the vocabulary.`);
+      log.info(`Use it anyway if nothing fits — it records as other:${bucketOf(`other:${one}`)} and shows up under 'evolve --unknown'.`);
+      process.exit(1);
+    }
+    log.ok(`${one}  (${family})`);
+    const prose = explainFromDoc(root, one);
+    if (prose) log.info(prose);
+    const suspects = codes[family][one]?.suspects ?? [];
+    if (suspects.length) {
+      log.info("");
+      log.info(`Probably indicts: ${suspects.join(", ")}`);
+    }
+    return;
+  }
+
+  for (const family of ["rejection", "friction"]) {
+    const names = Object.keys(codes[family] ?? {});
+    if (!names.length) continue;
+    log.info(`${family} codes (${names.length}):`);
+    for (const n of names) log.info(`  ${n}`);
+    log.info("");
+  }
+
+  // A code defined in the block with no prose beside it is unexplained, and an
+  // unexplained code gets guessed at. Report both directions.
+  const defined = new Set(allCodes(codes));
+  const undocumented = [...defined].filter((c) => !codes.documented.has(c));
+  const orphaned = [...codes.documented].filter((c) => !defined.has(c));
+  if (undocumented.length) log.warn(`defined but not explained in prose: ${undocumented.join(", ")}`);
+  if (orphaned.length) log.warn(`explained in prose but not defined: ${orphaned.join(", ")}`);
+
+  log.info(`If nothing fits, use your own words. It buckets as other:<slug> and a human decides later.`);
+}
+
+/** The prose paragraph under `### <code>` in the doc, for --explain. */
+function explainFromDoc(root, code) {
+  const p = path.join(root, CODES_DOC);
+  if (!fs.existsSync(p)) return null;
+  const text = fs.readFileSync(p, "utf8");
+  const m = new RegExp(`^###\\s+${code}\\s*$([\\s\\S]*?)(?=^###\\s|^---\\s*$)`, "m").exec(text);
+  return m ? m[1].trim() : null;
 }
 
 function cmdClassifyPath() {
@@ -752,6 +1144,11 @@ function cmdClassifyPath() {
   log.info(`${p} -> ${c}`);
   if (c === "protected") log.warn("No proposal may touch this.");
   if (c === "unclassified") log.warn("Treated as load-bearing (fail closed).");
+  if (c === "invalid") {
+    log.warn("Not a usable target. Name paths as plain repo-relative paths —");
+    log.warn("no leading slash or drive letter, and no '..' segments.");
+    process.exit(1);
+  }
 }
 
 // ---------------------------------------------------------------- sessions
@@ -801,6 +1198,11 @@ function applySkills(root, cfg, stage, { dryRun = false } = {}) {
   const opts = { stage, sliceNodes: sliceNodes(root), manual: cfg.skills?.manual ?? [] };
   const active = resolveActive(registry, opts);
   const changes = materialise(root, active, { dryRun });
+  // Only a real stage transition is evidence. A dry run is somebody asking what
+  // would happen, and recording it would make an unused skill look exercised.
+  if (!dryRun) {
+    recordActivation(root, cfg, { run: currentRunId(root), stage, active });
+  }
   return { active, changes, blocked: blockedByAudit(registry, opts), registry };
 }
 
@@ -881,9 +1283,22 @@ Product graph — authored outside Trellis, handed in complete:
 
 Autonomy and evolution:
   trellis auto [--stage id]   Drive the session pipeline headless, verifying on disk
+                                07_evolve is periodic: reachable only by --stage
     --force                     Re-run a stage even if its artifact already exists
   trellis sessions            Measured cost per stage from your own runs
-  trellis evolve              Rejection patterns with enough evidence to act on
+  trellis evolve              Rejection codes and failure kinds with enough evidence
+    --unknown                   Unrecognised codes: vocabulary pressure, never actionable
+    --min-runs <n>              Override the threshold (default: config evolve.minRuns)
+    --all-nodes                 Include nodes that failed then landed (mostly noise)
+    --retire                    Skills that never once activated: the deletion signal
+  trellis codes               The vocabulary triage records in
+    --explain <code>            What it means and which artifact it probably indicts
+  trellis friction --stage <id>   Record work you did by hand (or --none)
+    --kind <k> --code <c>       manual-edit | repeated-read | missing-tool | ...
+    --target <path> --count <n> --note "<=140 chars"
+    --none                      Explicitly assert there was none. Never fails a stage.
+  trellis propose             Write a proposal through code (enforces the refusals)
+    --kind tooling              Requires alternatives, cost, and a retirement condition
   trellis classify <path>     Is this path protected, load-bearing, or advisory
   trellis regression          Fixtures that must still pass after any kit change
   trellis skills              Which skills load in a session, and why
@@ -910,6 +1325,9 @@ const table = {
   auto: cmdAuto,
   sessions: cmdSessions,
   evolve: cmdEvolve,
+  codes: cmdCodes,
+  friction: cmdFriction,
+  propose: cmdPropose,
   classify: cmdClassifyPath,
   regression: cmdRegression,
   skills: cmdSkills,

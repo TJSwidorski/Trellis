@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
-import { changedPaths, revertPaths } from "./worktree.mjs";
-import { matchAny } from "./paths.mjs";
+import { changedPaths, revertPaths, ignoredPaths } from "./worktree.mjs";
+import { matchDeny, matchAllow } from "./paths.mjs";
 import { detectEnvFailure, envFailureMessage } from "./envfail.mjs";
 
 /**
@@ -23,7 +23,14 @@ export async function runGate(cfg, node, worktree) {
     };
   }
 
-  const tampered = changed.filter((p) => matchAny(p, node.tests || []));
+  // Ignored paths are invisible to `git status` even with --untracked-files=all,
+  // so a write into one used to escape all three checks below. Included for
+  // DETECTION only and never for the revert list: these entries can be whole
+  // collapsed directories, and reverting node_modules/ would be its own outage.
+  const ignored = ignoredPaths(worktree);
+  const seen = [...changed, ...ignored];
+
+  const tampered = seen.filter((p) => matchDeny(p, node.tests || []));
   if (tampered.length) {
     revertPaths(worktree, tampered);
     return {
@@ -37,8 +44,23 @@ export async function runGate(cfg, node, worktree) {
     };
   }
 
+  // A denied path reached through an ignored one is still a denied path — and
+  // it is the interesting case, because it is the one that was invisible.
+  const deniedIgnored = ignored.filter((p) => matchDeny(p, cfg.boundaries.denyWrite));
+  if (deniedIgnored.length) {
+    return {
+      ok: false,
+      kind: "out-of-scope",
+      feedback:
+        `These paths are ignored by git and outside your write scope: ${deniedIgnored.join(", ")}.\n` +
+        `They were not reverted — git does not track them — so remove them yourself and ` +
+        `keep your changes inside: ${(node.write || []).join(", ")}.`,
+      changed: seen,
+    };
+  }
+
   const outOfScope = changed.filter(
-    (p) => !matchAny(p, node.write || []) || matchAny(p, cfg.boundaries.denyWrite)
+    (p) => !matchAllow(p, node.write || []) || matchDeny(p, cfg.boundaries.denyWrite)
   );
   if (outOfScope.length) {
     revertPaths(worktree, outOfScope);
@@ -59,7 +81,7 @@ export async function runGate(cfg, node, worktree) {
     return { ok: false, kind: "no-gate", feedback: "No gate command configured for this node.", changed };
   }
 
-  const res = await exec(cmd, worktree, cfg.gate.timeoutMs);
+  const res = await exec(cmd, worktree, cfg.gate.timeoutMs, gateEnv(cfg));
   if (res.timedOut) {
     return {
       ok: false,
@@ -103,10 +125,36 @@ function tail(s, n) {
   return str.length <= n ? str : "...\n" + str.slice(str.length - n);
 }
 
-export function exec(command, cwd, timeoutMs) {
+/**
+ * The environment the gate command runs in.
+ *
+ * The gate executes code a cheap model just wrote, with shell:true, as the host
+ * user. That is inherent to running tests and is not the finding. The finding
+ * was that it inherited process.env entire, so the provider API key funding the
+ * whole run was readable by every gate command, in every worktree, on every
+ * attempt — including attempts by the model whose output was being judged.
+ *
+ * Path checks all happen BEFORE this point. None of them constrain what the
+ * command does once it starts, so the credential should not be there to take.
+ *
+ * Scoped deliberately: this removes the keys Trellis itself introduced, named
+ * by cfg.tiers[].apiKeyEnv plus cfg.gate.stripEnv. It is not a sandbox and does
+ * not pretend to be one — a project whose own tests need a secret still has it.
+ */
+export function gateEnv(cfg, base = process.env) {
+  const strip = new Set([
+    ...(cfg?.tiers ?? []).map((t) => t.apiKeyEnv).filter(Boolean),
+    ...(cfg?.gate?.stripEnv ?? []),
+  ]);
+  const env = { ...base };
+  for (const name of strip) delete env[name];
+  return env;
+}
+
+export function exec(command, cwd, timeoutMs, env = process.env) {
   return new Promise((resolve) => {
     // shell:true so "npm test -- foo" and Windows .cmd shims both work.
-    const child = spawn(command, { cwd, shell: true, windowsHide: true });
+    const child = spawn(command, { cwd, shell: true, windowsHide: true, env });
     let out = "";
     let timedOut = false;
     const cap = (d) => {

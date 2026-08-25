@@ -12,8 +12,11 @@ import { PASSED_GATE } from "./state.mjs";
  * Append-only JSONL, one record per node per run. Never rewritten.
  */
 
+// Tolerates a missing cfg the way every other path helper here does. A caller
+// that forgot to thread it (kit/bench/run.mjs did) should read the default
+// location, not crash the verify predicate that called it.
 export function ledgerPath(root, cfg) {
-  return path.join(root, cfg.paths.state, "ledger.jsonl");
+  return path.join(root, cfg?.paths?.state ?? ".trellis", "ledger.jsonl");
 }
 
 export function append(root, cfg, records) {

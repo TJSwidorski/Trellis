@@ -1,4 +1,4 @@
-import { safeRelative, matchAny, norm } from "./paths.mjs";
+import { safeRelative, matchAny, matchDeny, matchAllow, norm } from "./paths.mjs";
 
 /**
  * Workers must emit files in this exact shape:
@@ -81,12 +81,12 @@ export function screenBlocks(blocks, { worktree, allowWrite, denyWrite, frozen }
     if (!safe.ok) { flags.add("traversal"); rejections.push(safe.reason); continue; }
     const rel = safe.rel;
 
-    if (matchAny(rel, denyWrite)) {
+    if (matchDeny(rel, denyWrite)) {
       flags.add("denied");
       rejections.push(`${rel}: refused — protected path (secrets, git internals, or Trellis' own files).`);
       continue;
     }
-    if (matchAny(rel, frozen)) {
+    if (matchDeny(rel, frozen)) {
       flags.add("frozen");
       rejections.push(
         `${rel}: refused — this is a frozen test file. Tests define the contract you must satisfy; ` +
@@ -94,7 +94,7 @@ export function screenBlocks(blocks, { worktree, allowWrite, denyWrite, frozen }
       );
       continue;
     }
-    if (!matchAny(rel, allowWrite)) {
+    if (!matchAllow(rel, allowWrite)) {
       flags.add("out-of-scope");
       rejections.push(
         `${rel}: refused — outside this task's write scope. You may only write: ${allowWrite.join(", ")}`

@@ -80,9 +80,13 @@ even if it took three passes.
 | `trellis verify-tests` | Prove each gate rejects a null stub |
 | `trellis run [--resume]` | Execute the graph (no orchestrator tokens) |
 | `trellis accept <id>` / `reject <id>` | Close the review loop |
-| `trellis evolve` | Rejection patterns with enough evidence to act on |
+| `trellis codes` | The vocabulary triage records in |
+| `trellis friction` | Record work a session did by hand (or assert none) |
+| `trellis evolve` | Rejection codes, failure kinds, and friction with enough evidence |
+| `trellis propose` | Write a proposal through code, so the refusals bind |
 | `trellis regression` | Fixtures that must hold after any change to the kit |
 | `trellis auto` | Chain the sessions headless, verifying on disk |
+| `trellis auto --stage 07_evolve` | Periodic: turn recurring patterns into proposals |
 
 All are `node kit/bin/cli.mjs <command>`.
 

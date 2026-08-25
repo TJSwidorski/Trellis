@@ -123,6 +123,19 @@ assert.strictEqual(impossible(), "never");
 console.log("impossible ok");
 `.trim());
 
+  // downstream is never attempted — it is blocked by impossible — but it still
+  // declares a frozen test. This fixture used to carry `tests: []` and a gate of
+  // `node -e "process.exit(0)"`, which is the exact anti-pattern MISSION
+  // invariant 1 exists to forbid: a node that merges on a command proving
+  // nothing. Validation now rejects it, and the fixture was the first thing the
+  // new rule caught.
+  write(root, "tests/downstream.test.mjs", `
+import assert from "node:assert";
+import { downstream } from "../src/downstream.mjs";
+assert.strictEqual(downstream(), "ok-downstream");
+console.log("downstream ok");
+`.trim());
+
   const graph = {
     version: 1,
     project: "e2e",
@@ -132,7 +145,7 @@ console.log("impossible ok");
       { id: "combo", title: "combo", goal: "export combo using add and mul", deps: ["add", "mul"], write: ["src/combo.mjs"], read: ["src/add.mjs"], tests: ["tests/combo.test.mjs"], gate: "node tests/combo.test.mjs" },
       { id: "risky", title: "risky", goal: "export risky()", risk: "high", write: ["src/risky.mjs"], tests: ["tests/risky.test.mjs"], gate: "node tests/risky.test.mjs" },
       { id: "impossible", title: "impossible", goal: "export impossible()", write: ["src/impossible.mjs"], tests: ["tests/impossible.test.mjs"], gate: "node tests/impossible.test.mjs" },
-      { id: "downstream", title: "downstream", goal: "depends on impossible", deps: ["impossible"], write: ["src/downstream.mjs"], tests: [], gate: "node -e \"process.exit(0)\"" },
+      { id: "downstream", title: "downstream", goal: "depends on impossible", deps: ["impossible"], write: ["src/downstream.mjs"], tests: ["tests/downstream.test.mjs"], gate: "node tests/downstream.test.mjs" },
       { id: "auditable", title: "auditable", goal: "export auditable()", risk: "audit", tags: ["glue"], write: ["src/auditable.mjs"], tests: ["tests/auditable.test.mjs"], gate: "node tests/auditable.test.mjs" },
       { id: "afterAudit", title: "afterAudit", goal: "depends on an audit node", deps: ["auditable"], tags: ["glue"], write: ["src/after.mjs"], tests: ["tests/after.test.mjs"], gate: "node tests/after.test.mjs" },
       { id: "weak", title: "weak", goal: "export clamp(n)", tags: ["algorithm"], write: ["src/weak.mjs"], tests: ["tests/weak.test.mjs"], gate: "node tests/weak.test.mjs",

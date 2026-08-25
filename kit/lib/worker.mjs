@@ -5,6 +5,7 @@ import { chatWithBackoff, ProviderError } from "./provider.mjs";
 import { parseBlocks, screenBlocks, worstFlag } from "./extract.mjs";
 import { runGate } from "./gate.mjs";
 import { commitWorktree } from "./worktree.mjs";
+import { safeRelative, matchDeny } from "./paths.mjs";
 import * as log from "./log.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -37,8 +38,24 @@ Before the file blocks, write at most three sentences explaining your approach.
 After them, write nothing. Do not explain the code.
 `.trim();
 
-function readFileSafe(root, rel, maxBytes) {
-  const p = path.join(root, rel);
+/**
+ * `node.read` was the one path list nothing checked.
+ *
+ * Writes go through safeRelative and the deny globs; reads went through
+ * `path.join(root, rel)` and nothing else. A node declaring
+ * `read: ["../../.env"]` read the host's secrets and inlined them into the
+ * prompt POSTed to the provider — and validateGraph never inspected `read` at
+ * all, so no earlier stage would have objected either.
+ *
+ * Same two rules the write side already uses: inside the tree, and not denied.
+ * denyWrite is named for writes but its contents are "things a worker has no
+ * business touching", which reads as much as writes.
+ */
+function readFileSafe(root, rel, maxBytes, { denyWrite = [] } = {}) {
+  const safe = safeRelative(root, rel);
+  if (!safe.ok) return null;
+  if (matchDeny(safe.rel, denyWrite)) return null;
+  const p = safe.abs;
   if (!fs.existsSync(p)) return null;
   const stat = fs.statSync(p);
   if (!stat.isFile()) return null;
@@ -62,6 +79,7 @@ function fence(rel, text, truncated) {
  */
 export function buildPrompt(cfg, node, worktree) {
   const max = cfg.worker.maxContextFileBytes;
+  const deny = cfg.boundaries?.denyWrite ?? [];
   const sections = [];
 
   sections.push(`# Task: ${node.title}\n\n${node.goal}`);
@@ -71,7 +89,7 @@ export function buildPrompt(cfg, node, worktree) {
 
   const testBlocks = [];
   for (const t of node.tests || []) {
-    const f = readFileSafe(worktree, t, max);
+    const f = readFileSafe(worktree, t, max, { denyWrite: deny });
     if (f) testBlocks.push(fence(t, f.text, f.truncated));
   }
   if (testBlocks.length) {
@@ -84,7 +102,7 @@ export function buildPrompt(cfg, node, worktree) {
 
   const readBlocks = [];
   for (const r of node.read || []) {
-    const f = readFileSafe(worktree, r, max);
+    const f = readFileSafe(worktree, r, max, { denyWrite: deny });
     if (f) readBlocks.push(fence(r, f.text, f.truncated));
   }
   if (readBlocks.length) {
@@ -94,7 +112,7 @@ export function buildPrompt(cfg, node, worktree) {
   const existing = [];
   for (const w of node.write || []) {
     if (w.includes("*")) continue;
-    const f = readFileSafe(worktree, w, max);
+    const f = readFileSafe(worktree, w, max, { denyWrite: deny });
     if (f) existing.push(fence(w, f.text, f.truncated));
   }
   if (existing.length) {

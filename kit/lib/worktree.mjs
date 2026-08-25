@@ -3,17 +3,28 @@ import fs from "node:fs";
 import path from "node:path";
 import { norm } from "./paths.mjs";
 
+/**
+ * `raw: true` suppresses the trim on stdout.
+ *
+ * Trimming is right for the callers that read a single value — a branch name, a
+ * SHA, a toplevel path. It is catastrophic for `--porcelain -z`, where each
+ * record is `XY<space>path` and the status of an unstaged modification begins
+ * with a SPACE. Trimming ate that space, shifted the first record by one
+ * character, and handed every consumer a path with its first letter missing.
+ */
 export function git(cwd, args, opts = {}) {
+  const { raw = false, ...spawnOpts } = opts;
   const r = spawnSync("git", args, {
     cwd,
     encoding: "utf8",
     shell: false,
     maxBuffer: 32 * 1024 * 1024,
-    ...opts,
+    ...spawnOpts,
   });
+  const stdout = r.stdout || "";
   return {
     code: r.status ?? -1,
-    out: (r.stdout || "").trim(),
+    out: raw ? stdout : stdout.trim(),
     err: (r.stderr || "").trim(),
     ok: r.status === 0,
   };
@@ -47,9 +58,20 @@ export function branchName(nodeId) {
  * Every change in the worktree, including untracked files.
  * `git diff --name-only HEAD` misses untracked files entirely — a worker could
  * add a whole new module and the gate would never see it. Porcelain does not.
+ *
+ * `raw: true` is load-bearing, not a detail. Records are `XY<space>path`, and an
+ * unstaged modification has the status " M" — a LEADING SPACE. Trimming stdout
+ * removed it, so `entry.slice(3)` dropped the first character of the first path.
+ * Two consequences, both silent: a tampered test file whose path sorted first no
+ * longer matched `node.tests` and the gate ran against a worker-edited oracle,
+ * and any node that MODIFIED an existing file saw its correct work reported
+ * out-of-scope and burned every tier to exhaustion.
+ *
+ * The whole test suite missed it because every fixture creates new files, and
+ * untracked records ("??") have no leading space.
  */
 export function changedPaths(wt) {
-  const out = git(wt, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]).out;
+  const out = git(wt, ["status", "--porcelain=v1", "-z", "--untracked-files=all"], { raw: true }).out;
   if (!out) return [];
   const parts = out.split("\0").filter(Boolean);
   const files = [];
@@ -65,6 +87,45 @@ export function changedPaths(wt) {
     if (file) files.push(norm(file));
   }
   return [...new Set(files)];
+}
+
+/**
+ * Paths git is ignoring, which `changedPaths` cannot see.
+ *
+ * `--untracked-files=all` still omits ignored files, so a write into an ignored
+ * path was invisible to the gate: it escaped the scope check, the frozen-test
+ * check, and the revert. Screening in extract.mjs is path-based rather than
+ * git-based and still catches an out-of-scope block, so this is the second
+ * layer rather than the only one — but the second layer is exactly what is
+ * supposed to catch a file the first layer was talked into allowing.
+ *
+ * `--ignored=traditional` collapses whole ignored directories to a single entry
+ * (`node_modules/`), which is the point: `matching` enumerates every file inside
+ * them and can run to hundreds of thousands of paths on a normal project. The
+ * caller only needs to know that something ignored was touched and roughly
+ * where, never to revert it — reverting node_modules would be its own outage.
+ */
+export function ignoredPaths(wt) {
+  const out = git(
+    wt,
+    // --untracked-files must be on: ignored files ARE untracked, so `-uno`
+    // suppresses the very entries this function exists to surface.
+    ["status", "--porcelain=v1", "-z", "--ignored=traditional", "--untracked-files=normal"],
+    { raw: true }
+  ).out;
+  if (!out) return [];
+  const files = [];
+  for (const entry of out.split("\0").filter(Boolean)) {
+    if (entry.slice(0, 2) !== "!!") continue;
+    const file = norm(entry.slice(3));
+    if (file) files.push(file);
+  }
+  return [...new Set(files)];
+}
+
+/** Is this path ignored by git? One question, one answer. */
+export function isIgnored(wt, rel) {
+  return git(wt, ["check-ignore", "-q", "--", rel]).code === 0;
 }
 
 export function createWorktree(root, cfg, nodeId) {

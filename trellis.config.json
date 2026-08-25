@@ -96,6 +96,8 @@
   "gate": {
     "defaultCommand": null,
     "timeoutMs": 300000,
+    "$stripEnv": "Environment variables removed before the gate command runs. Tier apiKeyEnv names are stripped automatically; add anything else the project must not expose to code a worker just wrote.",
+    "stripEnv": [],
     "feedbackChars": 4000
   },
 
@@ -105,7 +107,8 @@
   },
 
   "boundaries": {
-    "$comment": "Paths no worker may ever write, regardless of what the graph node allows.",
+    "$comment": "Paths no worker may ever write, regardless of what the graph node allows. Matched case-insensitively, because .GIT/config and KIT/lib/gate.mjs open the real files on Windows and macOS.",
+    "$gate-config": "The second half of this list is the file a gate command reads. A worker that can write package.json decides what `npm test` runs; conftest.py executes before every pytest; a Makefile target is whatever it says. Denied at every depth, not just the root, because a monorepo package carries its own. If a node genuinely must change one, that is a human's edit, not a worker's.",
     "denyWrite": [
       ".git/**",
       ".env",
@@ -121,8 +124,28 @@
       ".trellis/**",
       "kit/**",
       "trellis.config.json",
+      "**/node_modules/**",
+
+      "package.json",
+      "**/package.json",
       "package-lock.json",
-      "**/node_modules/**"
+      "**/package-lock.json",
+      "**/pnpm-lock.yaml",
+      "**/yarn.lock",
+      "**/jest.config.*",
+      "**/vitest.config.*",
+      "**/.mocharc.*",
+      "**/karma.conf.*",
+      "**/conftest.py",
+      "**/pytest.ini",
+      "**/tox.ini",
+      "**/pyproject.toml",
+      "**/setup.cfg",
+      "**/Makefile",
+      "**/makefile",
+      "**/justfile",
+      "**/go.mod",
+      "**/Cargo.toml"
     ]
   },
 

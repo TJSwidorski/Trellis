@@ -19,7 +19,10 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import * as friction from "./friction.mjs";
+import * as evolve from "./evolve.mjs";
 
 // --------------------------------------------------------------- stage table
 
@@ -44,7 +47,7 @@ export const STAGES = [
   {
     id: "04_tests",
     prompt: "Read sessions/04_tests/CONTEXT.md and do exactly what it says. Nothing else.",
-    verify: (root) => testsExistAndAreNonVacuous(root),
+    verify: (root, cfg) => testsExistAndAreNonVacuous(root, cfg),
   },
   {
     id: "05_build",
@@ -55,9 +58,21 @@ export const STAGES = [
   {
     id: "06_triage",
     prompt: "Read sessions/06_triage/CONTEXT.md and do exactly what it says. Nothing else.",
-    verify: (root) => artifactExists(root, ".trellis/triage.json", (j) => Array.isArray(j.decisions)),
+    verify: (root, cfg) => triageRecordedEvidence(root, cfg),
+  },
+  {
+    id: "07_evolve",
+    // Not in the default chain. Evolution should run rarely and deliberately —
+    // every pass costs an expensive session, and the evidence it reads only
+    // changes across many runs. `trellis auto --stage 07_evolve` reaches it.
+    periodic: true,
+    prompt: "Read sessions/07_evolve/CONTEXT.md and do exactly what it says. Nothing else.",
+    verify: (root, cfg) => evolveConsideredEverything(root, cfg),
   },
 ];
+
+/** Stages that run on an ordinary `trellis auto`. */
+export const DEFAULT_CHAIN = STAGES.filter((s) => !s.periodic);
 
 // -------------------------------------------------------------- verification
 
@@ -99,11 +114,18 @@ function casesCoverPlan(root) {
 
 // Every test file the graph declares must exist with real content. Emptiness and
 // truncation are the signatures of a session that ran out of budget mid-write.
-function testsExistAndAreNonVacuous(root) {
+function testsExistAndAreNonVacuous(root, cfg) {
   const graph = readJson(root, ".trellis/graph.json");
   if (!graph) return { ok: false, detail: "graph.json missing" };
+
+  // Every node, not the flattened total. `flatMap` over all nodes meant a
+  // 40-node graph where 39 declared nothing passed on the strength of the 40th.
+  const bare = graph.nodes.filter((n) => !(n.tests ?? []).length).map((n) => n.id);
+  if (bare.length) {
+    return { ok: false, detail: `${bare.length} node(s) declare no tests: ${bare.slice(0, 5).join(", ")}` };
+  }
+
   const declared = graph.nodes.flatMap((n) => n.tests ?? []);
-  if (!declared.length) return { ok: false, detail: "graph declares no test files" };
   const missing = [];
   const thin = [];
   for (const rel of declared) {
@@ -113,7 +135,192 @@ function testsExistAndAreNonVacuous(root) {
   }
   if (missing.length) return { ok: false, detail: `${missing.length} test file(s) not written: ${missing.slice(0, 4).join(", ")}` };
   if (thin.length) return { ok: false, detail: `${thin.length} test file(s) suspiciously small: ${thin.slice(0, 4).join(", ")}` };
-  return { ok: true, detail: `${declared.length} test files present (run verify-tests for non-vacuity)` };
+
+  // The function is named testsExistAndAreNonVacuous and its success string used
+  // to read "(run verify-tests for non-vacuity)" — it never ran it. In the
+  // headless `auto` chain that meant non-vacuity was established nowhere at all,
+  // by anything, while the stage reported it finished. Run the real check.
+  const cli = path.resolve(fileURLToPath(import.meta.url), "../../bin/cli.mjs");
+  const r = spawnSync(process.execPath, [cli, "verify-tests"], {
+    cwd: root,
+    encoding: "utf8",
+    env: process.env,
+    timeout: (cfg?.gate?.timeoutMs ?? 300000) * 2,
+  });
+  if (r.status !== 0) {
+    const why = String(r.stdout || "").split("\n").filter((l) => /\[/.test(l)).slice(0, 3).join("; ");
+    return { ok: false, detail: `verify-tests rejected these gates: ${why || String(r.stderr || "").slice(0, 200)}` };
+  }
+  // Report what was actually proven, including when the answer is "not much".
+  const summary = String(r.stdout || "").split("\n").find((l) => /null stub|Nothing here is proven|could not be checked/.test(l));
+  return { ok: true, detail: summary?.replace(/\[\d+m/g, "").replace(/^[+!]\s*/, "").trim() || `${declared.length} test files verified` };
+}
+
+/**
+ * Read the JSONL lines belonging to the current run.
+ *
+ * `run` comes from state.json rather than from the session, so a line stamped
+ * with someone else's run id — or with none — cannot satisfy a stage.
+ */
+export function currentRunId(root) {
+  return readJson(root, ".trellis/state.json")?.runId ?? null;
+}
+
+function jsonlRowsForRun(root, rel, run) {
+  const p = path.resolve(root, rel);
+  if (!fs.existsSync(p)) return null;
+  const rows = [];
+  for (const line of fs.readFileSync(p, "utf8").split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const row = JSON.parse(line);
+      if (row.run === run) rows.push(row);
+    } catch { /* a torn last line is not evidence of anything */ }
+  }
+  return rows;
+}
+
+/**
+ * Triage must leave the cross-run record, not just this run's summary.
+ *
+ * `triage.json` is what the next slice reads; `triage.jsonl` is the only thing
+ * self-improvement ever sees. Verifying only the former let a stage pass having
+ * written no evidence at all — which is how `trellis evolve` could stay inert
+ * forever while every stage reported success.
+ */
+function triageRecordedEvidence(root, cfg) {
+  const base = artifactExists(root, ".trellis/triage.json", (j) => Array.isArray(j.decisions));
+  if (!base.ok) return base;
+
+  const run = currentRunId(root);
+  if (!run) return { ok: false, detail: "state.json has no runId to attribute triage to" };
+
+  const rows = jsonlRowsForRun(root, ".trellis/triage.jsonl", run);
+  if (rows === null) return { ok: false, detail: ".trellis/triage.jsonl was not written" };
+  if (!rows.length) {
+    return { ok: false, detail: `.trellis/triage.jsonl has no line stamped run "${run}"` };
+  }
+  const decisions = rows.flatMap((r) => (Array.isArray(r.decisions) ? r.decisions : []));
+  if (!decisions.length) {
+    return { ok: false, detail: `.trellis/triage.jsonl line for run "${run}" carries no decisions` };
+  }
+
+  // Friction is a separate claim from the triage decisions and gets checked
+  // separately. `--none` satisfies it: what is required is a statement, not a
+  // grievance. Verifying that a statement exists is the most a driver can do —
+  // whether it is TRUE is settled across runs, in evolve, and never here.
+  const f = assertedFriction(root, cfg, { run, stage: "06_triage" });
+  if (!f.ok) return f;
+
+  return {
+    ok: true,
+    detail: `triage.json + ${decisions.length} decision(s) for run ${run}; friction: ${f.detail}`,
+  };
+}
+
+/**
+ * The evolve stage must account for every pattern it was shown.
+ *
+ * Stage 06's rule, transplanted: silence on a stuck node is not acceptance, and
+ * silence on a shortlisted pattern is not a decline. Without this a pass can
+ * quietly ignore the evidence it would rather not act on, and every artifact it
+ * leaves behind still looks complete.
+ */
+function evolveConsideredEverything(root, cfg) {
+  const base = artifactExists(root, ".trellis/evolve.json", (j) => Array.isArray(j.consideredCodes));
+  if (!base.ok) return base;
+
+  const j = readJson(root, ".trellis/evolve.json");
+
+  // Attribute the artifact to this run, the way triage is attributed. Without
+  // it a stale evolve.json from an earlier pass satisfies the stage forever —
+  // and cmdAuto pre-checks verify and skips, so the stage would never run again.
+  const run = currentRunId(root);
+  if (!run) return { ok: false, detail: "state.json has no runId to attribute the evolve pass to" };
+  if (j.run !== run) {
+    return { ok: false, detail: `evolve.json is stamped run "${j.run}", not this run "${run}"` };
+  }
+
+  const considered = new Set(j.consideredCodes);
+  const proposals = Array.isArray(j.proposals) ? j.proposals : [];
+  const declined = Array.isArray(j.declined) ? j.declined : [];
+
+  const minRuns = cfg?.evolve?.minRuns ?? 3;
+  const shortlist = evolveShortlistCodes(root, cfg, minRuns);
+  const ignored = shortlist.filter((c) => !considered.has(c));
+  if (ignored.length) {
+    return {
+      ok: false,
+      detail: `shortlisted but never considered: ${ignored.join(", ")}. Deciding to do nothing is a decline, not an omission.`,
+    };
+  }
+
+  // A decline has to say what it declined, or the arithmetic below is satisfied
+  // by any array of the right length — `declined: [1,2,3]` used to pass.
+  const badDeclines = declined.filter((d) => !d || typeof d !== "object" || !d.code || !d.why);
+  if (badDeclines.length) {
+    return {
+      ok: false,
+      detail: `${badDeclines.length} decline(s) lack a code and a reason; a decline must name what it declined`,
+    };
+  }
+  const declinedCodes = new Set(declined.map((d) => d.code));
+  if (declinedCodes.size !== declined.length) {
+    return { ok: false, detail: "the same code was declined more than once" };
+  }
+  const strayDeclines = [...declinedCodes].filter((c) => !considered.has(c));
+  if (strayDeclines.length) {
+    return { ok: false, detail: `declined codes that were never considered: ${strayDeclines.join(", ")}` };
+  }
+
+  if (considered.size !== proposals.length + declined.length) {
+    return {
+      ok: false,
+      detail:
+        `${considered.size} code(s) considered but ${proposals.length} proposal(s) + ` +
+        `${declined.length} decline(s) accounts for ${proposals.length + declined.length}`,
+    };
+  }
+
+  // A proposal is a file writeProposal made, in the place it makes them. Any
+  // readable path used to count: `proposals: ["references/CODES.md"]` passed.
+  const badProposals = [];
+  for (const p of proposals) {
+    const n = evolve.normaliseTarget(p);
+    if (!n.ok) { badProposals.push(`${p} (${n.reason})`); continue; }
+    if (!n.rel.startsWith("evolution/proposals/") || !n.rel.endsWith(".md")) {
+      badProposals.push(`${p} (not a proposal under evolution/proposals/)`);
+      continue;
+    }
+    if (!fs.existsSync(path.resolve(root, n.rel))) badProposals.push(`${p} (does not exist)`);
+  }
+  if (badProposals.length) {
+    return { ok: false, detail: `evolve.json names things that are not written proposals: ${badProposals.join(", ")}` };
+  }
+
+  return {
+    ok: true,
+    detail: `${considered.size} pattern(s) accounted for; ${proposals.length} proposal(s), ${declined.length} declined`,
+  };
+}
+
+/**
+ * Exactly the codes the stage was shown — same builder, same cap.
+ *
+ * This used to enumerate the whole shortlist while the contract fed the stage
+ * `--json --top N`. With more than N actionable patterns the stage was required
+ * to account for codes it could not see, and could never pass. Both now call
+ * evolve.shortlist(), so a cap change cannot desynchronise them again.
+ */
+export const EVOLVE_TOP = 5;
+
+function evolveShortlistCodes(root, cfg, minRuns) {
+  return evolve.shortlist(root, cfg, { minRuns, top: EVOLVE_TOP }).map((r) => r.code);
+}
+
+/** Thin seam so the stage table does not import friction.mjs directly. */
+function assertedFriction(root, cfg, { run, stage }) {
+  return friction.assertedFor(root, cfg ?? { paths: { state: ".trellis" } }, { run, stage });
 }
 
 // ------------------------------------------------------------------- spawning
@@ -146,7 +353,12 @@ export function runSession(root, stage, cfg) {
 
     const child = spawn(cfg.driver.command, args, {
       cwd: root,
-      env: process.env,
+      // TRELLIS_STAGE lets a command know which stage invoked it without the
+      // session having to say so. `trellis propose` uses it to decide that a
+      // proposal is model-authored and must wait for a human — a decision that
+      // was previously made by a CLI flag the session was merely asked to pass,
+      // i.e. attested by exactly the party it constrains.
+      env: { ...process.env, TRELLIS_STAGE: stage.id },
       stdio: ["ignore", "pipe", "pipe"],
     });
 
