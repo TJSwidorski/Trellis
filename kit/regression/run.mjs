@@ -30,6 +30,7 @@ import { spawnSync } from "node:child_process";
 import { changedPaths } from "../lib/worktree.mjs";
 import { matchAny, matchDeny, matchAllow, FS_CASE_INSENSITIVE } from "../lib/paths.mjs";
 import { recordsFor, ledgerPath } from "../lib/ledger.mjs";
+import { isCheckable, SOFT_FINDINGS } from "../lib/verify.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 let pass = 0;
@@ -1667,6 +1668,70 @@ check("ADVERSARIAL the shipped denyWrite covers the files a gate command reads",
   for (const nested of ["packages/api/package.json", "services/x/conftest.py"]) {
     assert(matchDeny(nested, deny), `${nested} is not denied`);
   }
+});
+
+// --------------------------------------- verify-tests says what it can prove
+
+check("ADVERSARIAL a non-JS test is reported as unchecked, not as broken", () => {
+  // node --check on a .py file produced a `syntax` finding and killed the
+  // command, while the docs described non-vacuity as a general guarantee.
+  // Neither the failure nor the guarantee was honest.
+  assert(isCheckable("tests/a.test.mjs") && isCheckable("tests/a.spec.ts"), "JS/TS must stay checkable");
+  for (const foreign of ["tests/test_a.py", "a_test.go", "tests/a_spec.rb", "src/lib_test.rs"]) {
+    assert(!isCheckable(foreign), `${foreign} is not something this check understands`);
+  }
+  assert(SOFT_FINDINGS.has("unsupported-language"),
+    "an unverifiable language must not count as a defect in the test");
+  assert(!SOFT_FINDINGS.has("vacuous") && !SOFT_FINDINGS.has("syntax"),
+    "a genuinely vacuous or unparseable test must still be hard");
+});
+
+check("ADVERSARIAL stage 04 fails when any node declares no tests", () => {
+  // flatMap over all nodes meant a 40-node graph where 39 declared nothing
+  // passed on the strength of the 40th.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-04-"));
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  fs.mkdirSync(path.join(dir, "tests"), { recursive: true });
+  const body = "import assert from 'node:assert';\n".padEnd(200, "// pad\n");
+  fs.writeFileSync(path.join(dir, "tests", "a.test.mjs"), body);
+  fs.writeFileSync(path.join(dir, ".trellis", "graph.json"), JSON.stringify({
+    nodes: [
+      { id: "covered", tests: ["tests/a.test.mjs"] },
+      { id: "bare", tests: [] },
+    ],
+  }));
+  const v = STAGES.find((s) => s.id === "04_tests").verify;
+  const r = v(dir, CFG);
+  assert(!r.ok, "a node declaring no tests passed the stage");
+  assert(/bare/.test(r.detail), `detail should name the node, got: ${r.detail}`);
+});
+
+check("ADVERSARIAL stage 04 actually runs verify-tests rather than claiming it", () => {
+  // The function is named testsExistAndAreNonVacuous; its success string used to
+  // read "(run verify-tests for non-vacuity)" and it never ran it. A vacuous
+  // test — one the gate passes against a do-nothing stub — must fail the stage.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-04v-"));
+  const g = (...a) => spawnSync("git", a, { cwd: dir, encoding: "utf8" });
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  fs.mkdirSync(path.join(dir, "tests"), { recursive: true });
+  fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "trellis.config.json"), JSON.stringify({ baseBranch: "main" }));
+
+  // A test that asserts nothing: it passes whatever src/a.mjs contains.
+  fs.writeFileSync(path.join(dir, "tests", "a.test.mjs"),
+    "import { a } from '../src/a.mjs';\n// asserts nothing at all\nconsole.log('ok');\n".padEnd(200, "//\n"));
+  fs.writeFileSync(path.join(dir, "src", "a.mjs"), "export const a = () => 1;\n");
+  const graph = {
+    version: 1, project: "p",
+    nodes: [{ id: "n01", title: "n", goal: "g", write: ["src/a.mjs"], tests: ["tests/a.test.mjs"], gate: "node tests/a.test.mjs" }],
+  };
+  fs.writeFileSync(path.join(dir, ".trellis", "graph.json"), JSON.stringify(graph));
+  g("init", "-q", "."); g("config", "user.email", "a@b.c"); g("config", "user.name", "t");
+  g("add", "-A"); g("commit", "-qm", "init");
+
+  const r = STAGES.find((s) => s.id === "04_tests").verify(dir, CFG);
+  assert(!r.ok, `a vacuous test passed stage 04: ${r.detail}`);
+  assert(/verify-tests/.test(r.detail), `detail should show verify-tests ran, got: ${r.detail}`);
 });
 
 const fixDir = path.join(here, "fixtures");

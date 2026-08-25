@@ -19,7 +19,8 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import * as friction from "./friction.mjs";
 import * as evolve from "./evolve.mjs";
 
@@ -46,7 +47,7 @@ export const STAGES = [
   {
     id: "04_tests",
     prompt: "Read sessions/04_tests/CONTEXT.md and do exactly what it says. Nothing else.",
-    verify: (root) => testsExistAndAreNonVacuous(root),
+    verify: (root, cfg) => testsExistAndAreNonVacuous(root, cfg),
   },
   {
     id: "05_build",
@@ -113,11 +114,18 @@ function casesCoverPlan(root) {
 
 // Every test file the graph declares must exist with real content. Emptiness and
 // truncation are the signatures of a session that ran out of budget mid-write.
-function testsExistAndAreNonVacuous(root) {
+function testsExistAndAreNonVacuous(root, cfg) {
   const graph = readJson(root, ".trellis/graph.json");
   if (!graph) return { ok: false, detail: "graph.json missing" };
+
+  // Every node, not the flattened total. `flatMap` over all nodes meant a
+  // 40-node graph where 39 declared nothing passed on the strength of the 40th.
+  const bare = graph.nodes.filter((n) => !(n.tests ?? []).length).map((n) => n.id);
+  if (bare.length) {
+    return { ok: false, detail: `${bare.length} node(s) declare no tests: ${bare.slice(0, 5).join(", ")}` };
+  }
+
   const declared = graph.nodes.flatMap((n) => n.tests ?? []);
-  if (!declared.length) return { ok: false, detail: "graph declares no test files" };
   const missing = [];
   const thin = [];
   for (const rel of declared) {
@@ -127,7 +135,25 @@ function testsExistAndAreNonVacuous(root) {
   }
   if (missing.length) return { ok: false, detail: `${missing.length} test file(s) not written: ${missing.slice(0, 4).join(", ")}` };
   if (thin.length) return { ok: false, detail: `${thin.length} test file(s) suspiciously small: ${thin.slice(0, 4).join(", ")}` };
-  return { ok: true, detail: `${declared.length} test files present (run verify-tests for non-vacuity)` };
+
+  // The function is named testsExistAndAreNonVacuous and its success string used
+  // to read "(run verify-tests for non-vacuity)" — it never ran it. In the
+  // headless `auto` chain that meant non-vacuity was established nowhere at all,
+  // by anything, while the stage reported it finished. Run the real check.
+  const cli = path.resolve(fileURLToPath(import.meta.url), "../../bin/cli.mjs");
+  const r = spawnSync(process.execPath, [cli, "verify-tests"], {
+    cwd: root,
+    encoding: "utf8",
+    env: process.env,
+    timeout: (cfg?.gate?.timeoutMs ?? 300000) * 2,
+  });
+  if (r.status !== 0) {
+    const why = String(r.stdout || "").split("\n").filter((l) => /\[/.test(l)).slice(0, 3).join("; ");
+    return { ok: false, detail: `verify-tests rejected these gates: ${why || String(r.stderr || "").slice(0, 200)}` };
+  }
+  // Report what was actually proven, including when the answer is "not much".
+  const summary = String(r.stdout || "").split("\n").find((l) => /null stub|Nothing here is proven|could not be checked/.test(l));
+  return { ok: true, detail: summary?.replace(/\[\d+m/g, "").replace(/^[+!]\s*/, "").trim() || `${declared.length} test files verified` };
 }
 
 /**

@@ -20,6 +20,25 @@ import { norm } from "./paths.mjs";
  * implementation to mutate, so it runs after the node passes. See mutate.mjs.
  */
 
+/**
+ * The languages the stub check actually understands.
+ *
+ * Everything below — `node --check`, the ESM import parser, the Proxy stub — is
+ * JavaScript. Run against a Python or Go test this produced a `syntax` finding
+ * on every node and killed the command, while the docs described non-vacuity as
+ * a general guarantee. Neither the failure nor the guarantee was honest.
+ *
+ * So the scope is named. A test file in another language is reported as
+ * unchecked rather than as broken, and `ok` does not depend on it — the same
+ * treatment `no-tests` already gets. Better to say "this was not verified" than
+ * to say "verified" when nothing was.
+ */
+export const CHECKABLE_EXT = new Set([".mjs", ".js", ".cjs", ".jsx", ".ts", ".tsx", ".mts", ".cts"]);
+
+export function isCheckable(rel) {
+  return CHECKABLE_EXT.has(path.extname(String(rel)).toLowerCase());
+}
+
 const IMPORT_RE =
   /import\s+(?:([\w$]+)\s*,\s*)?(?:\{([^}]*)\}|\*\s+as\s+([\w$]+)|([\w$]+))?\s*from\s*['"]([^'"]+)['"]/g;
 
@@ -100,15 +119,34 @@ export async function verifyTests(cfg, graph, nodes, root, { log = () => {} } = 
       continue;
     }
 
-    // ---- 1. syntax ----
+    // Existence is language-independent and is checked for every test.
     let syntaxOk = true;
     for (const t of tests) {
-      const abs = path.join(root, t);
-      if (!fs.existsSync(abs)) {
+      if (!fs.existsSync(path.join(root, t))) {
         findings.push({ nodeId: node.id, kind: "missing-test", message: `${t} does not exist` });
         syntaxOk = false;
-        continue;
       }
+    }
+    if (!syntaxOk) continue;
+
+    // Everything past here is JavaScript-specific. Say so rather than emitting a
+    // parse error for every Python file and calling the node broken.
+    const foreign = tests.filter((t) => !isCheckable(t));
+    if (foreign.length) {
+      findings.push({
+        nodeId: node.id,
+        kind: "unsupported-language",
+        message:
+          `${foreign.join(", ")} — verify-tests checks JavaScript and TypeScript only, so ` +
+          `non-vacuity was NOT established for this node. Its gate still runs during \`run\`; ` +
+          `what is missing is the proof that the test rejects a do-nothing implementation.`,
+      });
+      continue;
+    }
+
+    // ---- 1. syntax ----
+    for (const t of tests) {
+      const abs = path.join(root, t);
       const r = await exec(`node --check "${abs}"`, root, 30000);
       if (r.code !== 0) {
         findings.push({ nodeId: node.id, kind: "syntax", message: `${t} does not parse:\n${String(r.output).slice(0, 500)}` });
@@ -178,8 +216,15 @@ export async function verifyTests(cfg, graph, nodes, root, { log = () => {} } = 
     }
   }
 
-  return { ok: findings.filter((f) => f.kind !== "no-tests").length === 0, findings };
+  // `ok` means "nothing was found that makes a test untrustworthy". A node whose
+  // language this cannot check has not been shown to be untrustworthy, only
+  // unverified — the same standing as no-tests. Callers that need to know how
+  // much was actually proven read SOFT_FINDINGS out of `findings`.
+  return { ok: findings.filter((f) => !SOFT_FINDINGS.has(f.kind)).length === 0, findings };
 }
+
+/** Findings that report a limit of this check rather than a defect in a test. */
+export const SOFT_FINDINGS = new Set(["no-tests", "unstubbable", "unsupported-language"]);
 
 /** Copy the working tree (minus git, worktrees, node_modules) into a scratch dir. */
 export function copyRepo(root, dest, cfg) {

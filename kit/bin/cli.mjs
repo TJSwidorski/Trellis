@@ -10,7 +10,7 @@ import * as st from "../lib/state.mjs";
 import * as log from "../lib/log.mjs";
 import { run } from "../lib/runner.mjs";
 import { writeReport } from "../lib/report.mjs";
-import { verifyTests } from "../lib/verify.mjs";
+import { verifyTests, SOFT_FINDINGS } from "../lib/verify.mjs";
 import { normalizeNode } from "../lib/graph.mjs";
 import * as ledger from "../lib/ledger.mjs";
 import { explain as explainRouting } from "../lib/routing.mjs";
@@ -227,18 +227,30 @@ async function cmdVerifyTests() {
     log: (id, msg) => log.node(id, log.green(msg)),
   });
 
-  const hard = findings.filter((f) => f.kind !== "no-tests" && f.kind !== "unstubbable");
-  const soft = findings.filter((f) => f.kind === "no-tests" || f.kind === "unstubbable");
+  const hard = findings.filter((f) => !SOFT_FINDINGS.has(f.kind));
+  const soft = findings.filter((f) => SOFT_FINDINGS.has(f.kind));
 
   log.info("");
-  for (const f of soft) log.warn(`${f.nodeId}: ${f.message}`);
+  for (const f of soft) log.warn(`${f.nodeId} [${f.kind}]: ${f.message}`);
   for (const f of hard) log.fail(`${f.nodeId} [${f.kind}]: ${f.message}`);
 
   log.info("");
   if (hard.length) {
     die(`${hard.length} node(s) have tests that cannot be trusted as an acceptance oracle.`);
   }
-  log.ok("Every gate rejects a null stub. Tests are non-vacuous.");
+
+  // Do not claim more than was established. A run where every node was skipped
+  // for language reasons used to print the same success line as one where every
+  // gate was actually proven to reject a stub.
+  const unchecked = new Set(soft.map((f) => f.nodeId));
+  const proven = nodes.size - unchecked.size;
+  if (proven === 0) {
+    log.warn(`No node's non-vacuity was established (${unchecked.size} unchecked). Nothing here is proven.`);
+  } else if (unchecked.size) {
+    log.ok(`${proven} of ${nodes.size} node(s) reject a null stub; ${unchecked.size} could not be checked.`);
+  } else {
+    log.ok("Every gate rejects a null stub. Tests are non-vacuous.");
+  }
   log.info(log.dim("Mutation checks run automatically after each node passes during `run`."));
   return 0;
 }
