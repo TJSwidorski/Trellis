@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { norm, globsOverlap, matchAny } from "./paths.mjs";
+import { norm, globsOverlap, matchAny, matchDeny } from "./paths.mjs";
 import { scopeBullets, findSpec } from "./spec.mjs";
 
 const ROLES = ["implementer", "fixer", "refactorer", "tester"];
@@ -79,7 +79,7 @@ export function validateGraph(graph, cfg, repoRoot, { requireTests = true } = {}
 
     // Write paths must not collide with hard boundaries.
     for (const w of n.write || []) {
-      if (matchAny(w, cfg.boundaries.denyWrite)) {
+      if (matchDeny(w, cfg.boundaries.denyWrite)) {
         errors.push(`${at}: write path "${w}" is inside a denied boundary.`);
       }
     }
@@ -91,7 +91,7 @@ export function validateGraph(graph, cfg, repoRoot, { requireTests = true } = {}
         const msg = `${at}: test file "${t}" does not exist. /trellis-tests writes these; they must exist before \`run\`.`;
         (requireTests ? errors : warnings).push(msg);
       }
-      if (matchAny(t, n.write || [])) {
+      if (matchDeny(t, n.write || [])) {
         errors.push(`${at}: test file "${t}" is also in "write". Tests are frozen — a worker that can edit its own test has no gate.`);
       }
     }

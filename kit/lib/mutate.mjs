@@ -5,7 +5,7 @@ import { chatWithBackoff } from "./provider.mjs";
 import { parseBlocks } from "./extract.mjs";
 import { exec, gateEnv } from "./gate.mjs";
 import { copyRepo } from "./verify.mjs";
-import { safeRelative, matchAny } from "./paths.mjs";
+import { safeRelative, matchDeny, matchAllow } from "./paths.mjs";
 
 /**
  * Post-gate mutation check — the third of Opus's run-1 verifications, automated.
@@ -88,8 +88,8 @@ export async function checkMutations(cfg, node, worktree, root, { onStep } = {})
         const safe = safeRelative(scratch, b.path);
         if (!safe.ok) continue;
         // A mutant may only touch the node's own implementation — never the tests.
-        if (matchAny(safe.rel, node.tests || [])) continue;
-        if (!matchAny(safe.rel, node.write || [])) continue;
+        if (matchDeny(safe.rel, node.tests || [])) continue;
+        if (!matchAllow(safe.rel, node.write || [])) continue;
         fs.mkdirSync(path.dirname(safe.abs), { recursive: true });
         fs.writeFileSync(safe.abs, b.content);
         wrote++;

@@ -28,7 +28,7 @@ import { kindActionable, kindCounts, shortlist } from "../lib/evolve.mjs";
 import os from "node:os";
 import { spawnSync } from "node:child_process";
 import { changedPaths } from "../lib/worktree.mjs";
-import { matchAny } from "../lib/paths.mjs";
+import { matchAny, matchDeny, matchAllow, FS_CASE_INSENSITIVE } from "../lib/paths.mjs";
 import { recordsFor, ledgerPath } from "../lib/ledger.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -1614,6 +1614,59 @@ check("--plan keeps the no-test case a warning, so planning still works", () => 
   const { errors, warnings } = validateGraph(g, { boundaries: { denyWrite: [] } }, kitRoot, { requireTests: false });
   assert(!errors.some((e) => /n01/.test(e) && /test/i.test(e)), `--plan should not hard-fail: ${JSON.stringify(errors)}`);
   assert(warnings.some((w) => /test/i.test(w)), "the missing test should still be warned about");
+});
+
+// ------------------------------------------------ case folding at the boundary
+
+check("ADVERSARIAL a deny list catches the case-variant that opens the same file", () => {
+  // On Windows and macOS `.GIT/config` and `KIT/lib/gate.mjs` reach the real
+  // files. The patterns meant to stop them are lowercase, and the matcher was
+  // case-sensitive, so both sailed through screening AND the gate.
+  const deny = [".git/**", ".env", "kit/**", "**/*.pem", ".claude/**"];
+  for (const probe of [".GIT/config", ".Git/config", ".ENV", "KIT/lib/gate.mjs", "secret.PEM", ".CLAUDE/hooks/x.mjs"]) {
+    assert(matchDeny(probe, deny), `${probe} was not denied — it opens the real file on this filesystem`);
+  }
+  // Folding a deny list must not start denying unrelated paths.
+  for (const ok of ["src/app.mjs", "tests/t.mjs", "docs/git.md"]) {
+    assert(!matchDeny(ok, deny), `${ok} was wrongly denied`);
+  }
+});
+
+check("ADVERSARIAL a frozen test is protected under a case-variant path", () => {
+  const tests = ["tests/add.test.mjs"];
+  assert(matchDeny("TESTS/ADD.TEST.MJS", tests),
+    "a case-variant of the frozen oracle was not recognised — the worker could edit its own test");
+});
+
+check("an allow list follows the filesystem, and does not widen scope where it should not", () => {
+  // Allow and deny want opposite caution. Folding a deny list is free; folding
+  // an allow list on a case-sensitive filesystem WIDENS a worker's write scope,
+  // because there SRC/a.mjs really is a different file.
+  assert(matchAllow("src/a.mjs", ["src/**"]), "the plain case stopped matching");
+  assert(matchAllow("SRC/a.mjs", ["src/**"]) === FS_CASE_INSENSITIVE,
+    `allow-list folding must track the filesystem (FS_CASE_INSENSITIVE=${FS_CASE_INSENSITIVE})`);
+  assert(!matchAllow("other/a.mjs", ["src/**"]), "allow list matched something outside the scope");
+});
+
+check("ADVERSARIAL the shipped denyWrite covers the files a gate command reads", () => {
+  // A worker that can write package.json can author the `npm test` its own gate
+  // runs, so the gate proves whatever the worker wants it to prove. Same for
+  // every other runner's config file.
+  const cfg = JSON.parse(fs.readFileSync(path.join(kitRoot, "trellis.config.json"), "utf8"));
+  const deny = cfg.boundaries.denyWrite;
+  const runnerConfig = [
+    "package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock",
+    "jest.config.js", "jest.config.mjs", "vitest.config.ts", ".mocharc.json",
+    "conftest.py", "pytest.ini", "tox.ini", "pyproject.toml", "setup.cfg",
+    "Makefile", "justfile", "go.mod", "Cargo.toml",
+  ];
+  const uncovered = runnerConfig.filter((f) => !matchDeny(f, deny));
+  assert(uncovered.length === 0,
+    `a worker could author the command its own gate runs via: ${uncovered.join(", ")}`);
+  // Nested ones too — a monorepo package can carry its own runner config.
+  for (const nested of ["packages/api/package.json", "services/x/conftest.py"]) {
+    assert(matchDeny(nested, deny), `${nested} is not denied`);
+  }
 });
 
 const fixDir = path.join(here, "fixtures");

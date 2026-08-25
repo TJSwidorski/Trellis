@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { changedPaths, revertPaths } from "./worktree.mjs";
-import { matchAny } from "./paths.mjs";
+import { matchDeny, matchAllow } from "./paths.mjs";
 import { detectEnvFailure, envFailureMessage } from "./envfail.mjs";
 
 /**
@@ -23,7 +23,7 @@ export async function runGate(cfg, node, worktree) {
     };
   }
 
-  const tampered = changed.filter((p) => matchAny(p, node.tests || []));
+  const tampered = changed.filter((p) => matchDeny(p, node.tests || []));
   if (tampered.length) {
     revertPaths(worktree, tampered);
     return {
@@ -38,7 +38,7 @@ export async function runGate(cfg, node, worktree) {
   }
 
   const outOfScope = changed.filter(
-    (p) => !matchAny(p, node.write || []) || matchAny(p, cfg.boundaries.denyWrite)
+    (p) => !matchAllow(p, node.write || []) || matchDeny(p, cfg.boundaries.denyWrite)
   );
   if (outOfScope.length) {
     revertPaths(worktree, outOfScope);
