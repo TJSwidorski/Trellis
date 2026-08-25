@@ -3,7 +3,7 @@ import path from "node:path";
 import os from "node:os";
 import { exec, gateEnv } from "./gate.mjs";
 import { detectEnvFailure } from "./envfail.mjs";
-import { norm } from "./paths.mjs";
+import { norm, matchDeny } from "./paths.mjs";
 
 /**
  * Pre-run checks on the frozen tests themselves.
@@ -229,6 +229,17 @@ export const SOFT_FINDINGS = new Set(["no-tests", "unstubbable", "unsupported-la
 /** Copy the working tree (minus git, worktrees, node_modules) into a scratch dir. */
 export function copyRepo(root, dest, cfg) {
   const skip = new Set([".git", "node_modules", cfg.paths.worktrees.replace("./", ""), cfg.paths.state.replace("./", "")]);
+
+  // The scratch copy lands in os.tmpdir() — world-readable on most systems, and
+  // outside whatever protects the repo — and then the gate command executes
+  // there. Copying credentials into it served no purpose: the gate runs against
+  // a stub, and gateEnv() already withholds the provider key. A SIGKILL between
+  // the copy and the `finally` that removes it left them behind.
+  //
+  // denyWrite is the existing list of "things a worker has no business
+  // touching", which is exactly the right list to not duplicate here.
+  const deny = cfg.boundaries?.denyWrite ?? [];
+
   fs.cpSync(root, dest, {
     recursive: true,
     force: true,
@@ -236,7 +247,11 @@ export function copyRepo(root, dest, cfg) {
       const rel = norm(path.relative(root, src));
       if (!rel) return true;
       const top = rel.split("/")[0];
-      return !skip.has(top);
+      if (skip.has(top)) return false;
+      // Directories must stay traversable or their permitted children vanish;
+      // the files inside are filtered on their own paths.
+      if (fs.statSync(src).isDirectory()) return true;
+      return !matchDeny(rel, deny);
     },
   });
 }

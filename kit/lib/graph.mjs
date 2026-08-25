@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { norm, globsOverlap, matchAny, matchDeny } from "./paths.mjs";
+import { norm, globsOverlap, matchAny, matchDeny, safeRelative } from "./paths.mjs";
 import { isIgnored } from "./worktree.mjs";
 import { scopeBullets, findSpec } from "./spec.mjs";
 
@@ -82,6 +82,22 @@ export function validateGraph(graph, cfg, repoRoot, { requireTests = true } = {}
     for (const w of n.write || []) {
       if (matchDeny(w, cfg.boundaries.denyWrite)) {
         errors.push(`${at}: write path "${w}" is inside a denied boundary.`);
+      }
+    }
+
+    // `read` was never inspected at all. Its contents go straight into the
+    // prompt POSTed to the provider, so a path outside the tree or inside a
+    // denied boundary exfiltrates whatever it names. Caught here as well as at
+    // read time, because a graph that ASKS for it is worth rejecting loudly.
+    if (n.read && !Array.isArray(n.read)) {
+      errors.push(`${at}: "read" must be an array of repo-relative paths.`);
+    }
+    for (const r of Array.isArray(n.read) ? n.read : []) {
+      const safe = safeRelative(repoRoot, String(r).replace(/[*?].*$/, "") || ".");
+      if (!safe.ok) {
+        errors.push(`${at}: read path "${r}" ${safe.reason}. Reads are inlined into the worker prompt.`);
+      } else if (matchDeny(r, cfg.boundaries.denyWrite)) {
+        errors.push(`${at}: read path "${r}" is inside a denied boundary; its contents would be sent to the provider.`);
       }
     }
 

@@ -31,7 +31,8 @@ import { changedPaths, ignoredPaths } from "../lib/worktree.mjs";
 import { runGate } from "../lib/gate.mjs";
 import { matchAny, matchDeny, matchAllow, FS_CASE_INSENSITIVE } from "../lib/paths.mjs";
 import { recordsFor, ledgerPath } from "../lib/ledger.mjs";
-import { isCheckable, SOFT_FINDINGS } from "../lib/verify.mjs";
+import { isCheckable, SOFT_FINDINGS, copyRepo } from "../lib/verify.mjs";
+import { buildPrompt } from "../lib/worker.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 let pass = 0;
@@ -1790,6 +1791,62 @@ check("ADVERSARIAL a frozen test may not be gitignored", () => {
   const { errors } = validateGraph(g, { boundaries: { denyWrite: [] }, gate: {} }, dir, { requireTests: true });
   assert(errors.some((e) => /ignored by git/.test(e)),
     `a gitignored oracle validated clean: ${JSON.stringify(errors)}`);
+});
+
+// ------------------------------------------- what leaves the machine, and how
+
+check("ADVERSARIAL a node cannot read its way outside the tree or into a secret", () => {
+  // `read` contents go straight into the prompt POSTed to the provider, and it
+  // was the one path list nothing checked — not at read time, not in validate.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-read-"));
+  fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "src", "a.mjs"), "export const a = 1;\n");
+  fs.writeFileSync(path.join(dir, ".env"), "OPENROUTER_API_KEY=sk-secret\n");
+  const cfg = {
+    boundaries: { denyWrite: [".env", ".git/**"] },
+    worker: { maxContextFileBytes: 10000 },
+    gate: {},
+  };
+
+  const prompt = buildPrompt(cfg, {
+    id: "n01", title: "t", goal: "g",
+    read: ["../../../etc/passwd", "../.env", ".env", "src/a.mjs"],
+    write: ["src/b.mjs"], tests: [], gate: "true",
+  }, dir);
+  assert(prompt.includes("export const a = 1"), "a legitimate read stopped working");
+  assert(!/sk-secret/.test(prompt), "a denied file's contents were inlined into the provider prompt");
+  assert(!/root:/.test(prompt), "a path outside the tree was read into the prompt");
+
+  // And the graph that ASKS for it is rejected outright.
+  const g = {
+    schema: "trellis.graph/1",
+    nodes: [{ id: "n01", title: "t", goal: "g", read: ["../.env"], write: ["src/b.mjs"], tests: ["src/a.mjs"], gate: "true" }],
+  };
+  const { errors } = validateGraph(g, cfg, dir, { requireTests: true });
+  assert(errors.some((e) => /read path/.test(e)), `a traversing read validated clean: ${JSON.stringify(errors)}`);
+});
+
+check("ADVERSARIAL verify-tests does not copy secrets into the system temp dir", () => {
+  // copyRepo's scratch lands in os.tmpdir() and the gate command then EXECUTES
+  // there. A SIGKILL before the cleanup left credentials behind.
+  const src = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-cpsrc-"));
+  fs.mkdirSync(path.join(src, "src"), { recursive: true });
+  fs.mkdirSync(path.join(src, ".claude"), { recursive: true });
+  fs.writeFileSync(path.join(src, "src", "a.mjs"), "export const a = 1;\n");
+  fs.writeFileSync(path.join(src, ".env"), "OPENROUTER_API_KEY=sk-secret\n");
+  fs.writeFileSync(path.join(src, ".claude", "settings.json"), "{}\n");
+  fs.writeFileSync(path.join(src, "id_rsa.pem"), "-----BEGIN PRIVATE KEY-----\n");
+
+  const dest = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "trellis-cpdst-")), "copy");
+  copyRepo(src, dest, {
+    paths: { worktrees: ".worktrees", state: ".trellis" },
+    boundaries: { denyWrite: [".env", "**/*.pem", ".claude/**"] },
+  });
+
+  assert(fs.existsSync(path.join(dest, "src", "a.mjs")), "the copy is useless if the source did not come with it");
+  for (const secret of [".env", "id_rsa.pem", ".claude/settings.json"]) {
+    assert(!fs.existsSync(path.join(dest, secret)), `${secret} was copied into the world-readable scratch dir`);
+  }
 });
 
 const fixDir = path.join(here, "fixtures");
