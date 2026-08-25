@@ -37,7 +37,7 @@ export const STAGES = [
   {
     id: "02_slice",
     prompt: "Read sessions/02_slice/CONTEXT.md and do exactly what it says. Nothing else.",
-    verify: (root) => artifactExists(root, ".trellis/plan.json", (j) => Array.isArray(j.nodes) && j.nodes.length > 0),
+    verify: (root) => sliceAssembledTaskGraph(root),
   },
   {
     id: "03_cases",
@@ -91,6 +91,63 @@ function artifactExists(root, rel, check) {
   return check(j)
     ? { ok: true, detail: rel }
     : { ok: false, detail: `${rel} exists but is incomplete` };
+}
+
+/**
+ * Stage 02 produces TWO artifacts, and only one of them is the session's work.
+ *
+ * `trellis slice` writes plan.json mechanically — the cut is not a judgement.
+ * The judgement is graph.json: write scopes, read lists, gate commands, tags,
+ * mutations, and any interface file two nodes would otherwise agree on by
+ * coincidence. Verifying plan.json alone meant the stage passed on the strength
+ * of the file the CLI wrote, so `auto` would skip the session that does the
+ * actual work and fail at 03 with no graph to read.
+ *
+ * The cross-stage check is the contract's own, quoted from it: every node id in
+ * plan.json must appear in graph.json. A node dropped between the two files is
+ * silently descoped work.
+ */
+function sliceAssembledTaskGraph(root) {
+  const base = artifactExists(root, ".trellis/plan.json", (j) => Array.isArray(j.nodes) && j.nodes.length > 0);
+  if (!base.ok) return base;
+
+  const graph = readJson(root, ".trellis/graph.json");
+  if (graph === null) {
+    return {
+      ok: false,
+      detail:
+        ".trellis/graph.json was not written — `trellis slice` cuts the plan, but the task graph " +
+        "(write scopes, gate commands, mutations) is assembled by the session",
+    };
+  }
+  if (!Array.isArray(graph.nodes) || !graph.nodes.length) {
+    return { ok: false, detail: ".trellis/graph.json declares no nodes" };
+  }
+
+  const plan = readJson(root, ".trellis/plan.json");
+  const planned = (plan.nodes ?? []).map((n) => (typeof n === "string" ? n : n.id));
+  const built = new Set(graph.nodes.map((n) => n.id));
+  const dropped = planned.filter((id) => !built.has(id));
+  if (dropped.length) {
+    return {
+      ok: false,
+      detail: `${dropped.length} planned node(s) missing from graph.json: ${dropped.slice(0, 5).join(", ")}`,
+    };
+  }
+
+  // A node with no write scope or no gate cannot be dispatched at all — the
+  // shape of a graph a session abandoned midway.
+  const incomplete = graph.nodes
+    .filter((n) => !(n.write ?? []).length || !n.gate)
+    .map((n) => n.id);
+  if (incomplete.length) {
+    return {
+      ok: false,
+      detail: `${incomplete.length} node(s) have no write scope or no gate: ${incomplete.slice(0, 5).join(", ")}`,
+    };
+  }
+
+  return { ok: true, detail: `${planned.length} planned node(s), all present in graph.json` };
 }
 
 // The cases file must have an entry for every node in the plan. A session that

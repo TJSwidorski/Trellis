@@ -1906,6 +1906,55 @@ check("ADVERSARIAL every field a worker sees or is graded against moves the hash
   }
 });
 
+// ------------------------------------- stage 02 must assemble the task graph
+
+const sliceVerify = STAGES.find((s) => s.id === "02_slice").verify;
+
+/** A root with whatever plan.json / graph.json pair you pass. */
+function sliceRoot(plan, graph) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-02-"));
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  if (plan !== undefined) fs.writeFileSync(path.join(dir, ".trellis", "plan.json"), JSON.stringify(plan));
+  if (graph !== undefined) fs.writeFileSync(path.join(dir, ".trellis", "graph.json"), JSON.stringify(graph));
+  return dir;
+}
+
+const taskNode = (id, over = {}) => ({ id, title: id, goal: "g", write: [`src/${id}.mjs`], gate: "node t.mjs", tests: [], deps: [], ...over });
+
+check("02_slice passes when the task graph covers the plan", () => {
+  const root = sliceRoot({ nodes: [{ id: "a" }, { id: "b" }] }, { nodes: [taskNode("a"), taskNode("b")] });
+  const r = sliceVerify(root, CFG);
+  assert(r.ok, `expected pass, got: ${r.detail}`);
+});
+
+check("ADVERSARIAL 02_slice fails when only the CLI's half was written", () => {
+  // `trellis slice` writes plan.json mechanically; graph.json is the session's
+  // actual work. Verifying plan.json alone let auto skip the session entirely
+  // and fail at 03 with no graph to read.
+  const root = sliceRoot({ nodes: [{ id: "a" }] }, undefined);
+  const r = sliceVerify(root, CFG);
+  assert(!r.ok, "the stage passed on the strength of the file the CLI wrote");
+  assert(/graph\.json/.test(r.detail), `detail should name the missing artifact, got: ${r.detail}`);
+});
+
+check("ADVERSARIAL a node dropped between plan and graph is silently descoped", () => {
+  // The contract's own cross-stage rule, quoted in sessions/02_slice/CONTEXT.md.
+  const root = sliceRoot({ nodes: [{ id: "a" }, { id: "b" }, { id: "c" }] }, { nodes: [taskNode("a")] });
+  const r = sliceVerify(root, CFG);
+  assert(!r.ok, "planned nodes vanished between the two files and the stage passed");
+  assert(/b/.test(r.detail) && /c/.test(r.detail), `detail should name what was dropped, got: ${r.detail}`);
+});
+
+check("ADVERSARIAL a node with no write scope or no gate cannot pass 02", () => {
+  // The shape a session abandoned midway leaves: node ids present, contracts empty.
+  for (const broken of [taskNode("b", { write: [] }), taskNode("b", { gate: null })]) {
+    const root = sliceRoot({ nodes: [{ id: "a" }, { id: "b" }] }, { nodes: [taskNode("a"), broken] });
+    const r = sliceVerify(root, CFG);
+    assert(!r.ok, `a node with ${broken.write.length ? "no gate" : "no write scope"} passed`);
+    assert(/b/.test(r.detail), `detail should name the node, got: ${r.detail}`);
+  }
+});
+
 const fixDir = path.join(here, "fixtures");
 if (fs.existsSync(fixDir)) {
   for (const f of fs.readdirSync(fixDir).filter((x) => x.endsWith(".json"))) {
