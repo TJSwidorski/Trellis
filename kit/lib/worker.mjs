@@ -233,6 +233,13 @@ export async function runNode(cfg, node, worktree, { onAttempt } = {}) {
       }
 
       record.reason = gate.kind;
+      // Keep what the gate actually said, not just what kind of failure it was.
+      // This text was going to the next model attempt and then being discarded,
+      // so REPORT.md's fenced block for an exhausted node could only ever print
+      // the word "test-failure" — and triage had to go run the gate by hand in
+      // the kept worktree to learn anything. Truncated because it is stored per
+      // attempt, per node, in state.json.
+      record.feedback = String(gate.feedback || "").slice(-1200);
       attempts.push(record);
       onAttempt?.(record);
       lastFeedback =

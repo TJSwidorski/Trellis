@@ -284,6 +284,17 @@ console.log("downstream ok");
     assert.ok(r.includes("Blocked (never attempted)"), "blocked section");
     assert.ok(r.includes("Decomposition signal"), "escalation signal");
     assert.ok(/\| cheap \| \d+ \|/.test(r), "cost table");
+
+    // The exhausted node's block must carry what the gate actually said. This
+    // is the end-to-end half: the regression fixture supplies `feedback`
+    // directly, so only a real run proves the worker stores it. Without it the
+    // fenced block printed the word "test-failure" and triage had to open the
+    // kept worktree and re-run the gate by hand to learn anything.
+    const block = r.slice(r.indexOf("### `impossible`"));
+    assert.ok(/Last gate output \(/.test(block), "no gate output recorded for the exhausted node");
+    const fenced = /```\n([\s\S]*?)```/.exec(block)?.[1] ?? "";
+    assert.ok(fenced.trim() && fenced.trim() !== "test-failure",
+      `the fenced block is still just the failure kind: ${JSON.stringify(fenced.slice(0, 80))}`);
   });
 
   check("workspace file lists only kept worktrees", () => {

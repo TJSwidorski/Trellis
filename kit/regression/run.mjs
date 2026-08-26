@@ -29,6 +29,7 @@ import os from "node:os";
 import { spawnSync } from "node:child_process";
 import { changedPaths, ignoredPaths } from "../lib/worktree.mjs";
 import { runGate } from "../lib/gate.mjs";
+import { writeReport } from "../lib/report.mjs";
 import { matchAny, matchDeny, matchAllow, FS_CASE_INSENSITIVE } from "../lib/paths.mjs";
 import { recordsFor, ledgerPath } from "../lib/ledger.mjs";
 import { initState, resumePlan, nodeHash } from "../lib/state.mjs";
@@ -1953,6 +1954,44 @@ check("ADVERSARIAL a node with no write scope or no gate cannot pass 02", () => 
     assert(!r.ok, `a node with ${broken.write.length ? "no gate" : "no write scope"} passed`);
     assert(/b/.test(r.detail), `detail should name the node, got: ${r.detail}`);
   }
+});
+
+// ---------------------------------- the report has to say what actually failed
+
+check("ADVERSARIAL an exhausted node's report carries the gate output, not just the kind", () => {
+  // `record.reason` on a gate failure is `gate.kind`, so the fenced block used
+  // to repeat the last word of the failure trail. Triage had to open the kept
+  // worktree and re-run the gate by hand to learn anything — a friction record
+  // from the first real run.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-rep-"));
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  const graph = { nodes: [{ id: "n01", title: "a node", write: ["src/**"], tests: [], gate: "x" }] };
+  const state = {
+    runId: "r1", project: "p", startedAt: "t", finishedAt: "t", nodes: {
+      n01: {
+        status: "exhausted", tier: "strong", reason: "all 6 attempts failed", survivingMutations: [],
+        attempts: [
+          { tier: "cheap", attempt: 1, ok: false, kind: "test-failure", reason: "test-failure",
+            feedback: "AssertionError: expected 'endcard.not_for_shorts' to have property 'code'" },
+          { tier: "strong", attempt: 2, ok: false, kind: "test-failure", reason: "test-failure",
+            feedback: "AssertionError: expected err.code to equal scene.endcard_shorts" },
+        ],
+      },
+    },
+  };
+  writeReport(dir, {
+    paths: { state: ".trellis", worktrees: ".worktrees" },
+    tiers: [{ name: "cheap" }, { name: "strong" }],
+  }, graph, state);
+  const md = fs.readFileSync(path.join(dir, ".trellis", "REPORT.md"), "utf8");
+
+  assert(/AssertionError: expected err\.code to equal scene\.endcard_shorts/.test(md),
+    "the last gate output is missing from the report, so triage cannot diagnose without opening the worktree");
+  assert(/strong#2/.test(md), "the report should say which attempt the output came from");
+  // The failure trail still summarises the kinds; the block must not be just that.
+  const fenced = /```\n([\s\S]*?)```/.exec(md)?.[1] ?? "";
+  assert(fenced.trim() !== "test-failure",
+    "the fenced block is still repeating the kind rather than the gate output");
 });
 
 const fixDir = path.join(here, "fixtures");

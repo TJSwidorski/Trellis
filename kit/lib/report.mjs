@@ -53,11 +53,17 @@ export function writeReport(root, cfg, graph, state) {
       L.push(`- worktree kept at: \`${path.posix.join(cfg.paths.worktrees, id)}\``);
       const failures = (s.attempts || []).map((a) => `${a.tier}#${a.attempt}: ${a.kind}`);
       L.push(`- failure trail: ${failures.join(" → ") || "(none)"}`);
+      // What the gate actually said, preferred over what kind of failure it was.
+      // `reason` on a gate failure is just the kind again, so this block used to
+      // repeat the last word of the failure trail and nothing else.
+      const withOutput = (s.attempts || []).filter((a) => a.feedback).pop();
       const last = (s.attempts || []).filter((a) => a.reason).pop();
-      if (last?.reason) {
+      const body = withOutput?.feedback || last?.reason;
+      if (body) {
         L.push("");
+        L.push(withOutput?.feedback ? `Last gate output (${withOutput.tier}#${withOutput.attempt}):` : "");
         L.push("```");
-        L.push(String(last.reason).slice(0, 1200));
+        L.push(String(body).slice(0, 1200));
         L.push("```");
       }
       L.push("");
