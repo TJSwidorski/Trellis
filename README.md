@@ -3,8 +3,9 @@
 **Product graph in, working software out.** Claude Code orchestrates, open-source
 models implement, and the loop lives in code.
 
-Version 2.0.0. Coming from 1.1.x, read `UPGRADING.md` first — the runner is
-unchanged, but the workspace layout is not.
+Version 2.1.0. Coming from 1.1.x, read `UPGRADING.md` first — the runner is
+unchanged, but the workspace layout is not. See `CHANGELOG.md` for what has
+changed since 2.0.0.
 
 ## Start here
 
@@ -16,6 +17,7 @@ unchanged, but the workspace layout is not.
 | Add your own skills and conventions | `references/skills/SKILLS.md` |
 | Understand how Trellis changes itself | `references/EVOLUTION.md` |
 | Migrate from 1.1.x | `UPGRADING.md` |
+| See what changed release to release | `CHANGELOG.md` |
 
 ## The shape of it
 

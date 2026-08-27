@@ -49,6 +49,7 @@ export const PAYLOAD = [
   "README.md",
   "QUICKSTART.md",
   "UPGRADING.md",
+  "CHANGELOG.md",
 ];
 
 // Top-level entries deliberately not installed. Anything present in the kit but
@@ -60,6 +61,7 @@ export const NOT_INSTALLED = [
   ".trellis-seed",   // empty, unreferenced
   ".bench",          // A/B harness output: scratch repos and REPORT.md
   "tasks",           // this repo's own working notes; a target repo keeps its own
+  ".github",         // this repo's own CI; a target repo keeps its own
   ".git",
   "node_modules",
 ];

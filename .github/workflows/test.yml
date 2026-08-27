@@ -1,0 +1,27 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # kit/regression/run.mjs and kit/selftest/e2e.mjs stand up real scratch
+      # git repos (gitRepoWith, makeRepo) and commit into them. A CI runner has
+      # no git identity configured by default.
+      - name: Configure git identity for test fixtures
+        run: |
+          git config --global user.email "ci@example.com"
+          git config --global user.name "Trellis CI"
+
+      - name: Run the full suite (units, regression, e2e)
+        run: npm test
