@@ -23,9 +23,10 @@ import {
   PRODUCT_GRAPH_DEFAULT,
 } from "../lib/product.mjs";
 import { STAGES, DEFAULT_CHAIN, EVOLVE_TOP, runSession, recordSession, sessionStats, isRetryable, sleep, currentRunId } from "../lib/driver.mjs";
-import { actionable, unknownCodes, kindActionable, kindByTier, writeProposal, classify, shortlist } from "../lib/evolve.mjs";
+import { actionable, unknownCodes, kindActionable, kindByTier, writeProposal, classify, shortlist, triageRows } from "../lib/evolve.mjs";
 import { loadCodes, allCodes, groupSimilar, bucketOf, normaliseCode, CODES_DOC } from "../lib/codes.mjs";
 import * as friction from "../lib/friction.mjs";
+import * as triage from "../lib/triage.mjs";
 import {
   loadRegistry, resolveActive, materialise, blockedByAudit, missingPlugins,
   recordActivation, readActivations, neverActivated,
@@ -854,7 +855,7 @@ function reportFriction(root, cfg, minRuns) {
   // a triage session can legitimately have a smooth time on a bad run.
   const contradicted = friction.contradictions(root, cfg, {
     ledgerRecords: ledger.read(root, cfg),
-    triageRows: readTriageRows(root, cfg),
+    triageRows: triageRows(root, cfg),
   });
   const byStage = {};
   for (const c of contradicted) (byStage[c.stage] ??= new Set()).add(c.run);
@@ -869,14 +870,6 @@ function reportFriction(root, cfg, minRuns) {
     log.info("  friction prompt is not landing, which is a contract problem.");
     log.info("");
   }
-}
-
-function readTriageRows(root, cfg) {
-  const p = path.join(root, cfg.paths?.state ?? ".trellis", "triage.jsonl");
-  if (!fs.existsSync(p)) return [];
-  return fs.readFileSync(p, "utf8").split("\n").filter(Boolean)
-    .map((l) => { try { return JSON.parse(l); } catch { return null; } })
-    .filter(Boolean);
 }
 
 /**
@@ -978,8 +971,10 @@ function reportRetire(root, cfg, minRuns) {
     return;
   }
 
-  log.warn(`${skills.length} entr(y/ies) never activated across ${runs} runs:`);
-  for (const s of skills) log.info(`  ${s.name.padEnd(28)} ${s.kind}, ${s.rules.join("+")}`);
+  log.warn(`${skills.length} entr(y/ies) never activated:`);
+  for (const s of skills) {
+    log.info(`  ${s.name.padEnd(28)} ${s.kind}, ${s.rules.join("+")} — 0 of ${s.runs} eligible run(s)`);
+  }
   log.info("");
   log.info("These have provably never entered a context window. Either the activation rules are");
   log.info("wrong, or the entry is dead weight. Both are worth a proposal against SKILLS/REGISTRY.json.");
@@ -1024,6 +1019,47 @@ function cmdFriction() {
     return;
   }
   log.ok(`${stage}: recorded ${row.kind}/${row.code}${row.target ? ` on ${row.target}` : ""}.`);
+  if (row.code?.startsWith("other:")) {
+    log.info(log.dim(`  bucketed — visible under 'evolve --unknown', never actionable until named in ${CODES_DOC}`));
+  }
+}
+
+// ------------------------------------------------------------------- triage
+
+/**
+ * Record one triage decision through code, stamping `run` here rather than
+ * accepting it — see kit/lib/triage.mjs for why. `sessions/06_triage/
+ * CONTEXT.md` calls this once per node reviewed instead of hand-formatting
+ * `.trellis/triage.jsonl`.
+ */
+function cmdTriage() {
+  const { root, cfg } = ctx();
+  const node = flagVal("node");
+  const verdict = flagVal("verdict");
+  const reason = flagVal("reason");
+  if (!node || !verdict || !reason) {
+    die('Usage: trellis triage --node <id> --verdict reject|accept|hold|take --reason "..." [--code <c>]');
+  }
+
+  const run = currentRunId(root);
+  if (!run) die("No runId in .trellis/state.json. Triage is recorded against a run, or not at all.");
+
+  const rawCode = flagVal("code");
+  const dec = {
+    node,
+    verdict,
+    reason,
+    code: rawCode ? normaliseCode(rawCode, loadCodes(root), "rejection") : undefined,
+  };
+
+  let row;
+  try {
+    row = triage.append(root, cfg, dec, { run });
+  } catch (e) {
+    die(e.message);
+  }
+
+  log.ok(`${row.node}: ${row.verdict}${row.code ? ` (${row.code})` : ""} — ${row.reason}`);
   if (row.code?.startsWith("other:")) {
     log.info(log.dim(`  bucketed — visible under 'evolve --unknown', never actionable until named in ${CODES_DOC}`));
   }
@@ -1081,8 +1117,11 @@ function cmdPropose() {
 
   log.ok(`wrote ${result.file}`);
   log.info(`  kind: ${result.kind}   tier: ${result.tier}`);
+  // No apply mechanism exists yet — this only classifies what WOULD be
+  // eligible for one if it did. Every proposal, advisory or load-bearing,
+  // currently waits for a human to read it and act.
   log.info(`  ${result.tier === "advisory" && !result.held
-    ? "auto-applies once regression is green"
+    ? "advisory, eligible for auto-apply once that mechanism exists — waits for a human for now"
     : "waits for a human merge"}`);
 }
 
@@ -1302,6 +1341,9 @@ Autonomy and evolution:
     --kind <k> --code <c>       manual-edit | repeated-read | missing-tool | ...
     --target <path> --count <n> --note "<=140 chars"
     --none                      Explicitly assert there was none. Never fails a stage.
+  trellis triage --node <id> --verdict <v> --reason "..."   Record one triage decision
+    --verdict reject|accept|hold|take
+    --code <c>                  Required for --verdict reject; see 'trellis codes' for the vocabulary
   trellis propose             Write a proposal through code (enforces the refusals)
     --kind tooling              Requires alternatives, cost, and a retirement condition
   trellis classify <path>     Is this path protected, load-bearing, or advisory
@@ -1332,6 +1374,7 @@ const table = {
   evolve: cmdEvolve,
   codes: cmdCodes,
   friction: cmdFriction,
+  triage: cmdTriage,
   propose: cmdPropose,
   classify: cmdClassifyPath,
   regression: cmdRegression,

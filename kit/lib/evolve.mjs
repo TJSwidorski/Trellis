@@ -43,11 +43,18 @@ export const PROTECTED = [
 // thing that should not change without someone looking — an entry going in is a
 // standing tax on every session's selection accuracy, and an entry coming out is
 // a capability the next project silently no longer has.
+//
+// package.json is here for the same reason: it classified "unclassified"
+// before, which made a version bump the single least-guarded edit a proposal
+// could make. Nothing in the kit reads the version at runtime, so the risk was
+// never a broken run — it was that "unclassified" behaves like a hole in a file
+// where every other tier was a deliberate choice.
 export const LOAD_BEARING = [
   "kit/lib/",
   "kit/bin/",
   "kit/mcp/",
   "trellis.config.json",
+  "package.json",
   "sessions/",
   "SKILLS/",
 ];
@@ -126,6 +133,19 @@ export function classify(relPath) {
  *  other artifact — see ledgerPath in ledger.mjs, which this mirrors. */
 export function triagePath(root, cfg) {
   return path.resolve(root, cfg?.paths?.state ?? ".trellis", "triage.jsonl");
+}
+
+/**
+ * Every row triage.jsonl has ever recorded, parsed. One reader shared by the
+ * contradiction source below and the human-facing friction report in
+ * cli.mjs, so the two cannot drift on what counts as a row.
+ */
+export function triageRows(root, cfg) {
+  const p = triagePath(root, cfg);
+  if (!fs.existsSync(p)) return [];
+  return fs.readFileSync(p, "utf8").split("\n").filter(Boolean)
+    .map((l) => { try { return JSON.parse(l); } catch { return null; } })
+    .filter(Boolean);
 }
 
 // Triage records structured rejection codes, not prose. "the error handling is
@@ -236,16 +256,24 @@ function survivorCount(rec) {
   return Number.isFinite(v) ? v : 0;
 }
 
-function isCostly(rec) {
+// The tier ladder is config-driven and documented as free to change
+// (references/EVOLUTION.md names the tier roster explicitly as a mechanism,
+// not an invariant). Hardcoding "strong" here meant a renamed or added top
+// tier silently stopped counting as costly — no error, `trellis evolve`
+// just reports less pressure than actually exists, and looks like the loop
+// is correctly inert rather than blind to half its population.
+function isCostly(rec, topTier) {
   return (
     rec.status === "exhausted" ||
-    rec.landedTier === "strong" ||
+    (topTier && rec.landedTier === topTier) ||
     survivorCount(rec) > 0
   );
 }
 
-function scoped(records, scope) {
-  return scope === "all" ? records : records.filter(isCostly);
+function scoped(records, scope, cfg) {
+  if (scope === "all") return records;
+  const topTier = cfg?.tiers?.[cfg.tiers.length - 1]?.name;
+  return records.filter((r) => isCostly(r, topTier));
 }
 
 /**
@@ -262,7 +290,7 @@ function scoped(records, scope) {
  * threshold, and a threshold needs the stricter arithmetic.
  */
 export function kindCounts(root, cfg, { scope = "costly", history = null } = {}) {
-  const records = scoped(history ?? ledger.read(root, cfg), scope);
+  const records = scoped(history ?? ledger.read(root, cfg), scope, cfg);
 
   // Corpus-wide share per kind, for the comparison column below.
   const corpus = {};
@@ -325,7 +353,7 @@ export function kindCounts(root, cfg, { scope = "costly", history = null } = {})
  * rather than to a contract fix.
  */
 export function kindByTier(root, cfg, { scope = "costly", history = null } = {}) {
-  const records = scoped(history ?? ledger.read(root, cfg), scope);
+  const records = scoped(history ?? ledger.read(root, cfg), scope, cfg);
   const out = new Map();
   const seen = new Set();
 
@@ -369,6 +397,40 @@ export function kindActionable(root, cfg, { minRuns = 3, scope = "costly", histo
 }
 
 /**
+ * `--none` asserted on a run whose ledger shows exhausted nodes or two or
+ * more rejections, grouped by stage. This is the one mechanism that catches
+ * a session lying about friction, and it used to be computed by
+ * friction.contradictions() and only ever displayed to a human in `trellis
+ * evolve`'s prose output — never fed into the shortlist, and stage 07's
+ * contract restricts it to `evolve --json` and nothing else. So the party
+ * with judgement was structurally prevented from ever seeing it.
+ *
+ * references/CODES.md already documents "unreported-suspected" as "written
+ * by the contradiction detector in evolve" — this is that wiring.
+ */
+function contradictionRows(root, cfg, { minRuns, ledgerRecords }) {
+  const found = friction.contradictions(root, cfg, {
+    ledgerRecords,
+    triageRows: triageRows(root, cfg),
+  });
+  const byStage = new Map();
+  for (const c of found) {
+    const e = byStage.get(c.stage) ?? { stage: c.stage, runs: new Set() };
+    e.runs.add(c.run);
+    byStage.set(c.stage, e);
+  }
+  return [...byStage.values()]
+    .filter((e) => e.runs.size >= minRuns)
+    .map((e) => ({
+      source: "friction",
+      code: "unreported-suspected",
+      runs: e.runs.size,
+      occurrences: e.runs.size,
+      targets: [e.stage],
+    }));
+}
+
+/**
  * The shortlist: every source, one ranking, one cap.
  *
  * This exists as one function because it used to exist as two. `emitShortlist`
@@ -380,6 +442,7 @@ export function kindActionable(root, cfg, { minRuns = 3, scope = "costly", histo
  */
 export function shortlist(root, cfg, { minRuns = 3, scope = "costly", top = 5, codes = null } = {}) {
   const vocab = codes ?? loadCodes(root);
+  const ledgerRecords = ledger.read(root, cfg);
   const rows = [
     ...actionable(root, cfg, { minRuns }).map((f) => ({
       source: "rejection",
@@ -404,6 +467,7 @@ export function shortlist(root, cfg, { minRuns = 3, scope = "costly", top = 5, c
         occurrences: f.count,
         targets: f.targets.slice(0, 3),
       })),
+    ...contradictionRows(root, cfg, { minRuns, ledgerRecords }),
   ]
     // Deterministic: the verify predicate and the stage must agree on WHICH
     // patterns made the cut, so ties cannot be broken by array order.

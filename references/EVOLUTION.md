@@ -39,23 +39,45 @@ node kit/bin/cli.mjs classify <path>
 
 **Protected** — never proposable, human edit only.
 `MISSION.md`, `kit/lib/gate.mjs`, `verify.mjs`, `mutate.mjs`, `worktree.mjs`,
-`kit/schema/`, `kit/regression/`, `.claude/hooks/`.
+`paths.mjs`, `extract.mjs`, `kit/schema/`, `kit/regression/`, `.claude/hooks/`.
 
 The last two are the ones people forget. A system that can edit its own regression
 suite has no regression suite. A system that can edit its own schema can redefine
-failure as success.
+failure as success. `paths.mjs` and `extract.mjs` joined the list for the same
+reason `worktree.mjs` is on it: they are what the other protected files actually
+call to decide whether a path or a block of output is allowed, so protecting the
+callers and leaving the boundary's own implementation merely load-bearing would
+let a proposal reach the same effect through a file nobody was watching for it.
 
 **Load-bearing** — proposable, human merges. `kit/lib/`, `kit/bin/`, `kit/mcp/`,
-`trellis.config.json`, `sessions/`. Correctness lives here.
+`trellis.config.json`, `sessions/`, `SKILLS/`. Correctness lives here.
 
-**Advisory** — proposable, auto-applies when regression is green. `README.md`,
-`CLAUDE.md`, `CONTEXT.md`, `references/`, `.claude/skills/`, `kit/roles/`. Prose.
+**Advisory** — proposable, classified as eligible for auto-apply when regression
+is green. `README.md`, `CLAUDE.md`, `CONTEXT.md`, `references/`,
+`.claude/skills/`, `kit/roles/`. Prose. No apply mechanism exists yet — see
+"What auto-apply actually does today" below.
 
 Unclassified paths fail closed to load-bearing.
 
 The reason for the split is behavioural. If every proposal needs review, you review
 README typos for a month and stop reading carefully — and that is exactly when a
 load-bearing one goes through.
+
+### What auto-apply actually does today
+
+There is no apply mechanism. `autoAppliable()` in `kit/lib/evolve.mjs` classifies
+which proposals *would* be eligible — advisory, not held, regression green — and
+that classification governs nothing else yet. Every proposal, advisory or
+load-bearing, waits for a human to read `evolution/proposals/` and act on it.
+
+This matters more than a documentation gap: if apply is ever implemented, it must
+not be implemented against `autoAppliable()` unchanged. That function currently
+returns true for all of `references/` except `CODES.md`, which includes
+`references/chiefs/*.md` — the security, backend, and architecture instruction
+files that shape every future run. Those are prose, but they are not advisory in
+the sense this tier means; a proposal that quietly reworded the security chief
+would auto-apply today's classification without ever crossing `PROTECTED`. Chiefs
+would need to come out of the advisory tier before apply exists at all.
 
 ### The one carve-out
 

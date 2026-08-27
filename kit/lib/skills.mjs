@@ -18,6 +18,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { safeRelative } from "./paths.mjs";
 
 // Only these may ever be activated. 'pending' means nobody has audited it yet and
 // 'rejected' means somebody did — either way it does not enter a context window.
@@ -217,20 +218,35 @@ export function neverActivated(registry, activations, { minRuns = 3 } = {}) {
     .filter((e) => !firesAutomatically(e) && !e.activation?.manual)
     .map((e) => ({ name: e.name, kind: e.kind }));
 
+  // The global gate: no per-entry judgement is worth making before SOME
+  // activity exists at all.
   if (runs.size < minRuns) return { ready: false, runs: runs.size, skills: [], unreachable };
 
-  const fired = new Set(activations.map((a) => a.name));
-  const skills = candidates
-    .filter(firesAutomatically)
-    .filter((e) => !fired.has(e.name))
-    .map((e) => ({
+  const skills = [];
+  for (const e of candidates.filter(firesAutomatically)) {
+    // `runs` above counts every run in the activation log, including ones
+    // that predate this entry's registration — "never activated across 40
+    // runs" is not evidence when the entry was added yesterday. An entry
+    // that declares `firstSeen` is judged only against rows at or after it,
+    // on both sides of the ledger: whether it fired, and how much history
+    // it has actually had a chance to fire in. An entry with no `firstSeen`
+    // keeps the old behaviour — judged against the whole log — so this is
+    // additive, not a migration every existing entry needs.
+    const eligible = e.firstSeen ? activations.filter((a) => a.ts && a.ts >= e.firstSeen) : activations;
+    const eligibleRuns = new Set(eligible.map((a) => a.run).filter(Boolean));
+    if (eligibleRuns.size < minRuns) continue; // not enough history for THIS entry yet
+    if (eligible.some((a) => a.name === e.name)) continue; // fired at least once, eligibly
+
+    skills.push({
       name: e.name,
       kind: e.kind,
+      runs: eligibleRuns.size,
       rules: AUTOMATIC.filter((k) => {
         const v = e.activation?.[k];
         return Array.isArray(v) ? v.length > 0 : Boolean(v);
       }),
-    }));
+    });
+  }
 
   return { ready: true, runs: runs.size, skills, unreachable };
 }
@@ -250,9 +266,16 @@ export function materialise(root, active, { dryRun = false } = {}) {
   const prior = fs.existsSync(manifestPath)
     ? JSON.parse(fs.readFileSync(manifestPath, "utf8")).written ?? []
     : [];
-  const want = active.filter((a) => a.kind === "skill").map((a) => a.name);
+  // `name` comes from SKILLS/REGISTRY.json — human-authored, but proposable,
+  // and this resolves straight into path.join(dest, name) and then a
+  // recursive force-delete. An entry named "..", "../..", or "../../kit"
+  // would walk outside .claude/skills/ entirely; safeRelative is the same
+  // check every other path in this boundary goes through. Checked on the
+  // way OUT of the prior manifest too, in case it was ever hand-edited.
+  const safeName = (n) => Boolean(n) && safeRelative(dest, String(n)).ok;
+  const want = active.filter((a) => a.kind === "skill" && safeName(a.name)).map((a) => a.name);
 
-  const removed = prior.filter((n) => !want.includes(n));
+  const removed = prior.filter((n) => safeName(n) && !want.includes(n));
   const added = want.filter((n) => !prior.includes(n));
   if (dryRun) return { added, removed, kept: want.filter((n) => prior.includes(n)) };
 

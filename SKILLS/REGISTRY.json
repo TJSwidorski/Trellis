@@ -8,6 +8,7 @@
     "manual": "loads only when named explicitly in trellis.config.json skills.manual."
   },
   "$cost": "Every activated skill's name and description enters the context at session start. That is the tax the gating exists to bound — but the sharper cost is selection accuracy: a model choosing among forty descriptions picks worse than one choosing among six. Measure with `trellis skills --explain` before adding to the always list.",
+  "$firstSeen": "Optional ISO date on an entry, e.g. \"2026-08-27\". `neverActivated` (kit/lib/skills.mjs) judges an entry only against activation rows at or after this date — without it, a brand-new entry is judged against the whole activation log and can be recommended for deletion on the strength of runs that happened before it existed. Set this when adding a new entry; existing entries with no firstSeen keep the old, whole-log behaviour.",
   "$marketplace-trust": {
     "the-wrong-inference": "'It is in anthropics/claude-plugins-official, therefore Anthropic vetted it.' That does not follow, and this registry exists partly to stop a future session deriving it again.",
     "three-source-classes": {

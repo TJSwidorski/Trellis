@@ -23,6 +23,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import * as friction from "./friction.mjs";
 import * as evolve from "./evolve.mjs";
+import * as ledger from "./ledger.mjs";
 
 // --------------------------------------------------------------- stage table
 
@@ -262,6 +263,27 @@ function triageRecordedEvidence(root, cfg) {
     return { ok: false, detail: `.trellis/triage.jsonl line for run "${run}" carries no decisions` };
   }
 
+  // The `run` field is what the whole minRuns discipline in evolve.mjs counts
+  // on — rejectionCounts dedups on it, one distinct value per line. `trellis
+  // triage` stamps it from state.json the way friction.append does, but
+  // triage.jsonl is a plain file (MISSION invariant 5) that a hand-formatted
+  // session, or a gate command running unsandboxed code, can also append to
+  // directly. A fabricated run id is indistinguishable from a real one to
+  // rejectionCounts, so cross-check every distinct run this file has EVER
+  // claimed — not just this run's rows — against runIds the ledger actually
+  // recorded. The ledger gets its entry for the current run during 05_build,
+  // which always precedes 06_triage in the chain, so the current run is
+  // legitimately present there by the time this check runs.
+  const forged = forgedTriageRuns(root, cfg, run);
+  if (forged.length) {
+    return {
+      ok: false,
+      detail:
+        `.trellis/triage.jsonl claims run(s) the ledger never recorded: ${forged.join(", ")}. ` +
+        `Every line must come from \`trellis triage\`, never hand-appended.`,
+    };
+  }
+
   // Friction is a separate claim from the triage decisions and gets checked
   // separately. `--none` satisfies it: what is required is a statement, not a
   // grievance. Verifying that a statement exists is the most a driver can do —
@@ -273,6 +295,29 @@ function triageRecordedEvidence(root, cfg) {
     ok: true,
     detail: `triage.json + ${decisions.length} decision(s) for run ${run}; friction: ${f.detail}`,
   };
+}
+
+/**
+ * Every distinct `run` value triage.jsonl has ever claimed, checked against
+ * runIds the ledger actually recorded. `currentRun` is always trusted even if
+ * the ledger somehow lags — it came from state.json, not from the file under
+ * suspicion — so this can never fail a stage on its own run.
+ */
+function forgedTriageRuns(root, cfg, currentRun) {
+  const p = path.resolve(root, cfg?.paths?.state ?? ".trellis", "triage.jsonl");
+  if (!fs.existsSync(p)) return [];
+  const claimed = new Set();
+  for (const line of fs.readFileSync(p, "utf8").split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const row = JSON.parse(line);
+      if (row?.run) claimed.add(row.run);
+    } catch { /* a torn last line is not evidence of anything */ }
+  }
+  if (!claimed.size) return [];
+  const known = new Set(ledger.read(root, cfg).map((r) => r.runId).filter(Boolean));
+  if (currentRun) known.add(currentRun);
+  return [...claimed].filter((r) => !known.has(r));
 }
 
 /**

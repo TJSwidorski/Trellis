@@ -24,6 +24,7 @@ import { resolveActive, blockedByAudit, neverActivated, materialise, activationP
 import { loadCodes, normaliseCode, allCodes, groupSimilar, CODES_DOC } from "../lib/codes.mjs";
 import { KINDS, FLAG_TO_KIND } from "../lib/kinds.mjs";
 import * as friction from "../lib/friction.mjs";
+import * as triage from "../lib/triage.mjs";
 import { kindActionable, kindCounts, shortlist } from "../lib/evolve.mjs";
 import os from "node:os";
 import { spawnSync } from "node:child_process";
@@ -269,6 +270,50 @@ check("ADVERSARIAL an alternate spelling of a protected path does not escape", (
   // Traversal and absolute paths are refused outright rather than resolved.
   for (const s of ["a/../kit/lib/gate.mjs", "references/../kit/regression/run.mjs", "C:/x/kit/lib/gate.mjs", "/etc/passwd", "\\\\server\\share\\x"]) {
     assert(classify(s) === "invalid", `classify("${s}") === "${classify(s)}" — expected refusal`);
+  }
+});
+
+// -------------------------------------------------------------------- hooks
+//
+// CLAUDE.md and CONTEXT.md both claim hooks stop Claude Code editing
+// MISSION.md and kit/ directly. Until now nothing checked that the ACTUAL
+// hook script enforces it — only that classify() agreed a path was
+// protected, which says nothing about whether protect-runner.mjs was ever
+// updated to match. Spawn the real script exactly as Claude Code invokes a
+// PreToolUse hook: JSON on stdin, exit code 2 to block.
+
+function runHook(rel, filePath) {
+  // kitRoot is declared further down in this file; resolve independently
+  // from `here` (this file's own directory) rather than reorder.
+  const r = spawnSync(process.execPath, [path.resolve(here, "../..", rel)], {
+    input: JSON.stringify({ tool_input: { file_path: filePath } }),
+    encoding: "utf8",
+  });
+  return { code: r.status, stderr: r.stderr || "" };
+}
+
+check("ADVERSARIAL protect-runner.mjs actually blocks the paths MISSION.md protects", () => {
+  for (const p of ["MISSION.md", "kit/lib/gate.mjs", "kit/lib/verify.mjs", "kit/lib/mutate.mjs",
+    "kit/lib/worktree.mjs", "kit/lib/paths.mjs", "kit/lib/extract.mjs",
+    "kit/schema/graph.schema.json", "kit/regression/run.mjs"]) {
+    const { code } = runHook(".claude/hooks/protect-runner.mjs", p);
+    assert(code === 2, `protect-runner.mjs let an Edit/Write through for protected path "${p}" (exit ${code})`);
+  }
+});
+
+check("ADVERSARIAL protect-runner.mjs blocks evidence files and the proposal directory", () => {
+  for (const p of [".trellis/triage.jsonl", ".trellis/friction.jsonl", ".trellis/ledger.jsonl",
+    ".trellis/skills.jsonl", "references/CODES.md", "evolution/proposals/001-x.md",
+    ".claude/settings.json", ".claude/settings.local.json"]) {
+    const { code } = runHook(".claude/hooks/protect-runner.mjs", p);
+    assert(code === 2, `protect-runner.mjs let an Edit/Write through for "${p}" (exit ${code})`);
+  }
+});
+
+check("protect-runner.mjs does not block ordinary project files or advisory docs", () => {
+  for (const p of ["src/foo.mjs", "tests/foo.test.mjs", "references/EVOLUTION.md", "README.md", "sessions/06_triage/CONTEXT.md"]) {
+    const { code } = runHook(".claude/hooks/protect-runner.mjs", p);
+    assert(code === 0, `protect-runner.mjs blocked an ordinary path "${p}" that should be editable`);
   }
 });
 
@@ -527,7 +572,11 @@ check("ADVERSARIAL every shipped SKILL.md has frontmatter that can actually trig
 // three ideas. These checks defend the other half of that bargain: an unnamed
 // code must stay visible without ever becoming able to act.
 
-const CFG = { paths: { state: ".trellis" } };
+// tiers matches the shape of a real config's roster (cheap/mid/strong) so
+// tests exercising "the top tier is costly" express that through config,
+// the same way isCostly reads it, rather than a literal it would pass
+// against even if the tier-name comparison were deleted entirely.
+const CFG = { paths: { state: ".trellis" }, tiers: [{ name: "cheap" }, { name: "mid" }, { name: "strong" }] };
 
 /** A throwaway repo root carrying a real CODES.md and a triage record. */
 function triageRoot(rows) {
@@ -641,6 +690,7 @@ function triageStageRoot({
   decisions = [{ node: "n01", verdict: "accept" }],
   jsonl,
   frictionRows = [{ run: "run-1", stage: "06_triage", kind: "none" }],
+  ledgerRows,
 }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-triage-"));
   fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
@@ -654,6 +704,7 @@ function triageStageRoot({
   w("triage.json", { decisions });
   if (jsonl !== undefined) wl("triage.jsonl", jsonl);
   if (frictionRows !== undefined) wl("friction.jsonl", frictionRows);
+  if (ledgerRows !== undefined) wl("ledger.jsonl", ledgerRows);
   return dir;
 }
 
@@ -691,6 +742,101 @@ check("ADVERSARIAL an unstamped triage record does not satisfy the stage", () =>
 check("ADVERSARIAL a run-stamped record carrying no decisions does not satisfy the stage", () => {
   const root = triageStageRoot({ jsonl: [{ run: "run-1", decisions: [] }] });
   assert(!triageVerify(root, CFG).ok, "an empty decision list was accepted as a triage record");
+});
+
+// The vulnerability sessions/06_triage/CONTEXT.md used to have: the orchestrator
+// hand-appended triage.jsonl itself, including `run`, copied out of state.json.
+// rejectionCounts dedups on `row.run`, so three hand-typed lines reading
+// `run: "a"`, `"b"`, `"c"` in ONE session cleared minRuns=3 on their own. The
+// stage's own runId is always trusted — it came from state.json, not from the
+// file under suspicion — but every OTHER run this file has ever claimed must be
+// backed by a real ledger entry, or the stage fails.
+
+check("ADVERSARIAL a triage.jsonl line claiming a run the ledger never recorded fails the stage", () => {
+  const root = triageStageRoot({
+    jsonl: [
+      { run: "run-1", decisions: [reject("design-slop")] },
+      { run: "fabricated-run-xyz", decisions: [reject("design-slop")] },
+    ],
+  });
+  const r = triageVerify(root, CFG);
+  assert(!r.ok, "a triage.jsonl line claiming an unrecorded run was accepted as evidence");
+  assert(/fabricated-run-xyz/.test(r.detail), `detail should name the forged run, got: ${r.detail}`);
+});
+
+check("triage passes when a past run's line is backed by a real ledger entry", () => {
+  const root = triageStageRoot({
+    jsonl: [
+      { run: "run-0", decisions: [reject("design-slop")] },
+      { run: "run-1", decisions: [reject("design-slop")] },
+    ],
+    ledgerRows: [{ runId: "run-0", nodeId: "n01" }],
+  });
+  const r = triageVerify(root, CFG);
+  assert(r.ok, `a run backed by the ledger should validate, got: ${r.detail}`);
+});
+
+// -------------------------------------------------------- trellis triage (the writer)
+//
+// friction.mjs solved this exact problem — stamp `run` in code rather than
+// accept it from the caller — and this mirrors that module's shape.
+
+check("ADVERSARIAL triage.validate refuses decisions that could never be counted", () => {
+  const cases = [
+    [{ verdict: "reject", code: "x", reason: "r" }, /node is required/],
+    [{ node: "n01", verdict: "invented", reason: "r" }, /not one of/],
+    [{ node: "n01", verdict: "reject", reason: "r" }, /code is required/],
+    [{ node: "n01", verdict: "accept" }, /reason is required/],
+  ];
+  for (const [dec, want] of cases) {
+    const errors = triage.validate(dec);
+    assert(errors.length > 0, `accepted an uncountable decision: ${JSON.stringify(dec)}`);
+    assert(errors.some((e) => want.test(e)),
+      `rejected ${JSON.stringify(dec)} but not for the expected reason: ${errors.join("; ")}`);
+  }
+  assert(triage.validate({ node: "n01", verdict: "accept", reason: "held up fine" }).length === 0,
+    "a well-formed accept decision must be valid");
+});
+
+check("ADVERSARIAL triage.append stamps run itself and refuses an unattributable decision", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-triage-writer-"));
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  const row = triage.append(
+    dir, CFG,
+    { node: "n01", verdict: "reject", code: "design-slop", reason: "x", run: "forged", ts: "1999" },
+    { run: "run-1" }
+  );
+  assert(row.node === "n01", "node was not carried through");
+
+  let threw = false;
+  try { triage.append(dir, CFG, { node: "n01", verdict: "accept", reason: "x" }, { run: null }); } catch { threw = true; }
+  assert(threw, "a decision with no run id was written — it can never be counted, so it is not evidence");
+});
+
+check("ADVERSARIAL triage.append's row always carries the caller's run, never a forged one", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-triage-writer-"));
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  triage.append(
+    dir, CFG,
+    { node: "n01", verdict: "reject", code: "design-slop", reason: "x", run: "forged" },
+    { run: "run-1" }
+  );
+  const lines = fs.readFileSync(path.join(dir, ".trellis", "triage.jsonl"), "utf8").split("\n").filter(Boolean);
+  assert(lines.length === 1, `expected exactly one line, got ${lines.length}`);
+  const written = JSON.parse(lines[0]);
+  assert(written.run === "run-1", `run was taken from the decision instead of the caller: ${written.run}`);
+});
+
+check("triage.append materialises triage.json as a view of this run's jsonl rows", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-triage-writer-"));
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  triage.append(dir, CFG, { node: "n01", verdict: "reject", code: "design-slop", reason: "x" }, { run: "run-1" });
+  triage.append(dir, CFG, { node: "n02", verdict: "accept", reason: "y" }, { run: "run-1" });
+  const summary = JSON.parse(fs.readFileSync(path.join(dir, ".trellis", "triage.json"), "utf8"));
+  assert(Array.isArray(summary.decisions) && summary.decisions.length === 2,
+    `expected 2 accumulated decisions, got: ${JSON.stringify(summary)}`);
+  assert(summary.decisions.map((d) => d.node).join(",") === "n01,n02",
+    `decisions should appear in write order, got: ${JSON.stringify(summary.decisions)}`);
 });
 
 // ------------------------------------------------------------ attempt kinds
@@ -846,6 +992,29 @@ check("a node that landed on the strong tier counts as costly", () => {
     `needing the top tier is expensive and must be in the population: ${JSON.stringify(found)}`);
 });
 
+check("ADVERSARIAL isCostly reads the top tier from config, not a hardcoded 'strong'", () => {
+  // references/EVOLUTION.md names the tier roster as a mechanism free to
+  // change. A hardcoded "strong" literal silently stopped recognising
+  // top-tier landings the moment a project renamed or added a tier — no
+  // error, just a narrower costly population and less pressure reported,
+  // which reads as the loop correctly being quiet rather than blind.
+  const renamedCfg = { paths: { state: ".trellis" }, tiers: [{ name: "cheap" }, { name: "heavy" }] };
+  const history = ["r1", "r2", "r3"].map((runId) =>
+    ledgerRec({ runId, status: "merged", landedTier: "heavy", failureKinds: ["timeout"] })
+  );
+  const found = kindActionable(null, renamedCfg, { minRuns: 3, history });
+  assert(found.length === 1 && found[0].kind === "timeout",
+    `a renamed top tier stopped counting as costly: ${JSON.stringify(found)}`);
+  // And landing on the OLD name "strong" must NOT be treated as top-tier
+  // under a config that no longer has a tier by that name — otherwise this
+  // is matching a literal again, just a different one.
+  const strongHistory = ["r1", "r2", "r3"].map((runId) =>
+    ledgerRec({ runId, status: "merged", landedTier: "strong", failureKinds: ["timeout"] })
+  );
+  assert(kindActionable(null, renamedCfg, { minRuns: 3, history: strongHistory }).length === 0,
+    "landedTier 'strong' was treated as costly under a config with no tier named 'strong'");
+});
+
 check("ADVERSARIAL an unrecognised kind is dropped rather than counted", () => {
   const history = ["r1", "r2", "r3", "r4"].map((runId) =>
     ledgerRec({ runId, status: "exhausted", landedTier: null, failureKinds: ["invented-kind"] })
@@ -930,11 +1099,76 @@ check("ADVERSARIAL an unaudited entry is never recommended for retirement", () =
     `an unaudited entry was proposed for deletion: ${r.skills.map((s) => s.name).join(", ")}`);
 });
 
+check("ADVERSARIAL an entry is not judged against runs that predate its firstSeen", () => {
+  // "Never activated across 40 runs" is not evidence when the entry was
+  // registered yesterday. Without firstSeen, this entry would be judged
+  // against all 5 distinct runs below (>= minRuns) and reported as dead
+  // weight on the strength of runs that happened before it existed.
+  const oldRuns = ["r1", "r2", "r3"].map((run) =>
+    ({ ts: "2020-01-01T00:00:00.000Z", run, stage: "03_cases", name: "used", reason: "stage:03_cases" }));
+  const newRuns = ["r4", "r5"].map((run) =>
+    ({ ts: "2026-06-01T00:00:00.000Z", run, stage: "03_cases", name: "used", reason: "stage:03_cases" }));
+  const entry = skillEntry("brand-new", { firstSeen: "2026-01-01" });
+  const r = neverActivated(reg([skillEntry("used"), entry]), [...oldRuns, ...newRuns], { minRuns: 3 });
+  assert(r.ready, "five distinct runs total should be enough evidence to speak at all");
+  assert(!r.skills.some((s) => s.name === "brand-new"),
+    `an entry with only 2 eligible runs after firstSeen was judged anyway: ${JSON.stringify(r.skills)}`);
+});
+
+check("neverActivated still reports an entry once it has enough runs after its own firstSeen", () => {
+  const oldRuns = ["r1", "r2"].map((run) =>
+    ({ ts: "2020-01-01T00:00:00.000Z", run, stage: "03_cases", name: "used", reason: "stage:03_cases" }));
+  const newRuns = ["r3", "r4", "r5"].map((run) =>
+    ({ ts: "2026-06-01T00:00:00.000Z", run, stage: "03_cases", name: "used", reason: "stage:03_cases" }));
+  const entry = skillEntry("brand-new", { firstSeen: "2026-01-01" });
+  const r = neverActivated(reg([skillEntry("used"), entry]), [...oldRuns, ...newRuns], { minRuns: 3 });
+  const found = r.skills.find((s) => s.name === "brand-new");
+  assert(found && found.runs === 3,
+    `expected brand-new reported with 3 eligible runs, got: ${JSON.stringify(r.skills)}`);
+});
+
+check("ADVERSARIAL materialise refuses a traversal name from the registry", () => {
+  // `name` resolves straight into path.join(dest, name) and then a recursive
+  // force-delete. An entry named "../../kit" would walk outside
+  // .claude/skills/ entirely — SKILLS/ is proposable, not protected.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-mat-traversal-"));
+  const dest = path.join(dir, ".claude", "skills");
+  fs.mkdirSync(dest, { recursive: true });
+  const canary = path.join(dir, "kit");
+  fs.mkdirSync(canary, { recursive: true });
+  fs.writeFileSync(path.join(canary, "canary.txt"), "do not delete me\n");
+
+  materialise(dir, [{ name: "../../kit", kind: "skill", reason: "always" }]);
+  assert(fs.existsSync(path.join(canary, "canary.txt")),
+    "a traversal name in the registry reached outside .claude/skills/");
+
+  // Also refused on the way OUT — a stale hand-edited manifest naming a
+  // traversal path must not be deleted through either.
+  fs.writeFileSync(path.join(dest, ".manifest.json"), JSON.stringify({ written: ["../../kit"] }));
+  materialise(dir, []);
+  assert(fs.existsSync(path.join(canary, "canary.txt")),
+    "a traversal name in a stale manifest was removed through the deletion path");
+});
+
 check("ADVERSARIAL the arsenal is load-bearing, never advisory", () => {
   for (const p of ["SKILLS/REGISTRY.json", "SKILLS/skills/trellis-plan/SKILL.md", "SKILLS/"]) {
     assert(classify(p) === "load-bearing",
       `${p} classified "${classify(p)}" — an arsenal change that auto-applies is one nobody saw`);
   }
+});
+
+check("ADVERSARIAL package.json is load-bearing, not unclassified", () => {
+  // Neither PROTECTED nor LOAD_BEARING meant a version bump fell through to
+  // "unclassified" — the least-guarded tier there is, for a proposal that
+  // could target a version release like any routine kit/lib/ change.
+  assert(classify("package.json") === "load-bearing",
+    `package.json classified "${classify("package.json")}"`);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-pkg-"));
+  fs.mkdirSync(path.join(dir, "evolution", "proposals"), { recursive: true });
+  const result = writeProposal(dir, {
+    title: "bump the version", targets: ["package.json"], rationale: "r", evidence: "e", change: "c",
+  });
+  assert(result.tier === "load-bearing", `expected load-bearing tier, got "${result.tier}"`);
 });
 
 // ---------------------------------------------------------------- friction
@@ -1039,6 +1273,26 @@ check("ADVERSARIAL a contradicted none is counted but never fails the stage", ()
     const r = friction.assertedFor(dir, CFG, { run, stage: "06_triage" });
     assert(r.ok, `asserting none failed the stage for ${run} — that makes silence the safe answer`);
   }
+});
+
+check("ADVERSARIAL a contradicted --none across enough runs reaches the shortlist", () => {
+  // friction.contradictions() used to be computed and shown only in a
+  // human-facing report; stage 07's contract restricts it to `evolve --json`
+  // and nothing else, so the one mechanism that catches a session lying
+  // about friction never reached the party with judgement.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-shortlist-"));
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  for (const run of ["r1", "r2", "r3"]) {
+    friction.append(dir, CFG, { stage: "06_triage", kind: "none" }, { run });
+  }
+  const ledgerRows = ["r1", "r2", "r3"].map((runId) => ({ runId, nodeId: "n01", status: "exhausted" }));
+  fs.writeFileSync(path.join(dir, ".trellis", "ledger.jsonl"), ledgerRows.map((r) => JSON.stringify(r)).join("\n") + "\n");
+
+  const rows = shortlist(dir, CFG, { minRuns: 3 });
+  const found = rows.find((r) => r.source === "friction" && r.code === "unreported-suspected");
+  assert(found, `expected an unreported-suspected row, got: ${JSON.stringify(rows)}`);
+  assert(found.runs === 3, `expected 3 distinct runs, got ${found.runs}`);
+  assert(found.targets?.includes("06_triage"), `expected the stage named, got: ${JSON.stringify(found)}`);
 });
 
 /** A friction root carrying a real CODES.md, written by hand as a human could. */

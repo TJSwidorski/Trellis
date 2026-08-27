@@ -10,6 +10,46 @@ under `kit/schema/`) are **not** tracked by this file. They change only on an
 incompatible on-disk format break, documented in `UPGRADING.md`, not on a routine
 release.
 
+## v2.3.0 — authenticate the evidence, make the docs true
+
+The self-improvement loop's evidence stream had an unvalidated `run` field —
+the one field its entire `minRuns` discipline depends on — and anything the
+unsandboxed gate executed (see v2.2.0) could append to it. Also: three
+documents claimed a hooks/apply behavior the code did not have.
+
+- **`trellis triage`** (`kit/lib/triage.mjs`, new). Stage 06 used to hand-format
+  `.trellis/triage.jsonl` itself, including the `run` field copied out of
+  `state.json` — three fabricated `run` values in one session could clear
+  `minRuns: 3` on their own. Mirrors `friction.mjs`'s pattern: `run` is
+  stamped in code, never accepted from the caller. `.trellis/triage.json` is
+  now a materialised view of the current run's jsonl rows, not a separate
+  file to keep in sync.
+- **Forged-run detection** (`kit/lib/driver.mjs`). Stage 06's verify now cross-
+  checks every distinct `run` value `.trellis/triage.jsonl` has *ever* claimed
+  against runIds the ledger actually recorded, not just the current run's.
+- **`isCostly` reads the top tier from config** (`kit/lib/evolve.mjs`), not a
+  hardcoded `"strong"` — a renamed or added top tier no longer silently drops
+  out of the self-improvement loop's costly-node population.
+- **`friction.contradictions()` wired into the shortlist** as a fourth source
+  (`unreported-suspected`). The one mechanism that catches a session falsely
+  asserting `--none` was computed and shown only to a human; stage 07's
+  contract restricts it to `evolve --json`, so it never reached the one place
+  a decision gets made.
+- **`neverActivated` respects an entry's `firstSeen`** (`kit/lib/skills.mjs`) —
+  a skill registered yesterday is no longer judged against runs that predate
+  it. **`materialise` validates registry-supplied skill names** through
+  `safeRelative` before a recursive delete, closing a traversal path.
+- **Hook coverage now matches what `CLAUDE.md`/`CONTEXT.md` claim**
+  (`.claude/hooks/protect-runner.mjs`). Previously covered three run-state
+  filenames and `.worktrees/`; now imports `PROTECTED` from `evolve.mjs` and
+  additionally covers the evidence `.jsonl` files, `evolution/proposals/`,
+  `references/CODES.md`, and both settings files.
+- **Deleted the false auto-apply claim** from `cli.mjs`, `evolution/README.md`,
+  `references/EVOLUTION.md`, and `sessions/06_triage/CONTEXT.md` — no apply
+  mechanism exists; every proposal waits for a human.
+- **`package.json` classified `LOAD_BEARING`** (`kit/lib/evolve.mjs`) — it was
+  neither protected nor load-bearing before, the least-guarded tier there is.
+
 ## v2.2.0 — integrity: close the gate, make the oracle real
 
 Two independent adversarial audits converged on the same root cause: the gate
