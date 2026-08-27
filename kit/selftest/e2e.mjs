@@ -443,6 +443,33 @@ import "a-package-that-is-definitely-not-installed";
       `expected an env-failure finding, got: ${JSON.stringify(vres2.findings)}`);
     assert.strictEqual(vres2.ok, false, "a broken environment must not report ok");
   });
+
+  // A node whose declared tests never import anything from its own write scope
+  // used to skip stubbing silently, then run the gate against a repo where the
+  // implementation simply does not exist — a module-not-found error exits
+  // non-zero exactly like a real assertion, and that used to be reported as
+  // "non-vacuous". There IS a concrete path here (unlike `unstubbable`, which
+  // fires when the write scope is a glob); the tests just never reference it.
+  write(vRoot, "tests/orphan.test.mjs", `
+import assert from "node:assert";
+import { somethingElseEntirely } from "../src/unrelated.mjs";
+assert.ok(somethingElseEntirely);
+`.trim());
+  write(vRoot, "src/orphan.mjs", "export const orphan = () => 1;\n");
+  write(vRoot, "src/unrelated.mjs", "export const somethingElseEntirely = () => 1;\n");
+  const vNodes3 = new Map([
+    ["orphan", normalizeNode({ id: "orphan", title: "orphan", goal: "g",
+      write: ["src/orphan.mjs"], tests: ["tests/orphan.test.mjs"],
+      gate: "node tests/orphan.test.mjs" }, vCfg)],
+  ]);
+  const vres3 = await verifyTests(vCfg, { nodes: [] }, vNodes3, vRoot);
+  check("ADVERSARIAL a node whose tests import nothing from its write scope is a hard failure, not a pass", () => {
+    const orphanFindings = vres3.findings.filter((f) => f.nodeId === "orphan");
+    assert.ok(orphanFindings.some((f) => f.kind === "unstubbed"),
+      `expected an unstubbed finding, got: ${JSON.stringify(orphanFindings)}`);
+    assert.strictEqual(vres3.ok, false, "a node nothing was stubbed for must not report ok");
+  });
+
   fs.rmSync(vRoot, { recursive: true, force: true });
 
   // ---- environment failure does not escalate tiers ----
@@ -570,6 +597,45 @@ assert.strictEqual(auto(), "ok");
       `no REPORT.md\nstdout: ${auto.stdout}\nstderr: ${auto.stderr}`);
   });
   fs.rmSync(aRoot, { recursive: true, force: true });
+
+  // `trellis verify-tests` used to always exit 0 unless a HARD finding forced
+  // `die()` — so a run where every node was soft-skipped (a language it does
+  // not check) printed "Nothing here is proven" and still exited 0. Since
+  // driver.mjs's stage-04 verify shells out to this exact command and reads
+  // only its exit code, the headless chain reported non-vacuity established on
+  // a run that established none of it. This must be exercised as a real
+  // subprocess: the bug is in cmdVerifyTests's process.exitCode, not in
+  // verifyTests() itself, which was already correct.
+  const nRoot = makeRepo();
+  write(nRoot, "tests/only.test.py", "assert True\n");
+  write(nRoot, "src/only.mjs", "export const only = () => 1;\n");
+  write(nRoot, ".trellis/graph.json", JSON.stringify({
+    version: 1,
+    project: "nothing-proven",
+    nodes: [
+      { id: "only", title: "only", goal: "g", write: ["src/only.mjs"],
+        tests: ["tests/only.test.py"], gate: "python -c \"pass\"" },
+    ],
+  }, null, 2));
+  write(nRoot, "trellis.config.json", JSON.stringify({
+    project: "nothing-proven", baseBranch: "main",
+    tiers: [{ name: "cheap", baseUrl: "http://x/v1", model: "m" }],
+    gate: { timeoutMs: 20000 },
+  }, null, 2));
+  g(nRoot, "add", "-A"); g(nRoot, "commit", "-qm", "fixture");
+  const nothingProven = await new Promise((resolve) => {
+    const c = spawn("node", [CLI, "verify-tests"], { cwd: nRoot });
+    let stdout = "", stderr = "";
+    c.stdout.on("data", (d) => (stdout += d));
+    c.stderr.on("data", (d) => (stderr += d));
+    c.on("close", (status) => resolve({ status, stdout, stderr }));
+  });
+  check("ADVERSARIAL verify-tests exits non-zero when nothing was proven", () => {
+    assert.notStrictEqual(nothingProven.status, 0,
+      `expected a non-zero exit when every node is soft-skipped, got 0.\n` +
+      `stdout: ${nothingProven.stdout}\nstderr: ${nothingProven.stderr}`);
+  });
+  fs.rmSync(nRoot, { recursive: true, force: true });
 
   // ---- report ----
   let failed = 0;

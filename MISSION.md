@@ -55,10 +55,20 @@ kit/lib/gate.mjs
 kit/lib/verify.mjs
 kit/lib/mutate.mjs
 kit/lib/worktree.mjs
+kit/lib/paths.mjs
+kit/lib/extract.mjs
 kit/schema/
 kit/regression/
 .claude/hooks/
 ```
+
+`paths.mjs` and `extract.mjs` joined the list in v2.2.0. `gate.mjs`, `verify.mjs`,
+and `worktree.mjs` are protected because they decide what a worker may touch —
+but the actual decisions (`matchDeny`, `matchAllow`, `safeRelative`, and the
+output-screening in `screenBlocks`) are implemented in these two files and merely
+called from the protected ones. A proposal that made `matchDeny` return `false`
+would disable `denyWrite`, the frozen-test check, and the credential filter in
+`copyRepo` at once, while touching no file on the original list.
 
 The last two matter most and are the least obvious. A system that can edit its own
 regression suite has no regression suite. A system that can edit its own schema can

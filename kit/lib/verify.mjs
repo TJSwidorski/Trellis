@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { spawnSync } from "node:child_process";
 import { exec, gateEnv } from "./gate.mjs";
 import { detectEnvFailure } from "./envfail.mjs";
 import { norm, matchDeny } from "./paths.mjs";
@@ -42,17 +43,63 @@ export function isCheckable(rel) {
 const IMPORT_RE =
   /import\s+(?:([\w$]+)\s*,\s*)?(?:\{([^}]*)\}|\*\s+as\s+([\w$]+)|([\w$]+))?\s*from\s*['"]([^'"]+)['"]/g;
 
+// `const { a, b } = require('./x')` / `const mod = require('./x')`, and the
+// dynamic-import equivalents `const { a } = await import('./x')` /
+// `const mod = await import('./x')`. Both hand back the whole module rather
+// than naming imports in the statement itself, so a destructuring pattern is
+// the only place names ever appear; a bare binding is treated like
+// `import * as mod`, which is what it is.
+const REQUIRE_DESTRUCTURE_RE =
+  /(?:const|let|var)\s*\{([^}]*)\}\s*=\s*(?:await\s+)?(?:require|import)\(\s*['"]([^'"]+)['"]\s*\)/g;
+const REQUIRE_BARE_RE =
+  /(?:const|let|var)\s+[\w$]+\s*=\s*(?:await\s+)?(?:require|import)\(\s*['"]([^'"]+)['"]\s*\)/g;
+
+/**
+ * Extension-agnostic comparison between a resolved import specifier and a
+ * declared write-scope path.
+ *
+ * Four of six realistic import forms used to fail an exact string comparison:
+ * an extensionless specifier (`from '../src/calc'`), the TypeScript
+ * `.js`-specifier-for-a-`.ts`-file convention, and (handled upstream, not
+ * here) `require()` / dynamic `import()` were simply never matched by
+ * IMPORT_RE at all. When comparison failed, `verifyTests` silently wrote no
+ * stub and let the gate run against a repo where the implementation was
+ * simply absent — reporting the resulting module-not-found error as
+ * "non-vacuous" when nothing had been proven.
+ *
+ * Stripping a known extension from both sides before comparing the stem
+ * handles the extensionless and `.js`-for-`.ts` cases in one rule. The
+ * `/index` case handles a specifier that names a directory whose target
+ * resolves through an index file.
+ */
+export function specMatchesTarget(resolvedSpec, targetRel) {
+  const a = norm(resolvedSpec);
+  const b = norm(targetRel);
+  if (a === b) return true;
+  const stripExt = (p) => (CHECKABLE_EXT.has(path.extname(p)) ? p.slice(0, -path.extname(p).length) : p);
+  const aStem = stripExt(a);
+  const bStem = stripExt(b);
+  if (aStem === bStem) return true;
+  if (bStem.endsWith("/index") && aStem === bStem.slice(0, -"/index".length)) return true;
+  return false;
+}
+
 /** Names a test file imports from a given module path. */
 export function importedNames(testSource, testFilePath, targetRel, root) {
   const names = new Set();
   let ns = false;
+
+  const resolveAndMatch = (spec) => {
+    if (!spec.startsWith(".")) return false;
+    const resolved = path.relative(root, path.resolve(path.dirname(testFilePath), spec));
+    return specMatchesTarget(resolved, targetRel);
+  };
+
   let m;
   IMPORT_RE.lastIndex = 0;
   while ((m = IMPORT_RE.exec(testSource))) {
     const [, defaultWithBraces, braced, star, bare, spec] = m;
-    if (!spec.startsWith(".")) continue;
-    const resolved = norm(path.relative(root, path.resolve(path.dirname(testFilePath), spec)));
-    if (resolved !== norm(targetRel)) continue;
+    if (!resolveAndMatch(spec)) continue;
     if (star) ns = true;
     if (bare || defaultWithBraces) names.add("__default__");
     for (const part of (braced || "").split(",")) {
@@ -62,6 +109,26 @@ export function importedNames(testSource, testFilePath, targetRel, root) {
       names.add(as[0].trim());
     }
   }
+
+  REQUIRE_DESTRUCTURE_RE.lastIndex = 0;
+  while ((m = REQUIRE_DESTRUCTURE_RE.exec(testSource))) {
+    const [, braced, spec] = m;
+    if (!resolveAndMatch(spec)) continue;
+    for (const part of braced.split(",")) {
+      const t = part.trim();
+      if (!t) continue;
+      const as = t.split(/\s*:\s*/); // destructured rename: `{ a: renamed }`
+      names.add(as[0].trim());
+    }
+  }
+
+  REQUIRE_BARE_RE.lastIndex = 0;
+  while ((m = REQUIRE_BARE_RE.exec(testSource))) {
+    const [, spec] = m;
+    if (!resolveAndMatch(spec)) continue;
+    ns = true;
+  }
+
   return { names: [...names], namespace: ns };
 }
 
@@ -145,11 +212,19 @@ export async function verifyTests(cfg, graph, nodes, root, { log = () => {} } = 
     }
 
     // ---- 1. syntax ----
+    // Argv, not an interpolated shell string. `t` comes from node.tests in
+    // graph.json — derived from a product graph authored outside Trellis —
+    // and `validateGraph` runs it through safeRelative before this can ever
+    // be reached, but this call gets the second layer for free: spawnSync
+    // with an argv array and no shell treats `abs` as one literal argument,
+    // so a `$(...)`, a backtick, or a `"` in the path has no shell to reach.
     for (const t of tests) {
       const abs = path.join(root, t);
-      const r = await exec(`node --check "${abs}"`, root, 30000);
-      if (r.code !== 0) {
-        findings.push({ nodeId: node.id, kind: "syntax", message: `${t} does not parse:\n${String(r.output).slice(0, 500)}` });
+      const r = spawnSync(process.execPath, ["--check", abs], { cwd: root, encoding: "utf8", timeout: 30000 });
+      const code = r.status ?? -1;
+      if (code !== 0) {
+        const output = (r.stdout || "") + (r.stderr || "");
+        findings.push({ nodeId: node.id, kind: "syntax", message: `${t} does not parse:\n${output.slice(0, 500)}` });
         syntaxOk = false;
       }
     }
@@ -160,12 +235,13 @@ export async function verifyTests(cfg, graph, nodes, root, { log = () => {} } = 
     try {
       copyRepo(root, scratch, cfg);
 
-      const targets = (node.write || []).filter((w) => !w.includes("*") && /\.(mjs|js|cjs|ts)$/.test(w));
+      const targets = (node.write || []).filter((w) => !w.includes("*") && CHECKABLE_EXT.has(path.extname(w)));
       if (!targets.length) {
         findings.push({ nodeId: node.id, kind: "unstubbable", message: `write scope has no concrete module path, so non-vacuity cannot be checked` });
         continue;
       }
 
+      let stubbedCount = 0;
       for (const target of targets) {
         const names = new Set();
         let ns = false;
@@ -176,9 +252,29 @@ export async function verifyTests(cfg, graph, nodes, root, { log = () => {} } = 
           ns ||= got.namespace;
         }
         if (!names.size && !ns) continue; // this test file doesn't import this target
+        stubbedCount++;
         const abs = path.join(scratch, target);
         fs.mkdirSync(path.dirname(abs), { recursive: true });
         fs.writeFileSync(abs, buildStub([...names]));
+      }
+
+      // Every target skipped means no test in this node imports anything from
+      // its write scope. The gate below would then run against a repo where
+      // the implementation is simply ABSENT — a module-not-found error exits
+      // non-zero exactly like a real assertion failure, and reporting that as
+      // "non-vacuous" proves nothing. This is a HARD finding: unlike
+      // `unstubbable` above (no concrete path exists to check at all), there
+      // IS a concrete path here and the tests simply never reference it.
+      if (!stubbedCount) {
+        findings.push({
+          nodeId: node.id,
+          kind: "unstubbed",
+          message:
+            `none of this node's tests (${tests.join(", ")}) import anything from its write scope ` +
+            `(${targets.join(", ")}) — non-vacuity could NOT be established. Either the tests import a ` +
+            `different path than the contract declares, or they do not test what the node builds.`,
+        });
+        continue;
       }
 
       const r = await exec(node.gate, scratch, cfg.gate.timeoutMs, gateEnv(cfg));

@@ -16,12 +16,21 @@ import { isKnownKind } from "./kinds.mjs";
 import * as friction from "./friction.mjs";
 
 // Never proposable. See MISSION.md. Prefix match on repo-relative paths.
+//
+// paths.mjs and extract.mjs are here for the same reason worktree.mjs is: they
+// are what gate.mjs, verify.mjs, and worker.mjs actually call to decide whether
+// a path or a block of output is allowed. Protecting the callers and leaving
+// the boundary's own implementation merely load-bearing (proposable, human-
+// merged, same as any other kit/lib file) would let a proposal reach the exact
+// same effect as editing gate.mjs by naming a file nobody was watching for it.
 export const PROTECTED = [
   "MISSION.md",
   "kit/lib/gate.mjs",
   "kit/lib/verify.mjs",
   "kit/lib/mutate.mjs",
   "kit/lib/worktree.mjs",
+  "kit/lib/paths.mjs",
+  "kit/lib/extract.mjs",
   "kit/schema/",
   "kit/regression/",
   ".claude/hooks/",

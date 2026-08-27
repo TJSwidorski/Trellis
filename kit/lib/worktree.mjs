@@ -156,16 +156,43 @@ export function commitWorktree(wt, message) {
   return r.ok || /nothing to commit/i.test(r.out + r.err);
 }
 
-/** Revert specific paths in the worktree back to their committed state. */
+/**
+ * Revert specific paths in the worktree back to their committed state.
+ *
+ * `git checkout HEAD -- ...paths` validates every pathspec before it acts: one
+ * path that does not exist in HEAD — a file the worker only just created —
+ * aborts the WHOLE checkout with a non-zero exit, silently leaving every
+ * tracked path in the same list un-reverted. The caller had no way to see that
+ * from the old signature (nothing was returned), so gate.mjs told the model its
+ * tampering "has been reverted" when none of it had been.
+ *
+ * Partition first — checkout only the paths that exist in HEAD, remove the
+ * rest — and return what was actually reverted so callers can report the
+ * truth instead of assuming success.
+ */
 export function revertPaths(wt, paths) {
-  if (!paths.length) return;
-  git(wt, ["checkout", "HEAD", "--", ...paths]);
+  if (!paths.length) return [];
+
+  const tracked = [];
+  const untracked = [];
   for (const p of paths) {
-    // checkout won't remove an untracked file the worker invented
-    const full = path.join(wt, p);
-    const tracked = git(wt, ["ls-files", "--error-unmatch", p]).ok;
-    if (!tracked && fs.existsSync(full)) fs.rmSync(full, { force: true });
+    (git(wt, ["ls-files", "--error-unmatch", "--", p]).ok ? tracked : untracked).push(p);
   }
+
+  const reverted = [];
+  if (tracked.length) {
+    const r = git(wt, ["checkout", "HEAD", "--", ...tracked]);
+    if (r.ok) reverted.push(...tracked);
+    // else: none of these were reverted either. Omission from the return value
+    // is the signal — there is nothing more specific to report per-path from a
+    // single checkout call.
+  }
+  for (const p of untracked) {
+    const full = path.join(wt, p);
+    if (fs.existsSync(full)) fs.rmSync(full, { force: true });
+    reverted.push(p);
+  }
+  return reverted;
 }
 
 /** Merge a node branch into the base branch. Returns { ok, conflict, message }. */

@@ -10,6 +10,14 @@ import { detectEnvFailure, envFailureMessage } from "./envfail.mjs";
  *   1. scope   — every changed path, including untracked, is inside node.write
  *   2. frozen  — no declared test file was touched
  *   3. command — the node's gate command exits 0
+ *
+ * 1 and 2 also run again, after 3. The command is untrusted code that just ran
+ * with shell:true as the host user, and nothing above constrains what it does
+ * once it starts — it can rewrite its own test file at import time, or append
+ * to .trellis/triage.jsonl, as a side effect of running rather than as a
+ * `### FILE:` block. That used to be invisible until the NEXT attempt's
+ * pre-check ran, which never happens if THIS attempt is the one that passes
+ * and merges. See the re-check after `exec` below.
  */
 export async function runGate(cfg, node, worktree) {
   // ---- 1 & 2: what actually changed on disk ----
@@ -32,12 +40,19 @@ export async function runGate(cfg, node, worktree) {
 
   const tampered = seen.filter((p) => matchDeny(p, node.tests || []));
   if (tampered.length) {
-    revertPaths(worktree, tampered);
+    // Ignored paths can be whole collapsed directory entries (ignoredPaths'
+    // docblock) — never hand those to revertPaths, only what changedPaths saw.
+    const reverted = revertPaths(worktree, tampered.filter((p) => changed.includes(p)));
+    const remaining = tampered.filter((p) => !reverted.includes(p));
     return {
       ok: false,
       kind: "test-tampering",
       feedback:
-        `You modified frozen test files: ${tampered.join(", ")}. Those changes have been reverted.\n` +
+        `You modified frozen test files: ${tampered.join(", ")}.\n` +
+        (reverted.length ? `Reverted: ${reverted.join(", ")}.\n` : "") +
+        (remaining.length
+          ? `NOT reverted — remove these yourself: ${remaining.join(", ")}.\n`
+          : "") +
         `The tests are the specification. Do not change them — change your implementation so the ` +
         `existing tests pass exactly as written.`,
       changed,
@@ -63,12 +78,17 @@ export async function runGate(cfg, node, worktree) {
     (p) => !matchAllow(p, node.write || []) || matchDeny(p, cfg.boundaries.denyWrite)
   );
   if (outOfScope.length) {
-    revertPaths(worktree, outOfScope);
+    const reverted = revertPaths(worktree, outOfScope);
+    const remaining = outOfScope.filter((p) => !reverted.includes(p));
     return {
       ok: false,
       kind: "out-of-scope",
       feedback:
-        `These paths are outside your write scope and have been reverted: ${outOfScope.join(", ")}.\n` +
+        `These paths are outside your write scope.\n` +
+        (reverted.length ? `Reverted: ${reverted.join(", ")}.\n` : "") +
+        (remaining.length
+          ? `NOT reverted — remove these yourself: ${remaining.join(", ")}.\n`
+          : "") +
         `You may only create or modify: ${(node.write || []).join(", ")}.\n` +
         `If the task genuinely needs another file, say so in plain prose instead of writing it.`,
       changed,
@@ -91,6 +111,44 @@ export async function runGate(cfg, node, worktree) {
       exitCode: null,
     };
   }
+  // ---- 1 & 2 again: what changed WHILE the command ran ----
+  // Getting here means the pre-checks above found nothing wrong with anything
+  // on disk before `exec` started — otherwise this function would already have
+  // returned. So any violation found now was caused by the command itself:
+  // an import-time write, a test-runner plugin, a script the gate invoked.
+  // This runs before the exit-code branches below on purpose — a rewritten
+  // oracle that happens to make the suite pass is a worse outcome than one
+  // that makes it fail, and neither exit code should be trusted once this
+  // fires.
+  const changedDuring = changedPaths(worktree);
+  const ignoredDuring = ignoredPaths(worktree);
+  const seenDuring = [...changedDuring, ...ignoredDuring];
+  const tamperedDuring = seenDuring.filter((p) => matchDeny(p, node.tests || []));
+  const deniedDuring = seenDuring.filter((p) => matchDeny(p, cfg.boundaries.denyWrite));
+  const outOfScopeDuring = changedDuring.filter((p) => !matchAllow(p, node.write || []));
+  const tampering = [...new Set([...tamperedDuring, ...deniedDuring, ...outOfScopeDuring])];
+  if (tampering.length) {
+    // Only hand changedPaths entries to revertPaths — an ignored one can be a
+    // whole collapsed directory (node_modules/), and reverting that would be
+    // its own outage. See ignoredPaths' docblock in worktree.mjs.
+    const reverted = revertPaths(worktree, tampering.filter((p) => changedDuring.includes(p)));
+    const remaining = tampering.filter((p) => !reverted.includes(p));
+    return {
+      ok: false,
+      kind: "gate-tampering",
+      feedback:
+        `Running the gate command changed something it should not have: ${tampering.join(", ")}.\n` +
+        (reverted.length ? `Reverted: ${reverted.join(", ")}.\n` : "") +
+        (remaining.length
+          ? `NOT reverted — remove these yourself: ${remaining.join(", ")}.\n`
+          : "") +
+        `This happened as a SIDE EFFECT of running your code — an import, a script, a plugin — not ` +
+        `from a ### FILE: block. Whatever your implementation does at import or run time, make it stop ` +
+        `touching test files, denied paths, or anything outside your write scope.`,
+      changed: seenDuring,
+    };
+  }
+
   if (res.code === 0) {
     return { ok: true, kind: "pass", changed, exitCode: 0, output: tail(res.output, 1000) };
   }

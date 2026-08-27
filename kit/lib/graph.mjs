@@ -103,7 +103,20 @@ export function validateGraph(graph, cfg, repoRoot, { requireTests = true } = {}
 
     // Tests must exist on disk before the run — they are the acceptance oracle.
     for (const t of n.tests || []) {
-      const tp = path.join(repoRoot, t);
+      // `read` and `write` both go through safeRelative; `tests` never did.
+      // verify-tests and the mutation checker both interpolate this path into
+      // a shell command (`node --check "${abs}"`) — a traversal or an absolute
+      // path here is not just a scoping bug, it is a path an attacker chose
+      // reaching a shell with shell:true. graph.json is orchestrator-authored,
+      // but it is derived from a product graph handed in from outside Trellis,
+      // which the rest of this function already treats as untrusted enough to
+      // validate rather than trust.
+      const safe = safeRelative(repoRoot, t);
+      if (!safe.ok) {
+        errors.push(`${at}: test path "${t}" ${safe.reason}.`);
+        continue;
+      }
+      const tp = safe.abs;
       if (!fs.existsSync(tp)) {
         const msg = `${at}: test file "${t}" does not exist. /trellis-tests writes these; they must exist before \`run\`.`;
         (requireTests ? errors : warnings).push(msg);

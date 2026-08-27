@@ -37,6 +37,7 @@ export const KINDS = Object.freeze(
     "timeout",
     "test-failure",
     "test-tampering",
+    "gate-tampering",
     "out-of-scope",
     "env-failure",
     // worker.mjs

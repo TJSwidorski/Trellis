@@ -241,11 +241,16 @@ async function cmdVerifyTests() {
 
   // Do not claim more than was established. A run where every node was skipped
   // for language reasons used to print the same success line as one where every
-  // gate was actually proven to reject a stub.
+  // gate was actually proven to reject a stub — and `process.exitCode` staying
+  // 0 meant `driver.mjs`'s stage-04 verify, which shells out to this exact
+  // command and checks only its exit code, scraped this warning line into its
+  // own success `detail`. Reserved for nodes.size > 0: an empty graph has
+  // nothing to prove and is not the failure this guards against.
   const unchecked = new Set(soft.map((f) => f.nodeId));
   const proven = nodes.size - unchecked.size;
-  if (proven === 0) {
+  if (proven === 0 && nodes.size > 0) {
     log.warn(`No node's non-vacuity was established (${unchecked.size} unchecked). Nothing here is proven.`);
+    process.exitCode = 1;
   } else if (unchecked.size) {
     log.ok(`${proven} of ${nodes.size} node(s) reject a null stub; ${unchecked.size} could not be checked.`);
   } else {

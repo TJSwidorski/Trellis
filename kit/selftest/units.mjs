@@ -43,6 +43,40 @@ check("buildStub produces importable inert exports", () => {
   assert.ok(s.includes("export const bar"));
 });
 
+// Four of six realistic import forms used to produce no stub at all: the gate
+// then ran against a repo where the target simply did not exist, and a
+// module-not-found error was reported as non-vacuity established. Each row
+// here failed before the extension-agnostic comparison and require()/import()
+// patterns were added to importedNames.
+check("importedNames resolves an extensionless specifier", () => {
+  const got = importedNames("import { a } from '../src/calc';", "/r/tests/t.test.mjs", "src/calc.mjs", "/r");
+  assert.deepStrictEqual(got.names, ["a"]);
+});
+check("importedNames resolves the TS .js-specifier-for-a-.ts-file convention", () => {
+  const got = importedNames("import { a } from '../src/calc.js';", "/r/tests/t.test.mjs", "src/calc.ts", "/r");
+  assert.deepStrictEqual(got.names, ["a"]);
+});
+check("importedNames resolves require() with destructuring", () => {
+  const got = importedNames("const { a, b } = require('../src/calc.mjs');", "/r/tests/t.test.mjs", "src/calc.mjs", "/r");
+  assert.deepStrictEqual(got.names.sort(), ["a", "b"]);
+});
+check("importedNames resolves a bare require() as a namespace reference", () => {
+  const got = importedNames("const calc = require('../src/calc.mjs');", "/r/tests/t.test.mjs", "src/calc.mjs", "/r");
+  assert.strictEqual(got.namespace, true);
+});
+check("importedNames resolves dynamic import() with destructuring", () => {
+  const got = importedNames("const { a } = await import('../src/calc.mjs');", "/r/tests/t.test.mjs", "src/calc.mjs", "/r");
+  assert.deepStrictEqual(got.names, ["a"]);
+});
+check("importedNames resolves a bare dynamic import() as a namespace reference", () => {
+  const got = importedNames("const mod = await import('../src/calc.mjs');", "/r/tests/t.test.mjs", "src/calc.mjs", "/r");
+  assert.strictEqual(got.namespace, true);
+});
+check("importedNames resolves a directory import against its index file", () => {
+  const got = importedNames("import { a } from '../src/calc';", "/r/tests/t.test.mjs", "src/calc/index.mjs", "/r");
+  assert.deepStrictEqual(got.names, ["a"]);
+});
+
 // ---------- unit: routing ----------
 const hist = (tag, tier, landed, n) => Array.from({length:n},(_,i)=>({
   runId:"r1", nodeId:`n${i}`, tags:[tag], landedTier: landed?tier:null,

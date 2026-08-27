@@ -27,7 +27,7 @@ import * as friction from "../lib/friction.mjs";
 import { kindActionable, kindCounts, shortlist } from "../lib/evolve.mjs";
 import os from "node:os";
 import { spawnSync } from "node:child_process";
-import { changedPaths, ignoredPaths } from "../lib/worktree.mjs";
+import { changedPaths, ignoredPaths, revertPaths } from "../lib/worktree.mjs";
 import { runGate } from "../lib/gate.mjs";
 import { writeReport } from "../lib/report.mjs";
 import { matchAny, matchDeny, matchAllow, FS_CASE_INSENSITIVE } from "../lib/paths.mjs";
@@ -1793,6 +1793,90 @@ check("ADVERSARIAL a frozen test may not be gitignored", () => {
   const { errors } = validateGraph(g, { boundaries: { denyWrite: [] }, gate: {} }, dir, { requireTests: true });
   assert(errors.some((e) => /ignored by git/.test(e)),
     `a gitignored oracle validated clean: ${JSON.stringify(errors)}`);
+});
+
+check("ADVERSARIAL a test path cannot traverse out of the tree", () => {
+  // `read` and `write` both go through safeRelative; `tests` never did, and
+  // verify-tests interpolates this exact path into `node --check "${abs}"`.
+  // graph.json is orchestrator-authored, but it is derived from a product
+  // graph handed in from outside Trellis — the rest of validateGraph already
+  // treats that as untrusted enough to check.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-testpath-"));
+  const g = {
+    schema: "trellis.graph/1",
+    nodes: [{ id: "n01", title: "t", goal: "g", write: ["src/**"], tests: ["../../../etc/passwd"], gate: "node x" }],
+  };
+  const { errors } = validateGraph(g, { boundaries: { denyWrite: [] }, gate: {} }, dir, { requireTests: false });
+  assert(errors.some((e) => /traversal|escapes worktree/.test(e)),
+    `a traversal test path validated clean: ${JSON.stringify(errors)}`);
+});
+
+check("ADVERSARIAL revertPaths reverts the tracked file even when an untracked path is in the same list", () => {
+  // `git checkout HEAD -- a b` validates every pathspec BEFORE it acts: one
+  // path that does not exist in HEAD aborts the WHOLE checkout with a non-zero
+  // exit, silently leaving every tracked path in the same list un-reverted.
+  // revertPaths used to run that command and never look at its exit code, so
+  // gate.mjs told the model tampered paths "have been reverted" when none of
+  // the tracked ones had been.
+  const dir = gitRepoWith({ "tracked.txt": "original\n" }, { "tracked.txt": "TAMPERED\n" });
+  fs.writeFileSync(path.join(dir, "untracked.txt"), "new\n");
+  const reverted = revertPaths(dir, ["tracked.txt", "untracked.txt"]);
+  // core.autocrlf legitimately rewrites line endings on checkout; that is not
+  // the thing under test here.
+  const onDisk = fs.readFileSync(path.join(dir, "tracked.txt"), "utf8").replace(/\r\n/g, "\n");
+  assert(onDisk === "original\n", `tracked.txt was not reverted: ${JSON.stringify(onDisk)}`);
+  assert(!fs.existsSync(path.join(dir, "untracked.txt")), "untracked.txt was not removed");
+  assert(reverted.includes("tracked.txt"), `reverted list should include tracked.txt: ${JSON.stringify(reverted)}`);
+  assert(reverted.includes("untracked.txt"), `reverted list should include untracked.txt: ${JSON.stringify(reverted)}`);
+});
+
+// ------------------------------------------- side effects of running the gate
+
+checkAsync("ADVERSARIAL a gate command that rewrites its own frozen test does not pass", async () => {
+  // All three pre-exec checks pass cleanly here — src/x.mjs is the only thing
+  // changed, and it is in scope. The tampering happens DURING `exec`, as an
+  // import-time side effect of the gate command itself, not as a `### FILE:`
+  // block. Nothing before runGate's new post-exec check could ever have seen
+  // this on the attempt where it actually happens.
+  const dir = gitRepoWith(
+    {
+      "tests/frozen.test.mjs": "assert(1)\n",
+      "src/x.mjs": "original\n",
+      "tamper.mjs": "import fs from 'node:fs';\nfs.writeFileSync('tests/frozen.test.mjs', 'tampered\\n');\n",
+    },
+    { "src/x.mjs": "changed\n" }
+  );
+  const node = { id: "n01", write: ["src/x.mjs"], tests: ["tests/frozen.test.mjs"], gate: "node tamper.mjs" };
+  const cfg = { boundaries: { denyWrite: [] }, gate: { timeoutMs: 5000 } };
+  const r = await runGate(cfg, node, dir);
+  assert(!r.ok, "a gate command that rewrote its own test still reported ok:true");
+  assert(r.kind === "gate-tampering", `expected gate-tampering, got ${JSON.stringify(r.kind)}`);
+  // core.autocrlf legitimately rewrites line endings on checkout; that is not
+  // the thing under test here.
+  const onDisk = fs.readFileSync(path.join(dir, "tests/frozen.test.mjs"), "utf8").replace(/\r\n/g, "\n");
+  assert(onDisk === "assert(1)\n", `the tampered test was not reverted: ${JSON.stringify(onDisk)}`);
+});
+
+checkAsync("ADVERSARIAL a gate command cannot forge evidence in .trellis/ as a side effect", async () => {
+  // The same hole, from the self-improvement-loop side: anything the gate
+  // executes can append to .trellis/*.jsonl, which the evolve loop is
+  // contractually forbidden from cross-checking against anything else.
+  const dir = gitRepoWith(
+    {
+      "src/x.mjs": "original\n",
+      "tamper.mjs":
+        "import fs from 'node:fs';\n" +
+        "fs.mkdirSync('.trellis', { recursive: true });\n" +
+        "fs.writeFileSync('.trellis/triage.jsonl', JSON.stringify({ run: 'fake' }) + '\\n');\n",
+    },
+    { "src/x.mjs": "changed\n" }
+  );
+  const node = { id: "n01", write: ["src/x.mjs"], tests: [], gate: "node tamper.mjs" };
+  const cfg = { boundaries: { denyWrite: [".trellis/**"] }, gate: { timeoutMs: 5000 } };
+  const r = await runGate(cfg, node, dir);
+  assert(!r.ok, "a gate command that wrote into .trellis/ still reported ok:true");
+  assert(r.kind === "gate-tampering", `expected gate-tampering, got ${JSON.stringify(r.kind)}`);
+  assert(!fs.existsSync(path.join(dir, ".trellis/triage.jsonl")), "the forged evidence file was not removed");
 });
 
 // ------------------------------------------- what leaves the machine, and how
