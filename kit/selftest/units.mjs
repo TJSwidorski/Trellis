@@ -14,6 +14,7 @@ import { chat, readCapped } from "../lib/provider.mjs";
 import { exec } from "../lib/gate.mjs";
 import { sandboxSupported, wrapForSandbox } from "../lib/sandbox.mjs";
 import { structurallyMutable, generateStructuralMutants } from "../lib/structuralMutants.mjs";
+import { buildPrompt } from "../lib/worker.mjs";
 import http from "node:http";
 import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
@@ -730,6 +731,46 @@ check("generateStructuralMutants respects the limit and returns nothing over a s
   const busy = "if (a < b && b < c && c < d) {}";
   const capped = generateStructuralMutants(busy, { limit: 2 });
   assert.strictEqual(capped.length, 2);
+});
+
+check("buildPrompt puts the mutable file-contents section last, after a byte-identical stable prefix", () => {
+  // Item 11: everything through OUTPUT_CONTRACT must be identical no matter
+  // what the write-scope files currently contain, so a caching provider can
+  // reuse it across every retry -- only the tail should differ.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-buildprompt-"));
+  fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+  fs.mkdirSync(path.join(dir, "tests"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "tests", "a.test.mjs"), "assert(true);\n");
+  const cfg = { worker: { maxContextFileBytes: 10000 }, boundaries: { denyWrite: [] } };
+  const node = { id: "n01", title: "t", goal: "g", tests: ["tests/a.test.mjs"], write: ["src/a.mjs"], gate: "true" };
+
+  fs.writeFileSync(path.join(dir, "src", "a.mjs"), "export const a = 1;\n");
+  const p1 = buildPrompt(cfg, node, dir);
+  fs.writeFileSync(path.join(dir, "src", "a.mjs"), "export const a = 999; // totally different\n");
+  const p2 = buildPrompt(cfg, node, dir);
+
+  assert.notStrictEqual(p1, p2, "the two prompts should differ somewhere -- the file contents changed");
+
+  const marker = "## How to respond"; // inside OUTPUT_CONTRACT, the last stable section
+  const cut1 = p1.indexOf(marker);
+  const cut2 = p2.indexOf(marker);
+  assert.ok(cut1 > 0 && cut2 > 0, "expected OUTPUT_CONTRACT's marker to appear in both prompts");
+  const stableEnd = p1.indexOf("\n\n---\n\n", cut1) + "\n\n---\n\n".length;
+  assert.strictEqual(p1.slice(0, stableEnd), p2.slice(0, stableEnd),
+    "the stable prefix (through OUTPUT_CONTRACT) must be byte-identical regardless of mutable file contents");
+
+  // And the mutable section must actually be AFTER that point, not folded
+  // into the "stable" prefix by accident.
+  assert.ok(p1.indexOf("## Current contents of files you may edit") > cut1,
+    "the mutable section must come after the stable OUTPUT_CONTRACT section, not before it");
+});
+
+check("ADVERSARIAL buildPrompt still starts with \"# Task:\" verbatim -- the mock-server routing key", () => {
+  const cfg = { worker: { maxContextFileBytes: 10000 }, boundaries: { denyWrite: [] } };
+  const node = { id: "n01", title: "my-node", goal: "g", tests: [], write: [], gate: "true" };
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-buildprompt2-"));
+  const prompt = buildPrompt(cfg, node, dir);
+  assert.match(prompt, /^# Task: my-node\n/);
 });
 
 await Promise.all(pending);

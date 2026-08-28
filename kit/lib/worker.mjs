@@ -77,16 +77,32 @@ function fence(rel, text, truncated) {
  * Build the single user message for a node.
  * Deliberately narrow: contract, frozen tests, a few read files, and the write
  * scope. Cheap models degrade fast with long context — do not hand them the repo.
+ *
+ * Section order is deliberate for prompt caching (item 11), not just
+ * readability: everything through OUTPUT_CONTRACT is IDENTICAL across every
+ * attempt on this node within one run — the goal, acceptance criteria,
+ * frozen tests, read-only reference files, write scope, and gate command
+ * never change attempt to attempt. Only "Current contents of files you may
+ * edit" changes, because it reflects whatever the PREVIOUS attempt just
+ * wrote. Putting that one mutable section LAST means a provider that
+ * supports prompt caching (v2.9.2 wires up `cache_control` on this stable
+ * prefix) can reuse the cached prefix on every retry, paying full price only
+ * for the small mutable tail — instead of the whole prompt being a cache
+ * miss the moment the file contents changed by even one byte.
+ *
+ * `# Task: <title>` MUST stay first, verbatim: mock-server.mjs's own
+ * `/# Task: ([^\n]+)/` match over the joined message text is how the test
+ * harness routes a call to the right node's scripted responses.
  */
 export function buildPrompt(cfg, node, worktree) {
   const max = cfg.worker.maxContextFileBytes;
   const deny = cfg.boundaries?.denyWrite ?? [];
-  const sections = [];
+  const stable = [];
 
-  sections.push(`# Task: ${node.title}\n\n${node.goal}`);
+  stable.push(`# Task: ${node.title}\n\n${node.goal}`);
 
-  if (node.acceptance) sections.push(`## Acceptance criteria\n\n${node.acceptance}`);
-  if (node.notes) sections.push(`## Notes\n\n${node.notes}`);
+  if (node.acceptance) stable.push(`## Acceptance criteria\n\n${node.acceptance}`);
+  if (node.notes) stable.push(`## Notes\n\n${node.notes}`);
 
   const testBlocks = [];
   for (const t of node.tests || []) {
@@ -94,7 +110,7 @@ export function buildPrompt(cfg, node, worktree) {
     if (f) testBlocks.push(fence(t, f.text, f.truncated));
   }
   if (testBlocks.length) {
-    sections.push(
+    stable.push(
       `## Frozen tests — these define correctness\n\n` +
       `These files already exist and you may NOT modify them. Your code must make them pass ` +
       `exactly as written.\n\n${testBlocks.join("\n\n")}`
@@ -107,9 +123,21 @@ export function buildPrompt(cfg, node, worktree) {
     if (f) readBlocks.push(fence(r, f.text, f.truncated));
   }
   if (readBlocks.length) {
-    sections.push(`## Existing code for reference (read-only)\n\n${readBlocks.join("\n\n")}`);
+    stable.push(`## Existing code for reference (read-only)\n\n${readBlocks.join("\n\n")}`);
   }
 
+  stable.push(
+    `## Your write scope\n\nYou may create or modify ONLY these paths:\n` +
+    (node.write || []).map((w) => `- ${w}`).join("\n") +
+    `\n\nAnything you write outside this list is discarded and counts as a failed attempt.`
+  );
+
+  stable.push(`## Gate\n\nYour work is accepted only when this exits 0:\n\n\`\`\`\n${node.gate}\n\`\`\``);
+
+  stable.push(OUTPUT_CONTRACT);
+
+  // The one mutable section — see the docblock above on why it goes last.
+  const mutable = [];
   const existing = [];
   for (const w of node.write || []) {
     if (w.includes("*")) continue;
@@ -117,20 +145,10 @@ export function buildPrompt(cfg, node, worktree) {
     if (f) existing.push(fence(w, f.text, f.truncated));
   }
   if (existing.length) {
-    sections.push(`## Current contents of files you may edit\n\n${existing.join("\n\n")}`);
+    mutable.push(`## Current contents of files you may edit\n\n${existing.join("\n\n")}`);
   }
 
-  sections.push(
-    `## Your write scope\n\nYou may create or modify ONLY these paths:\n` +
-    (node.write || []).map((w) => `- ${w}`).join("\n") +
-    `\n\nAnything you write outside this list is discarded and counts as a failed attempt.`
-  );
-
-  sections.push(`## Gate\n\nYour work is accepted only when this exits 0:\n\n\`\`\`\n${node.gate}\n\`\`\``);
-
-  sections.push(OUTPUT_CONTRACT);
-
-  return sections.join("\n\n---\n\n");
+  return [...stable, ...mutable].join("\n\n---\n\n");
 }
 
 function applyBlocks({ writes, deletes }) {
