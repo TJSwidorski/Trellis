@@ -1098,7 +1098,7 @@ async function runStageChain(root, cfg, stages) {
       }
 
       const check = stage.verify(root, cfg);
-      recordSession(root, {
+      recordSession(root, cfg, {
         stage: stage.id,
         cycle: currentCycle(root, cfg)?.cycle ?? null,
         attempt,
@@ -1158,7 +1158,7 @@ async function runStageChain(root, cfg, stages) {
 
 function cmdAutoDryRun(root, cfg, only) {
   const stages = only ? STAGES.filter((s) => s.id === only) : DEFAULT_CHAIN;
-  const stats = sessionStats(root);
+  const stats = sessionStats(root, cfg);
   log.info(log.bold("Stage plan:"));
   for (const stage of stages) {
     const pre = stage.verify(root, cfg);
@@ -1190,7 +1190,7 @@ async function cmdAuto() {
 
   if (flags.has("--dry-run")) return cmdAutoDryRun(root, cfg, only);
 
-  const stats = sessionStats(root);
+  const stats = sessionStats(root, cfg);
   if (Object.keys(stats).length) {
     log.info("Observed cost per stage (from your own runs, not an estimate):");
     for (const [stage, s] of Object.entries(stats)) {
@@ -1467,7 +1467,7 @@ function cmdFriction() {
   const stage = flagVal("stage");
   if (!stage) die("Usage: trellis friction --stage <id> (--none | --kind <k> --code <c> [--target p] [--count n] [--note s])");
 
-  const run = currentRunId(root);
+  const run = currentRunId(root, cfg);
   if (!run) die("No runId in .trellis/state.json. Friction is recorded against a run, or not at all.");
 
   const rec = flags.has("--none")
@@ -1515,7 +1515,7 @@ function cmdTriage() {
     die('Usage: trellis triage --node <id> --verdict reject|accept|hold|take --reason "..." [--code <c>]');
   }
 
-  const run = currentRunId(root);
+  const run = currentRunId(root, cfg);
   if (!run) die("No runId in .trellis/state.json. Triage is recorded against a run, or not at all.");
 
   const rawCode = flagVal("code");
@@ -1672,8 +1672,8 @@ function cmdClassifyPath() {
 // ---------------------------------------------------------------- sessions
 
 function cmdSessions() {
-  const { root } = ctx();
-  const stats = sessionStats(root);
+  const { root, cfg } = ctx();
+  const stats = sessionStats(root, cfg);
   if (!Object.keys(stats).length) {
     log.info("No sessions recorded yet. `trellis auto` writes .trellis/sessions.jsonl as it goes.");
     return;
@@ -1719,7 +1719,7 @@ function applySkills(root, cfg, stage, { dryRun = false } = {}) {
   // Only a real stage transition is evidence. A dry run is somebody asking what
   // would happen, and recording it would make an unused skill look exercised.
   if (!dryRun) {
-    recordActivation(root, cfg, { run: currentRunId(root), stage, active });
+    recordActivation(root, cfg, { run: currentRunId(root, cfg), stage, active });
   }
   return { active, changes, blocked: blockedByAudit(registry, opts), registry };
 }

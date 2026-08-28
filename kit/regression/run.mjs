@@ -19,7 +19,7 @@ import {
 import { validateGraph } from "../lib/graph.mjs";
 import { gateEnv } from "../lib/gate.mjs";
 import { classify, writeProposal, PROTECTED, actionable, unknownCodes, autoAppliable, rejectionCounts as rejectionCountsFn, triagePath } from "../lib/evolve.mjs";
-import { isRetryable, STAGES, DEFAULT_CHAIN, EVOLVE_TOP, runSession } from "../lib/driver.mjs";
+import { isRetryable, STAGES, DEFAULT_CHAIN, EVOLVE_TOP, runSession, currentRunId, recordSession, sessionStats } from "../lib/driver.mjs";
 import { resolveActive, blockedByAudit, neverActivated, materialise, activationPath } from "../lib/skills.mjs";
 import { loadCodes, normaliseCode, allCodes, groupSimilar, CODES_DOC } from "../lib/codes.mjs";
 import { KINDS, FLAG_TO_KIND } from "../lib/kinds.mjs";
@@ -1844,6 +1844,43 @@ check("ADVERSARIAL every evidence file honours cfg.paths.state", () => {
   assert(fs.existsSync(path.join(dir, "evidence", "friction.jsonl")), "friction.jsonl was not written under evidence/");
   assert(!fs.existsSync(path.join(dir, ".trellis", "friction.jsonl")), "friction.jsonl leaked into .trellis/");
   assert(friction.read(dir, cfg).length === 1, "the record could not be read back from the configured dir");
+});
+
+check("ADVERSARIAL driver.mjs's own artifact checks and session ledger honour cfg.paths.state too", () => {
+  // Secondary finding alongside the check above: driver.mjs hardcoded
+  // ".trellis/..." in roughly two dozen places while exactly one function
+  // (forgedTriageRuns) read cfg.paths.state. A project that set paths.state
+  // to anything else had the runner writing to the new location while every
+  // stage verify, currentRunId, and the session ledger kept reading the old
+  // default — every stage failed with "state.json has no runId to attribute
+  // triage to", or a stale leftover .trellis/ from before the config change
+  // satisfied a stage that should have failed.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-driver-state-"));
+  const cfg = { paths: { state: "evidence" } };
+  fs.mkdirSync(path.join(dir, "evidence"), { recursive: true });
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+
+  // A decoy state.json under the DEFAULT location, with a runId that must
+  // never be read — proves this isn't passing by accident because both
+  // paths happen to agree.
+  fs.writeFileSync(path.join(dir, ".trellis", "state.json"), JSON.stringify({ runId: "decoy-wrong-location" }));
+  fs.writeFileSync(path.join(dir, "evidence", "state.json"), JSON.stringify({ runId: "real-run", finishedAt: "now" }));
+  assert(currentRunId(dir, cfg) === "real-run",
+    `currentRunId ignored cfg.paths.state, got: ${currentRunId(dir, cfg)}`);
+
+  recordSession(dir, cfg, { stage: "02_slice", costUsd: 1.5 });
+  assert(fs.existsSync(path.join(dir, "evidence", "sessions.jsonl")), "sessions.jsonl was not written under evidence/");
+  assert(!fs.existsSync(path.join(dir, ".trellis", "sessions.jsonl")), "sessions.jsonl leaked into .trellis/");
+  const stats = sessionStats(dir, cfg);
+  assert(stats["02_slice"]?.runs === 1, `sessionStats did not read back the record it just wrote: ${JSON.stringify(stats)}`);
+
+  // And a real stage verify(), end to end: 05_build's check reads state.json
+  // + cycle.json, both of which must come from the configured directory.
+  fs.writeFileSync(path.join(dir, "evidence", "cycle.json"), JSON.stringify({ id: "c1", cycle: 1 }));
+  fs.writeFileSync(path.join(dir, "evidence", "state.json"), JSON.stringify({ runId: "c1", finishedAt: "now" }));
+  fs.writeFileSync(path.join(dir, "evidence", "REPORT.md"), "# report\n");
+  const check = STAGES.find((s) => s.id === "05_build").verify(dir, cfg);
+  assert(check.ok, `05_build's verify should pass reading only from the configured dir: ${JSON.stringify(check)}`);
 });
 
 check("ADVERSARIAL materialise only removes directories it wrote", () => {

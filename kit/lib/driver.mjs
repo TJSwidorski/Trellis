@@ -36,7 +36,7 @@ export const STAGES = [
   {
     id: "01_ingest",
     prompt: "Read sessions/01_ingest/CONTEXT.md and do exactly what it says. Nothing else.",
-    verify: (root) => ingestCurrentForSpec(root),
+    verify: (root, cfg) => ingestCurrentForSpec(root, cfg),
     // Nothing to commit: ingest.json / product-graph.derived.json are working
     // state, not a deliverable — no docs anywhere ask the operator to commit
     // them by hand either.
@@ -52,13 +52,13 @@ export const STAGES = [
     // on "unexpected" modifications is the correct behaviour: it means the
     // session did not do what its contract said, and that is worth a human
     // looking rather than auto silently sweeping it in.
-    commits: () => [".trellis/plan.json", ".trellis/graph.json"],
+    commits: (root, cfg) => [statePath(cfg, "plan.json"), statePath(cfg, "graph.json")],
   },
   {
     id: "03_cases",
     prompt: "Read sessions/03_cases/CONTEXT.md and do exactly what it says. Nothing else.",
     verify: (root, cfg) => casesCoverPlan(root, cfg),
-    commits: () => [".trellis/cases.json"],
+    commits: (root, cfg) => [statePath(cfg, "cases.json")],
   },
   {
     id: "04_tests",
@@ -66,8 +66,8 @@ export const STAGES = [
     verify: (root, cfg) => testsExistAndAreNonVacuous(root, cfg),
     // The declared test paths are the whole point of this stage, and they are
     // the only thing known ahead of time — read from THIS cycle's graph.json.
-    commits: (root) => {
-      const graph = readJson(root, ".trellis/graph.json");
+    commits: (root, cfg) => {
+      const graph = readJson(root, statePath(cfg, "graph.json"));
       return (graph?.nodes ?? []).flatMap((n) => n.tests ?? []);
     },
   },
@@ -84,7 +84,10 @@ export const STAGES = [
     id: "06_triage",
     prompt: "Read sessions/06_triage/CONTEXT.md and do exactly what it says. Nothing else.",
     verify: (root, cfg) => triageRecordedEvidence(root, cfg),
-    commits: () => [".trellis/triage.json", ".trellis/triage.jsonl", ".trellis/friction.jsonl", ".trellis/built.json"],
+    commits: (root, cfg) => [
+      statePath(cfg, "triage.json"), statePath(cfg, "triage.jsonl"),
+      statePath(cfg, "friction.jsonl"), statePath(cfg, "built.json"),
+    ],
   },
   {
     id: "07_evolve",
@@ -94,9 +97,9 @@ export const STAGES = [
     periodic: true,
     prompt: "Read sessions/07_evolve/CONTEXT.md and do exactly what it says. Nothing else.",
     verify: (root, cfg) => evolveConsideredEverything(root, cfg),
-    commits: (root) => {
-      const j = readJson(root, ".trellis/evolve.json");
-      return [".trellis/evolve.json", ...(j?.proposals ?? [])];
+    commits: (root, cfg) => {
+      const j = readJson(root, statePath(cfg, "evolve.json"));
+      return [statePath(cfg, "evolve.json"), ...(j?.proposals ?? [])];
     },
   },
 ];
@@ -110,6 +113,21 @@ function readJson(root, rel) {
   const p = path.resolve(root, rel);
   if (!fs.existsSync(p)) return null;
   try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch { return null; }
+}
+
+/**
+ * Every artifact this file checks lives under `cfg.paths.state`, which
+ * defaults to ".trellis" but is a real, documented config knob (see
+ * trellis.config.json's `paths` block) — `forgedTriageRuns` below already
+ * honoured it; every OTHER path in this file was a literal ".trellis/..."
+ * string. Set `paths.state` to anything else and the runner writes there
+ * while this file kept reading the old default: every stage failed with
+ * "state.json has no runId to attribute triage to", or read a stale
+ * left-over `.trellis/` directory from before the config changed instead of
+ * the one the run actually just wrote to.
+ */
+function statePath(cfg, rel) {
+  return `${cfg?.paths?.state ?? ".trellis"}/${rel}`;
 }
 
 function artifactExists(root, rel, check) {
@@ -145,10 +163,10 @@ function artifactExists(root, rel, check) {
  * treated as stale rather than crashing, so an old artifact does not wedge
  * the stage; it just re-runs once.
  */
-function ingestCurrentForSpec(root) {
-  const base = artifactExists(root, ".trellis/ingest.json", (j) => j.errors?.length === 0);
+function ingestCurrentForSpec(root, cfg) {
+  const base = artifactExists(root, statePath(cfg, "ingest.json"), (j) => j.errors?.length === 0);
   if (!base.ok) return base;
-  const j = readJson(root, ".trellis/ingest.json");
+  const j = readJson(root, statePath(cfg, "ingest.json"));
   const specPath = path.resolve(root, j.source ?? "");
   if (!j.source || !fs.existsSync(specPath)) {
     return { ok: false, detail: `ingest.json names a spec that no longer exists: ${j.source}` };
@@ -167,11 +185,11 @@ function ingestCurrentForSpec(root) {
  * so comparing it is the same run-stamp discipline 06/07 already use.
  */
 function buildFinishedThisCycle(root, cfg) {
-  const base = artifactExists(root, ".trellis/REPORT.md");
+  const base = artifactExists(root, statePath(cfg, "REPORT.md"));
   if (!base.ok) return base;
   const cyc = currentCycle(root, cfg);
-  const state = readJson(root, ".trellis/state.json");
-  if (!cyc) return { ok: false, detail: "no .trellis/cycle.json — run `trellis cycle` first" };
+  const state = readJson(root, statePath(cfg, "state.json"));
+  if (!cyc) return { ok: false, detail: `no ${statePath(cfg, "cycle.json")} — run \`trellis cycle\` first` };
   if (!state) return { ok: false, detail: "state.json missing — the runner has not produced one yet" };
   if (state.runId !== cyc.id) {
     return { ok: false, detail: `REPORT.md is from a different cycle than the current one (${cyc.cycle}) — run \`trellis run\` again` };
@@ -181,7 +199,7 @@ function buildFinishedThisCycle(root, cfg) {
 }
 
 function sliceAssembledTaskGraph(root, cfg) {
-  const base = artifactExists(root, ".trellis/plan.json", (j) => Array.isArray(j.nodes) && j.nodes.length > 0);
+  const base = artifactExists(root, statePath(cfg, "plan.json"), (j) => Array.isArray(j.nodes) && j.nodes.length > 0);
   if (!base.ok) return base;
 
   // The plan is cut mechanically by `trellis slice`, which stamps `cycle`
@@ -190,23 +208,23 @@ function sliceAssembledTaskGraph(root, cfg) {
   // stayed "satisfied" forever, and a second `trellis auto` printed six
   // "already satisfied, skipping" lines and did nothing.
   const cyc = currentCycle(root, cfg);
-  const plan0 = readJson(root, ".trellis/plan.json");
-  if (!cyc) return { ok: false, detail: "no .trellis/cycle.json — run `trellis cycle` first" };
+  const plan0 = readJson(root, statePath(cfg, "plan.json"));
+  if (!cyc) return { ok: false, detail: `no ${statePath(cfg, "cycle.json")} — run \`trellis cycle\` first` };
   if (plan0?.cycle !== cyc.id) {
     return { ok: false, detail: `plan.json belongs to a different cycle than the current one (${cyc.cycle}) — re-run \`trellis slice\`` };
   }
 
-  const graph = readJson(root, ".trellis/graph.json");
+  const graph = readJson(root, statePath(cfg, "graph.json"));
   if (graph === null) {
     return {
       ok: false,
       detail:
-        ".trellis/graph.json was not written — `trellis slice` cuts the plan, but the task graph " +
+        `${statePath(cfg, "graph.json")} was not written — \`trellis slice\` cuts the plan, but the task graph ` +
         "(write scopes, gate commands, mutations) is assembled by the session",
     };
   }
   if (!Array.isArray(graph.nodes) || !graph.nodes.length) {
-    return { ok: false, detail: ".trellis/graph.json declares no nodes" };
+    return { ok: false, detail: `${statePath(cfg, "graph.json")} declares no nodes` };
   }
   // graph.json IS the session's work, so its cycle stamp has to come from the
   // session actually writing one — sessions/02_slice/CONTEXT.md instructs it.
@@ -214,7 +232,7 @@ function sliceAssembledTaskGraph(root, cfg) {
     return { ok: false, detail: `graph.json is not stamped with the current cycle (${cyc.cycle}) — the session must write "cycle": "${cyc.id}" into it` };
   }
 
-  const plan = readJson(root, ".trellis/plan.json");
+  const plan = readJson(root, statePath(cfg, "plan.json"));
   const planned = (plan.nodes ?? []).map((n) => (typeof n === "string" ? n : n.id));
   const built = new Set(graph.nodes.map((n) => n.id));
   const dropped = planned.filter((id) => !built.has(id));
@@ -244,12 +262,12 @@ function sliceAssembledTaskGraph(root, cfg) {
 // died halfway leaves a well-formed file covering the first eight nodes; this is
 // the check that catches it.
 function casesCoverPlan(root, cfg) {
-  const plan = readJson(root, ".trellis/plan.json");
-  const cases = readJson(root, ".trellis/cases.json");
+  const plan = readJson(root, statePath(cfg, "plan.json"));
+  const cases = readJson(root, statePath(cfg, "cases.json"));
   if (!plan) return { ok: false, detail: "plan.json missing" };
   if (!cases) return { ok: false, detail: "cases.json missing or unparseable" };
   const cyc = currentCycle(root, cfg);
-  if (!cyc) return { ok: false, detail: "no .trellis/cycle.json — run `trellis cycle` first" };
+  if (!cyc) return { ok: false, detail: `no ${statePath(cfg, "cycle.json")} — run \`trellis cycle\` first` };
   if (cases.cycle !== cyc.id) {
     return { ok: false, detail: `cases.json is not stamped with the current cycle (${cyc.cycle}) — the session must write "cycle": "${cyc.id}" into it` };
   }
@@ -267,7 +285,7 @@ function casesCoverPlan(root, cfg) {
 // Every test file the graph declares must exist with real content. Emptiness and
 // truncation are the signatures of a session that ran out of budget mid-write.
 function testsExistAndAreNonVacuous(root, cfg) {
-  const graph = readJson(root, ".trellis/graph.json");
+  const graph = readJson(root, statePath(cfg, "graph.json"));
   if (!graph) return { ok: false, detail: "graph.json missing" };
 
   // Every node, not the flattened total. `flatMap` over all nodes meant a
@@ -314,8 +332,8 @@ function testsExistAndAreNonVacuous(root, cfg) {
  * `run` comes from state.json rather than from the session, so a line stamped
  * with someone else's run id — or with none — cannot satisfy a stage.
  */
-export function currentRunId(root) {
-  return readJson(root, ".trellis/state.json")?.runId ?? null;
+export function currentRunId(root, cfg) {
+  return readJson(root, statePath(cfg, "state.json"))?.runId ?? null;
 }
 
 function jsonlRowsForRun(root, rel, run) {
@@ -341,20 +359,21 @@ function jsonlRowsForRun(root, rel, run) {
  * forever while every stage reported success.
  */
 function triageRecordedEvidence(root, cfg) {
-  const base = artifactExists(root, ".trellis/triage.json", (j) => Array.isArray(j.decisions));
+  const base = artifactExists(root, statePath(cfg, "triage.json"), (j) => Array.isArray(j.decisions));
   if (!base.ok) return base;
 
-  const run = currentRunId(root);
+  const run = currentRunId(root, cfg);
   if (!run) return { ok: false, detail: "state.json has no runId to attribute triage to" };
 
-  const rows = jsonlRowsForRun(root, ".trellis/triage.jsonl", run);
-  if (rows === null) return { ok: false, detail: ".trellis/triage.jsonl was not written" };
+  const triageJsonl = statePath(cfg, "triage.jsonl");
+  const rows = jsonlRowsForRun(root, triageJsonl, run);
+  if (rows === null) return { ok: false, detail: `${triageJsonl} was not written` };
   if (!rows.length) {
-    return { ok: false, detail: `.trellis/triage.jsonl has no line stamped run "${run}"` };
+    return { ok: false, detail: `${triageJsonl} has no line stamped run "${run}"` };
   }
   const decisions = rows.flatMap((r) => (Array.isArray(r.decisions) ? r.decisions : []));
   if (!decisions.length) {
-    return { ok: false, detail: `.trellis/triage.jsonl line for run "${run}" carries no decisions` };
+    return { ok: false, detail: `${triageJsonl} line for run "${run}" carries no decisions` };
   }
 
   // The `run` field is what the whole minRuns discipline in evolve.mjs counts
@@ -373,7 +392,7 @@ function triageRecordedEvidence(root, cfg) {
     return {
       ok: false,
       detail:
-        `.trellis/triage.jsonl claims run(s) the ledger never recorded: ${forged.join(", ")}. ` +
+        `${triageJsonl} claims run(s) the ledger never recorded: ${forged.join(", ")}. ` +
         `Every line must come from \`trellis triage\`, never hand-appended.`,
     };
   }
@@ -398,7 +417,7 @@ function triageRecordedEvidence(root, cfg) {
  * suspicion — so this can never fail a stage on its own run.
  */
 function forgedTriageRuns(root, cfg, currentRun) {
-  const p = path.resolve(root, cfg?.paths?.state ?? ".trellis", "triage.jsonl");
+  const p = path.resolve(root, statePath(cfg, "triage.jsonl"));
   if (!fs.existsSync(p)) return [];
   const claimed = new Set();
   for (const line of fs.readFileSync(p, "utf8").split("\n")) {
@@ -423,15 +442,15 @@ function forgedTriageRuns(root, cfg, currentRun) {
  * leaves behind still looks complete.
  */
 function evolveConsideredEverything(root, cfg) {
-  const base = artifactExists(root, ".trellis/evolve.json", (j) => Array.isArray(j.consideredCodes));
+  const base = artifactExists(root, statePath(cfg, "evolve.json"), (j) => Array.isArray(j.consideredCodes));
   if (!base.ok) return base;
 
-  const j = readJson(root, ".trellis/evolve.json");
+  const j = readJson(root, statePath(cfg, "evolve.json"));
 
   // Attribute the artifact to this run, the way triage is attributed. Without
   // it a stale evolve.json from an earlier pass satisfies the stage forever —
   // and cmdAuto pre-checks verify and skips, so the stage would never run again.
-  const run = currentRunId(root);
+  const run = currentRunId(root, cfg);
   if (!run) return { ok: false, detail: "state.json has no runId to attribute the evolve pass to" };
   if (j.run !== run) {
     return { ok: false, detail: `evolve.json is stamped run "${j.run}", not this run "${run}"` };
@@ -659,15 +678,14 @@ export function runSession(root, stage, cfg) {
 
 // Actual cost per stage across runs. After a dozen runs this is a real
 // distribution, which beats asking a model to estimate its own consumption.
-export function recordSession(root, entry) {
-  const dir = path.resolve(root, ".trellis");
-  fs.mkdirSync(dir, { recursive: true });
-  const p = path.join(dir, "sessions.jsonl");
+export function recordSession(root, cfg, entry) {
+  const p = path.resolve(root, statePath(cfg, "sessions.jsonl"));
+  fs.mkdirSync(path.dirname(p), { recursive: true });
   fs.appendFileSync(p, JSON.stringify({ at: new Date().toISOString(), ...entry }) + "\n");
 }
 
-export function sessionStats(root) {
-  const p = path.resolve(root, ".trellis/sessions.jsonl");
+export function sessionStats(root, cfg) {
+  const p = path.resolve(root, statePath(cfg, "sessions.jsonl"));
   if (!fs.existsSync(p)) return {};
   const rows = fs.readFileSync(p, "utf8").split("\n").filter(Boolean).map((l) => {
     try { return JSON.parse(l); } catch { return null; }
