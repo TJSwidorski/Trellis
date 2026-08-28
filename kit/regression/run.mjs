@@ -38,6 +38,7 @@ import { matchAny, matchDeny, matchAllow, FS_CASE_INSENSITIVE } from "../lib/pat
 import { recordsFor, ledgerPath } from "../lib/ledger.mjs";
 import { initState, resumePlan, nodeHash } from "../lib/state.mjs";
 import { currentCycle, beginCycle, cycleIdFor } from "../lib/cycle.mjs";
+import { builtNodes, writeBuilt } from "../lib/built.mjs";
 import { isCheckable, SOFT_FINDINGS, copyRepo } from "../lib/verify.mjs";
 import { buildPrompt, runNode } from "../lib/worker.mjs";
 import { chat, chatWithBackoff, ProviderError } from "../lib/provider.mjs";
@@ -2808,6 +2809,95 @@ check("ADVERSARIAL 05_build does not accept a REPORT.md from a previous cycle", 
 check("ADVERSARIAL 05_build does not accept an unfinished run", () => {
   const r = buildVerify(buildRoot({ finished: false }), CFG);
   assert(!r.ok, "a run with no finishedAt satisfied the stage");
+});
+
+// ------------------------------------------------- built.json is derived now
+
+function builtFixtureRoot({ ledgerRows = [], stateNodes = {}, manual = null } = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-built-"));
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  if (ledgerRows.length) {
+    fs.writeFileSync(path.join(dir, ".trellis/ledger.jsonl"), ledgerRows.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  }
+  if (Object.keys(stateNodes).length) {
+    fs.writeFileSync(path.join(dir, ".trellis/state.json"), JSON.stringify({ runId: "r1", nodes: stateNodes }));
+  }
+  if (manual) fs.writeFileSync(path.join(dir, ".trellis/built.manual.json"), JSON.stringify(manual));
+  return dir;
+}
+
+check("a node landed in the ledger counts as built, even with no state.json", () => {
+  const dir = builtFixtureRoot({ ledgerRows: [{ nodeId: "a", status: "merged" }] });
+  const nodes = builtNodes(dir, CFG);
+  assert(nodes.includes("a"), `expected "a" built from the ledger alone, got ${JSON.stringify(nodes)}`);
+});
+
+check("a node landed in state.json but not yet in the ledger still counts as built", () => {
+  // The ledger append happens at triage, not at merge -- a node that landed
+  // mid-run must not look "not built" until the NEXT triage catches up.
+  const dir = builtFixtureRoot({ stateNodes: { a: { status: "merged" } } });
+  const nodes = builtNodes(dir, CFG);
+  assert(nodes.includes("a"), `expected "a" built from state.json alone, got ${JSON.stringify(nodes)}`);
+});
+
+check("ADVERSARIAL a node that only ever attempted, never landed, does not count as built", () => {
+  const dir = builtFixtureRoot({
+    ledgerRows: [{ nodeId: "a", status: "exhausted" }],
+    stateNodes: { b: { status: "blocked" } },
+  });
+  const nodes = builtNodes(dir, CFG);
+  assert(nodes.length === 0, `an unlanded node was counted as built: ${JSON.stringify(nodes)}`);
+});
+
+check("built.manual.json is additive only, and a malformed one adds nothing rather than crashing", () => {
+  const dir = builtFixtureRoot({ ledgerRows: [{ nodeId: "a", status: "merged" }], manual: { nodes: ["b"] } });
+  const nodes = builtNodes(dir, CFG);
+  assert(nodes.includes("a") && nodes.includes("b"), `expected both a and b, got ${JSON.stringify(nodes)}`);
+
+  const dir2 = builtFixtureRoot({ ledgerRows: [{ nodeId: "a", status: "merged" }] });
+  fs.writeFileSync(path.join(dir2, ".trellis/built.manual.json"), "{ not json");
+  const nodes2 = builtNodes(dir2, CFG);
+  assert(nodes2.length === 1 && nodes2[0] === "a", `a malformed manual file should add nothing, got ${JSON.stringify(nodes2)}`);
+});
+
+check("writeBuilt reports what was added and removed since last write", () => {
+  const dir = builtFixtureRoot({ ledgerRows: [{ nodeId: "a", status: "merged" }] });
+  const first = writeBuilt(dir, CFG);
+  assert(first.added.length === 1 && first.added[0] === "a", `expected a to be reported added, got ${JSON.stringify(first)}`);
+
+  fs.writeFileSync(path.join(dir, ".trellis/ledger.jsonl"),
+    [{ nodeId: "a", status: "merged" }, { nodeId: "b", status: "merged" }].map((r) => JSON.stringify(r)).join("\n") + "\n");
+  const second = writeBuilt(dir, CFG);
+  assert(second.added.length === 1 && second.added[0] === "b", `expected only b newly added, got ${JSON.stringify(second)}`);
+  assert(second.removed.length === 0, `nothing should have been removed, got ${JSON.stringify(second.removed)}`);
+});
+
+check("ADVERSARIAL slice uses the derived built set, not a hand-authored file", () => {
+  // Even if a stale built.json sits on disk (left over from before this
+  // command existed, or hand-edited), cmdSlice must not read it directly.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-builtslice-"));
+  const g = (...a) => spawnSync("git", a, { cwd: dir, encoding: "utf8" });
+  g("init", "-q", "-b", "main"); g("config", "user.email", "a@b.c"); g("config", "user.name", "t");
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  // A hand-authored built.json claims "a" is built -- if cmdSlice reads this
+  // file directly rather than deriving, "a" would be skipped even though
+  // nothing in the ledger or state.json says it landed.
+  fs.writeFileSync(path.join(dir, ".trellis/built.json"), JSON.stringify({ nodes: ["a"] }));
+  fs.writeFileSync(path.join(dir, ".trellis/product-graph.json"), JSON.stringify({
+    schema: "trellis.product-graph/1", product: "p",
+    versions: { v1: { definition: "d", scale_target: "1" }, v2: { definition: "d2", scale_target: "1" } },
+    nodes: [{ id: "a", title: "a", version: "v1", kind: "backend", acceptance: ["x"],
+      reversibility: "two-way", scale_tier: "1", deps: [], surfaces: ["none"] }],
+  }));
+  fs.writeFileSync(path.join(dir, "trellis.config.json"), JSON.stringify({
+    project: "p", baseBranch: "main",
+    paths: { state: ".trellis", worktrees: ".worktrees", graph: ".trellis/graph.json" },
+    tiers: [{ name: "cheap", baseUrl: "http://127.0.0.1:1", model: "m", apiKeyEnv: null, maxAttempts: 1, maxTokens: 100 }],
+  }));
+  g("add", "-A"); g("commit", "-qm", "init");
+  const cli = path.resolve(kitRoot, "kit/bin/cli.mjs");
+  const r = spawnSync(process.execPath, [cli, "slice", "--max", "25"], { cwd: dir, encoding: "utf8" });
+  assert(/Slice of 1 node/.test(r.stdout), `"a" was skipped by a stale hand-authored built.json: ${r.stdout}${r.stderr}`);
 });
 
 const fixDir = path.join(here, "fixtures");

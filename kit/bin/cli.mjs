@@ -29,6 +29,7 @@ import { loadCodes, allCodes, groupSimilar, bucketOf, normaliseCode, CODES_DOC }
 import * as friction from "../lib/friction.mjs";
 import * as triage from "../lib/triage.mjs";
 import { currentCycle, beginCycle, cycleIdFor } from "../lib/cycle.mjs";
+import { builtNodes, writeBuilt } from "../lib/built.mjs";
 import {
   loadRegistry, resolveActive, materialise, blockedByAudit, missingPlugins,
   recordActivation, readActivations, neverActivated,
@@ -674,6 +675,9 @@ function cmdApplyTriage() {
   }
 
   st.saveState(root, cfg, state);
+  // Accepting or resetting nodes changes what counts as built; refresh the
+  // derived cache rather than leave it showing the pre-apply picture.
+  writeBuilt(root, cfg);
 
   const checkpointPath = path.resolve(root, ".trellis/checkpoint.json");
   if (rows.checkpoint.length) {
@@ -838,6 +842,22 @@ function cmdPromote() {
   log.info("This is a suggestion. Promoting means editing the source product graph by hand.");
 }
 
+// ------------------------------------------------------------------- built
+
+/**
+ * The derived cache, written for human inspection — `trellis slice` calls
+ * builtNodes() directly and never reads this file, so nothing downstream
+ * depends on it being fresh. This exists so you can SEE what the ledger and
+ * state.json currently say is done, and what changed since last time.
+ */
+function cmdBuilt() {
+  const { root, cfg } = ctx();
+  const { nodes, added, removed } = writeBuilt(root, cfg);
+  log.ok(`${nodes.length} node(s) built.`);
+  if (added.length) log.info(`  + ${added.join(", ")}`);
+  if (removed.length) log.warn(`  - ${removed.join(", ")} (no longer counts as built — was this a reject?)`);
+}
+
 // ------------------------------------------------------------------- slice
 
 function cmdSlice() {
@@ -846,8 +866,12 @@ function cmdSlice() {
   const { errors, graph: derived } = validateProductGraph(graph);
   if (errors.length) die("Run `trellis ingest` first — the graph does not validate.");
 
-  const statePath = path.resolve(root, ".trellis/built.json");
-  const built = fs.existsSync(statePath) ? JSON.parse(fs.readFileSync(statePath, "utf8")).nodes ?? [] : [];
+  // Derived from the ledger and state.json, not read from a hand-authored
+  // file — see kit/lib/built.mjs for why nobody ever wrote that file
+  // correctly. A node that landed cannot be re-planned; a node that did not
+  // land cannot be skipped by a stale entry, because there is no entry to
+  // go stale.
+  const built = builtNodes(root, cfg);
   const max = flagInt("max") ?? 25;
   const version = flagVal("version") || "v1";
 
@@ -1596,6 +1620,7 @@ trellis — Claude Code orchestrates, open-source models do the work.
 Product graph — authored outside Trellis, handed in complete:
   trellis ingest              Validate the product graph, derive high-risk nodes
   trellis promote             Which v2 nodes are unblocked and could ship in v1
+  trellis built                What the ledger + state.json currently say is done
   trellis cycle                Declare a new pass — begins cycle 1 lazily if you skip this
     --force                     Begin a new cycle even if the current one is unfinished
     --version v1|v2              Which release this cycle targets
@@ -1644,6 +1669,7 @@ const table = {
   "apply-triage": cmdApplyTriage,
   status: cmdStatus,
   clean: cmdClean,
+  built: cmdBuilt,
   cycle: cmdCycle,
   ingest: cmdIngest,
   promote: cmdPromote,

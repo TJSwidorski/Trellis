@@ -67,8 +67,12 @@ never about it.
 
 - `.trellis/triage.json` and `.trellis/triage.jsonl` — written by `trellis
   triage` as you go. Nothing to author by hand.
-- `.trellis/built.json` — accepted node ids, so the next slice skips them
 - One or more friction records, written by `trellis friction` (see below)
+
+Run `node kit/bin/cli.mjs built` before you finish. It derives what counts as
+built from the ledger and `state.json` — you do not hand-write this file, and
+nothing here reads it back. This exists so a human can see what changed; the
+next `trellis slice` computes it itself.
 
 ## Friction
 
