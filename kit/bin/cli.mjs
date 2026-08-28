@@ -895,7 +895,12 @@ function cmdSlice() {
   // land cannot be skipped by a stale entry, because there is no entry to
   // go stale.
   const built = builtNodes(root, cfg);
-  const max = flagInt("max") ?? 25;
+  // No `?? 25` here: nextSlice's own default parameter is the single source
+  // of truth for the cap. Passing `undefined` through when --max is absent
+  // lets that default apply exactly as if the argument had never been
+  // given, instead of this file re-stating the number and the two silently
+  // drifting apart if one of them is ever changed alone.
+  const max = flagInt("max");
   const version = flagVal("version") || "v1";
 
   const slice = nextSlice(derived, { version, built, maxNodes: max });
