@@ -6,6 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { findCycle } from "./graphutil.mjs";
 
 const TIERS = ["1", "10", "100", "1000", "10000", "100000"];
 const KINDS = ["frontend", "backend", "data", "infra", "interface", "ops"];
@@ -122,29 +123,6 @@ export function validateProductGraph(graph) {
 
   const derived = deriveRisk(graph, byId);
   return { errors, warnings, graph: derived };
-}
-
-function findCycle(byId) {
-  const state = new Map(); // 0 unseen, 1 on stack, 2 done
-  const stack = [];
-  let found = null;
-
-  const walk = (id) => {
-    if (found) return;
-    if (state.get(id) === 2) return;
-    if (state.get(id) === 1) {
-      found = stack.slice(stack.indexOf(id)).concat(id);
-      return;
-    }
-    state.set(id, 1);
-    stack.push(id);
-    for (const d of byId.get(id).deps ?? []) walk(d);
-    stack.pop();
-    state.set(id, 2);
-  };
-
-  for (const id of byId.keys()) walk(id);
-  return found;
 }
 
 // Risk is derived so it cannot be forgotten on the node where it mattered.

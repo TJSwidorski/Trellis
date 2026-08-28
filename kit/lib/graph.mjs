@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import { norm, globsOverlap, matchAny, matchDeny, safeRelative } from "./paths.mjs";
 import { isIgnored } from "./worktree.mjs";
 import { scopeBullets, findSpec } from "./spec.mjs";
+import { findCycle } from "./graphutil.mjs";
 
 const ROLES = ["implementer", "fixer", "refactorer", "tester"];
 const RISKS = ["low", "audit", "high"];
@@ -151,45 +152,19 @@ export function validateGraph(graph, cfg, repoRoot, { requireTests = true } = {}
     }
   }
 
-  // ---- cycle detection (DFS, iterative) ----
+  // ---- cycle detection ----
   //
   // Runs even when field errors already exist above (a missing title, an
   // unclaimed scope bullet, ...) -- an author fixing one error class at a
   // time used to discover a cycle, then a write collision, only after every
   // earlier error was already fixed: three round trips where one report
-  // would do. Safe to run unconditionally: it only ever reads `byId` and
-  // `.deps`, and a dependency id absent from `byId` (a node with no id was
-  // never added to it, and an unknown-dep reference is already reported as
-  // a field error above) is treated as inert below rather than dereferenced.
-  const WHITE = 0, GREY = 1, BLACK = 2;
-  const color = new Map([...byId.keys()].map((k) => [k, WHITE]));
-  outer:
-  for (const start of byId.keys()) {
-    if (color.get(start) !== WHITE) continue;
-    const stack = [[start, 0]];
-    const trail = [];
-    while (stack.length) {
-      const frame = stack[stack.length - 1];
-      const [id, i] = frame;
-      if (i === 0) { color.set(id, GREY); trail.push(id); }
-      const deps = byId.get(id).deps || [];
-      if (i < deps.length) {
-        frame[1]++;
-        const d = deps[i];
-        if (!byId.has(d)) continue;
-        if (color.get(d) === GREY) {
-          const cycle = trail.slice(trail.indexOf(d)).concat(d).join(" -> ");
-          errors.push(`Dependency cycle: ${cycle}`);
-          break outer;
-        }
-        if (color.get(d) === WHITE) stack.push([d, 0]);
-      } else {
-        color.set(id, BLACK);
-        trail.pop();
-        stack.pop();
-      }
-    }
-  }
+  // would do. Shared with product.mjs's ingest-time check (graphutil.mjs) --
+  // that version used to be a separate, RECURSIVE implementation, which is
+  // exactly the kind of algorithm that blows the call stack on a long enough
+  // chain; this one was already iterative for that reason, so unifying them
+  // fixed both the duplication and the stack-overflow risk in the same move.
+  const cyc = findCycle(byId);
+  if (cyc) errors.push(`Dependency cycle: ${cyc.join(" -> ")}`);
 
   // The remaining checks assume a structurally sound, acyclic graph: write
   // collision detection walks ancestors() (memoizes incorrectly on a cycle

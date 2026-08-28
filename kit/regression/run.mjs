@@ -201,6 +201,39 @@ check("ADVERSARIAL dependency cycle is rejected", () => {
   assert(errors.some((e) => /cycle/i.test(e)), "cycle was allowed");
 });
 
+check("ADVERSARIAL a long dependency chain does not blow the call stack", () => {
+  // product.mjs's cycle detector used to be its own RECURSIVE implementation
+  // (one JS call frame per edge on the current path) -- deduplicated with
+  // graph.mjs's already-iterative one into graphutil.mjs's shared findCycle.
+  // A migration modelled as a few thousand sequential steps used to crash
+  // `trellis ingest` with a RangeError instead of reporting whether it had a
+  // cycle at all. 10,000 reliably overflows the old recursive
+  // implementation's real frame size (confirmed by hand) well before it
+  // gets anywhere near a minimal function's own, much deeper limit.
+  //
+  // Direction matters: n0 must depend on n1, n1 on n2, and so on (the FIRST
+  // node's dependency chain is entirely unvisited) so the very first outer
+  // walk() call cascades all the way down in one recursive chain. The
+  // reverse direction (later nodes depending on earlier ones, visited in
+  // insertion order) never recurses more than one level deep at a time,
+  // since the outer loop's own iteration order already visits every
+  // dependency before the node that needs it -- silently not exercising the
+  // deep-recursion path a real migration's dependency direction would hit.
+  const N = 10000;
+  const nodes = [];
+  for (let i = 0; i < N; i++) {
+    nodes.push(node(`n${i}`, i === N - 1 ? {} : { deps: [`n${i + 1}`] }));
+  }
+  let result;
+  try {
+    result = validateProductGraph(graph(nodes));
+  } catch (e) {
+    throw new Error(`validateProductGraph threw (likely a stack overflow) on a long acyclic chain: ${e.message}`);
+  }
+  assert(!result.errors.some((e) => /cycle/i.test(e)),
+    `a genuinely acyclic long chain was reported as cyclic: ${JSON.stringify(result.errors)}`);
+});
+
 check("ADVERSARIAL authored high_risk is rejected", () => {
   const { errors } = validateProductGraph(graph([node("a", { high_risk: false })]));
   assert(errors.some((e) => /derived/i.test(e)), "hand-set high_risk was accepted");
