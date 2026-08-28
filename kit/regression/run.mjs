@@ -10,6 +10,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
 import {
   validateProductGraph,
   promotable,
@@ -2744,6 +2746,43 @@ check("ADVERSARIAL verify-tests does not copy secrets into the system temp dir",
   for (const secret of [".env", "id_rsa.pem", ".claude/settings.json"]) {
     assert(!fs.existsSync(path.join(dest, secret)), `${secret} was copied into the world-readable scratch dir`);
   }
+});
+
+check("ADVERSARIAL copyRepo links node_modules so a real gate command can actually find its dependencies", () => {
+  // Finding 04. node_modules was excluded from the copy AND never linked, so
+  // a gate like `npx vitest run` or `npm test` could not find its own test
+  // runner in scratch: every gate on a project with dependencies exited
+  // non-zero for a reason that had nothing to do with vacuity.
+  // detectEnvFailure catches this in verifyTests, but mutate.mjs's mutation
+  // scorer has no such check and read the identical failure as "every
+  // mutant killed" -- a broken environment producing a perfect, meaningless
+  // mutation score.
+  const src = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-cpnm-src-"));
+  fs.mkdirSync(path.join(src, "src"), { recursive: true });
+  fs.writeFileSync(path.join(src, "src", "a.mjs"), "export const a = 1;\n");
+  fs.mkdirSync(path.join(src, "node_modules", "a-fake-dep"), { recursive: true });
+  fs.writeFileSync(path.join(src, "node_modules", "a-fake-dep", "package.json"),
+    JSON.stringify({ name: "a-fake-dep", main: "index.js" }));
+  fs.writeFileSync(path.join(src, "node_modules", "a-fake-dep", "index.js"),
+    "module.exports = { marker: 'from-real-node-modules' };\n");
+
+  const dest = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "trellis-cpnm-dst-")), "copy");
+  copyRepo(src, dest, {
+    paths: { worktrees: ".worktrees", state: ".trellis" },
+    boundaries: { denyWrite: [] },
+  });
+
+  assert(fs.existsSync(path.join(dest, "src", "a.mjs")), "the ordinary copy still happened");
+  const nmPath = path.join(dest, "node_modules");
+  assert(fs.existsSync(nmPath), "node_modules is missing from the scratch copy entirely");
+  const st = fs.lstatSync(nmPath);
+  assert(st.isSymbolicLink() || st.isDirectory(),
+    "node_modules must be reachable one way or another");
+  // The real proof: Node's own module resolution, from INSIDE the scratch
+  // copy, must actually find the dependency -- not just "a path exists".
+  const dep = require(path.join(dest, "node_modules", "a-fake-dep"));
+  assert(dep.marker === "from-real-node-modules",
+    `required the dependency through the scratch copy and got: ${JSON.stringify(dep)}`);
 });
 
 // --------------------------------------------- a resume must not burn the run

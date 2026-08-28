@@ -366,7 +366,8 @@ export async function verifyTests(cfg, graph, nodes, root, { log = () => {} } = 
 /** Findings that report a limit of this check rather than a defect in a test. */
 export const SOFT_FINDINGS = new Set(["no-tests", "unstubbable", "unsupported-language"]);
 
-/** Copy the working tree (minus git, worktrees, node_modules) into a scratch dir. */
+/** Copy the working tree (minus git, worktrees) into a scratch dir, linking
+ * node_modules rather than copying it. */
 export function copyRepo(root, dest, cfg) {
   const skip = new Set([".git", "node_modules", cfg.paths.worktrees.replace("./", ""), cfg.paths.state.replace("./", "")]);
 
@@ -394,4 +395,30 @@ export function copyRepo(root, dest, cfg) {
       return !matchDeny(rel, deny);
     },
   });
+
+  // node_modules is excluded from the copy above — copying it in full would
+  // be slow (and pointless: dependencies aren't user code a check needs a
+  // fresh view of) — but without it AT ALL, a gate like `npx vitest run` or
+  // `npm test` cannot find its own test runner. Every gate on a project with
+  // real dependencies then exits non-zero for a reason that has nothing to
+  // do with vacuity: verifyTests' own detectEnvFailure catches this and
+  // reports env-failure for every node, but mutate.mjs's mutation scorer has
+  // no such check, and reads the identical failure as "every mutant killed"
+  // — a systematically broken environment producing a perfect, meaningless
+  // mutation score. Link instead of copying: same effect for Node's own
+  // module resolution, none of the copy cost. `junction` on win32 because a
+  // true directory symlink there needs admin rights or Developer Mode; a
+  // junction needs neither and Node's fs API treats the two identically for
+  // read access.
+  const nodeModules = path.join(root, "node_modules");
+  if (fs.existsSync(nodeModules)) {
+    try {
+      fs.symlinkSync(nodeModules, path.join(dest, "node_modules"), process.platform === "win32" ? "junction" : "dir");
+    } catch {
+      // A restrictive filesystem, or a leftover path from a prior run, can
+      // make linking fail. Fall through and leave node_modules missing —
+      // the same degraded behavior this function always had — rather than
+      // letting a link failure crash verification outright.
+    }
+  }
 }
