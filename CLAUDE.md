@@ -9,10 +9,14 @@ next. Then read exactly one stage contract under `sessions/`.
 
 ## One session, one job
 
-You will be compacted or cleared between stages. That is the design, not a
-limitation — planning, case enumeration, and test writing for a real slice do not
-fit in one window, and a session that runs out of room mid-task reports success
-while having done a fraction of the work. We have watched that happen.
+You will be cleared between stages — not compacted, cleared. That is the design,
+not a limitation. Planning, case enumeration, and test writing for a real slice do
+not fit in one window, and a session that runs out of room mid-task reports
+success while having done a fraction of the work. We have watched that happen.
+See `sessions/README.md` for why clearing rather than compacting matters — the
+short version is that a summary is a place for an earlier instruction to quietly
+not survive, and this design never asks a model to carry its own governance
+forward across a rewrite it wrote.
 
 Two rules follow:
 
