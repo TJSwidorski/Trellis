@@ -10,6 +10,94 @@ under `kit/schema/`) are **not** tracked by this file. They change only on an
 incompatible on-disk format break, documented in `UPGRADING.md`, not on a routine
 release.
 
+## v2.6.1 – v2.6.22 — fail loudly
+
+An adversarial audit (five independent clean-context reviewers, ten lenses)
+found that this kit's defects share one shape: enforcement that fails open —
+a check that cannot run, an error scored as a pass, a halt that reports
+success. Every finding below closes one of those. Each tag in the range is
+its own commit with its own tests; this section summarises the whole run.
+
+- **An environment halt can no longer report success** (`kit/lib/runner.mjs`,
+  v2.6.3). The terminal sweep re-derived `budget.check()` alone, omitting the
+  `envHalt` term the launch loop itself uses, so an environment-halted run
+  left every untried node PENDING — counted as neither done nor stuck — and
+  exited 0 having built nothing.
+- **Cycle detection runs even when field errors already exist**
+  (`kit/lib/graph.mjs`, v2.6.4), and **`ancestors()`/`levels()` are
+  cycle-safe, iterative primitives** (v2.6.5, v2.6.6) — promoted ahead of
+  their own payoff ranking, since they become load-bearing scheduling logic
+  later in this same series.
+- **A stalled response body can no longer hang a worker call**
+  (`kit/lib/provider.mjs`, v2.6.7). `clearTimeout` fired at response headers,
+  not at the end of the body read; a 32MB size cap was also missing entirely.
+- **A broken git can no longer read as a clean, unchanged tree**
+  (`kit/lib/worktree.mjs`, v2.6.8). `git()` dropped `spawnSync`'s own error
+  field, so a spawn failure was indistinguishable from a genuinely empty,
+  successful result.
+- **A killed gate or session can no longer leave orphan processes running**
+  (`kit/lib/gate.mjs`, `kit/lib/driver.mjs`, new `kit/lib/proc.mjs`, v2.6.9).
+  Both spawn with `shell:true`, making the killed process the shell, not the
+  command — reproduced by hand as a genuine >30s hang with a surviving
+  orphan node process before the fix, confirmed gone after.
+- **A failed commit can no longer be reported as a merged node**
+  (`kit/lib/worker.mjs`, `kit/lib/worktree.mjs`, v2.6.10). A `git commit`
+  failure after a passing gate was silently indistinguishable from success;
+  the worktree was then force-deleted, taking the only copy of the work.
+- **One source of truth for the slice cap** (`kit/bin/cli.mjs`, v2.6.11).
+- **Mutation scoring no longer trips the worker-retry attempt ceiling**
+  (`kit/lib/budget.mjs`, v2.6.12).
+- **`cfg.paths.state` is honoured everywhere in the driver, not just in one
+  function** (`kit/lib/driver.mjs`, v2.6.13) — roughly two dozen hardcoded
+  `.trellis` literals unified behind one `statePath()` helper.
+- **`denyWrite` covers the gate-config files today's test runners actually
+  read** (`trellis.config.json`, v2.6.14) — Vite, TypeScript path mapping,
+  Playwright, Babel, `.gitignore`, and CI workflow files, none of which were
+  covered before.
+- **Write-collision detection agrees with the gate about case folding**
+  (`kit/lib/paths.mjs`, v2.6.15). `globsOverlap` never folded case at all,
+  so two differently-cased write scopes could pass validation and then both
+  write the same physical file on Windows or macOS.
+- **A landed node can no longer be silently rebuilt on `--resume`**
+  (`kit/lib/state.mjs`, `kit/bin/cli.mjs`, v2.6.16). Editing a merged node's
+  contract and then `--resume` used to reset it to PENDING and rebuild it
+  from a base branch that still contained its own merge — automatically
+  doing what `trellis reject` explicitly refuses to do without a human
+  reverting first.
+- **A `--only` deadlock is now visibly stuck, not silently done**
+  (`kit/lib/runner.mjs`, v2.6.17).
+- **A held-on-survivor node is visible again** (`kit/lib/runner.mjs`,
+  `kit/lib/log.mjs`, v2.6.18) — the `onSurvivor:"hold"` disposition logged
+  neither a console line nor a `run.jsonl` event, unlike the structurally
+  identical high-risk hold beside it. Also fixes a real flush race in
+  `closeRunLog()` found while writing this fix's own test.
+- **Multi-byte UTF-8 survives a pipe chunk boundary**
+  (`kit/lib/gate.mjs`, `kit/lib/driver.mjs`, v2.6.19). Per-chunk
+  `d.toString()` decoded each half of a split character independently to
+  U+FFFD, which could corrupt `detectEnvFailure`'s own pattern matching.
+- **`buildStub` emits CommonJS when the target actually resolves as
+  CommonJS** (`kit/lib/verify.mjs`, v2.6.20). It always emitted ESM
+  regardless of the target's real module system, so a CJS test's `require()`
+  threw a bare `SyntaxError` that was then scored as "non-vacuous" anyway.
+- **One shared, iterative cycle detector for both graphs**
+  (new `kit/lib/graphutil.mjs`, v2.6.21). `product.mjs`'s was still
+  recursive — exactly the algorithm shape that blows the call stack on a
+  long chain — while `graph.mjs`'s was already iterative; unifying them
+  fixed the duplication and the stack-overflow risk in the same move.
+- **One `readJsonOrNull`, one `parseJsonl`, and matched path validators**
+  (`kit/lib/paths.mjs` and nine call sites, v2.6.22). Also closes a gap
+  between `safeRelative` and `evolve.mjs`'s `normaliseTarget`: both now
+  reject a UNC-style path, where before only one of them did.
+- **CI now runs on `windows-latest` as well as `ubuntu-latest`**
+  (v2.6.1) — development happens on Windows; several fixes above are
+  platform-divergent and ubuntu-only CI could not have caught them.
+- **Documented that sessions are cleared, never compacted, as the
+  deliberate architectural choice it is** (`sessions/README.md`, `CLAUDE.md`,
+  `CONTEXT.md`, v2.6.2) — written ahead of its own payoff ranking, as the
+  invariant later prompt-caching work must not violate.
+
+Regression 206 (was 190), units 45/45 (was 28), e2e 52/52 (was 44).
+
 ## v2.6.0 — a driver that actually launches on Windows
 
 - **`trellis auto` can launch its driver on a Windows install where `claude`
