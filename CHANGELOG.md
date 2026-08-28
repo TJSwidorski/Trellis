@@ -10,6 +10,70 @@ under `kit/schema/`) are **not** tracked by this file. They change only on an
 incompatible on-disk format break, documented in `UPGRADING.md`, not on a routine
 release.
 
+## v2.5.0 — one command, a whole cycle
+
+Landed the `run-two-fixes` branch (re-reviewed, blockers fixed inline, ported
+onto everything Phases 1–3 had already changed) and deleted it. Trellis can
+now run a whole cycle — slice, build, triage, apply what's reversible — with
+one command, and resume genuinely holds after a test gets strengthened.
+
+- **`trellis auto --cycles N`** (`kit/bin/cli.mjs`, `kit/lib/driver.mjs`,
+  new `kit/lib/cycle.mjs`) drives the default chain N times, beginning a
+  fresh cycle each pass, committing exactly what each stage was declared to
+  produce and halting — never guessing — on anything else. `--dry-run` prints
+  the plan and cost without starting anything. New `OPERATING.md` is the
+  manual for it; `QUICKSTART.md` is cut over from the retired
+  `/trellis-plan` skill flow to the `sessions/NN_stage/CONTEXT.md` pipeline
+  this has been hardening since v2.2.0.
+- **The checkpoint is the one stop `--cycles` cannot skip**: a high-risk node
+  held for review halts the whole loop, unconditionally, regardless of how
+  many cycles remain, and `.trellis/checkpoint.json` is now written on every
+  apply — including empty — so a stale entry can no longer report a
+  long-accepted node as still awaiting review.
+- **`--resume` rebuilds a node whose test got strengthened, not just whose
+  contract changed** (`kit/lib/state.mjs`). `nodeHash` now folds in a digest
+  of the frozen tests' actual content, not just their paths — REPORT.md's own
+  advice to "strengthen the tests, then re-run" previously did nothing,
+  because nothing compared what a test *said*.
+- **`.trellis/cycle.json`** rolls `runId` forward on a genuinely new pass at
+  the product graph, fixing evolve.mjs/friction.mjs thresholds and stale-
+  artifact skip bugs in `trellis auto` that came from two real runs, weeks
+  apart, counting as one.
+- **`.trellis/built.json` is derived, not hand-authored** (new
+  `kit/lib/built.mjs`): the ledger, then the current run's `state.json`, then
+  an additive-only `built.manual.json`, in that trust order. `trellis slice`
+  reads the derived set directly; nothing downstream depends on the cached
+  file staying fresh.
+- **`trellis triage` is a command, not a hand-formatted JSONL line**
+  (`kit/lib/triage.mjs`), and **`trellis apply-triage`** mechanises the
+  reversible half of a triage decision — reset a rejected non-landed node,
+  bookkeep an accept on one already landed — while a held high-risk accept
+  is never applied directly, only ever written to the checkpoint.
+- **`.claude/hooks/guard-bash.mjs`** closes the Bash hole: a headless stage
+  session could previously run `trellis accept --merge` or a raw
+  `git merge`/`push`/`pull`/`reset --hard` — a one-way door MISSION.md
+  reserves for a human — through the Bash tool, which no existing hook
+  matched. Denies the CLI form, the `trellis` bin-alias form, and the raw git
+  equivalents, tolerating arbitrary flags between `git` and the subcommand.
+  `trellis auto` refuses to start at all without this hook registered.
+- **`reject` no longer false-positives on a landed node via a `git merge-base`
+  check that a squash or rebase merge defeats** — it now checks the node's
+  own recorded status (`st.LANDED`) instead.
+
+Six things fixed while porting rather than deferred: `auto` no longer halts
+on a fresh project's own `.trellis/ingest.json` (gitignored, working state
+rather than a deliverable); `commitStageOutput` reuses the existing
+rename-aware `changedPaths()` instead of re-parsing `git status --porcelain`
+by hand; a `RUNNING` node surviving a graph-changed salvage is normalised to
+`PENDING` through a helper both the happy-path and salvage-path resume call,
+so it is never invisible to `readySet` again; a `BUDGET`-stopped node is
+revived by `--resume` the same way; the Bash guard tolerates `git -C .` and
+`git -c foo=bar` (a global option's *value* is not itself dash-prefixed) and
+also blocks the `trellis accept` bin-alias and raw `git pull`.
+
+Regression 189 (was 152 going into this phase), units 28/28, e2e 44/44 (was
+31).
+
 ## v2.4.0 — the worker loop
 
 Quality and cost, not safety — five fixes to how a worker actually gets
