@@ -450,6 +450,26 @@ async function cmdRun() {
  */
 function cmdAccept() {
   const { root, cfg } = ctx();
+
+  // Real enforcement is guard-bash.mjs, which runs outside this process and
+  // cannot be argued with. This is defence in depth for the paths that reach
+  // here without it: hooks not configured, or TRELLIS_STAGE forwarded past a
+  // shell that stripped it before the guard saw the string. Bypassable with
+  // `env -u TRELLIS_STAGE`, which is exactly why it is not the only layer.
+  if (process.env.TRELLIS_STAGE) {
+    die(
+      `accept is a human decision (MISSION.md: one-way doors get human eyes), and this is running ` +
+        `inside stage "${process.env.TRELLIS_STAGE}". Use \`trellis apply-triage\` for reversible ` +
+        `verdicts; anything needing accept belongs in .trellis/checkpoint.json for a human to run.`
+    );
+  }
+  if (!process.stdout.isTTY) {
+    log.warn(
+      "accept is running non-interactively (stdout is not a TTY). If this is a headless session, stop " +
+        "— accepting a node is a human decision. If it's a script you wrote yourself, ignore this."
+    );
+  }
+
   const state = st.loadState(root, cfg);
   if (!state) die("No run to accept against.");
   const ids = argv.slice(1).filter((a) => !a.startsWith("--"));
@@ -733,11 +753,46 @@ function cmdSlice() {
 
 // -------------------------------------------------------------------- auto
 
+/**
+ * `auto` spawns headless sessions with `permissionMode: acceptEdits` and an
+ * unrestricted Bash tool. Without `.claude/hooks/guard-bash.mjs` registered on
+ * a `Bash` matcher, nothing stops a stage session from running
+ * `cli.mjs accept --merge` on a high-risk node — the exact one-way door
+ * MISSION.md says must stay a human's. This is a preflight refusal, the same
+ * shape as `doctor`'s checks: fail loudly before spending anything, not after.
+ */
+function requireBashGuard(root) {
+  const p = path.resolve(root, ".claude/settings.json");
+  let settings;
+  try {
+    settings = JSON.parse(fs.readFileSync(p, "utf8"));
+  } catch {
+    die(
+      `${p} is missing or unreadable. \`auto\` refuses to start without the Bash guard configured — ` +
+        `see .claude/hooks/guard-bash.mjs.`
+    );
+  }
+  const pre = settings.hooks?.PreToolUse ?? [];
+  const guarded = pre.some(
+    (h) => String(h.matcher || "").split("|").includes("Bash") &&
+      (h.hooks || []).some((x) => /guard-bash\.mjs/.test(x.command || ""))
+  );
+  if (!guarded) {
+    die(
+      "No PreToolUse hook matches Bash in .claude/settings.json. A headless stage session's Bash tool " +
+        "is unrestricted without it, which means nothing stops `accept --merge` on a high-risk node — " +
+        "the one-way door MISSION.md says must stay a human's. Register guard-bash.mjs on a \"Bash\" " +
+        "matcher before running auto."
+    );
+  }
+}
+
 async function cmdAuto() {
   const { root, cfg } = ctx();
   if (!cfg.driver?.enabled) {
     die("driver.enabled is false in trellis.config.json. Read the driver section before turning this on.");
   }
+  requireBashGuard(root);
 
   // Periodic stages are reachable only by name. Without this, adding one would
   // silently make every ordinary run spend an extra expensive session.

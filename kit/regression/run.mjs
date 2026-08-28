@@ -2829,6 +2829,130 @@ if (fs.existsSync(fixDir)) {
   }
 }
 
+// -------------------------------------------- the Bash guard's own bypasses
+//
+// guard-bash.mjs's string matching found real bypasses on first read: the
+// "trellis" bin alias (package.json declares one) contains no "cli.mjs", so
+// `trellis accept x --merge` was invisible to a check written only against
+// `cli.mjs accept`; `git -C . merge` broke `\bgit\s+merge\b` outright since
+// flags between the subcommand name and "git" were never accounted for; and
+// `git pull` — a merge by another name — was absent from the deny list
+// entirely. None of this is exercised by the porting commit's own tests,
+// which never tried these specific strings.
+
+function runBashGuard(cmd, { stage = "06_triage" } = {}) {
+  const r = spawnSync(process.execPath, [path.resolve(here, "../../.claude/hooks/guard-bash.mjs")], {
+    input: JSON.stringify({ tool_input: { command: cmd } }),
+    encoding: "utf8",
+    env: { ...process.env, TRELLIS_STAGE: stage },
+  });
+  return { code: r.status, stderr: r.stderr || "" };
+}
+
+check("ADVERSARIAL the guard blocks the 'trellis' bin alias, not just 'cli.mjs accept'", () => {
+  const { code } = runBashGuard("trellis accept n01 --merge");
+  assert(code === 2, `the bin-alias form of accept was not blocked (exit ${code})`);
+});
+
+check("ADVERSARIAL the guard blocks a git merge with flags between git and the subcommand", () => {
+  for (const cmd of ["git -C . merge some-branch", "git -c user.name=x merge some-branch"]) {
+    const { code } = runBashGuard(cmd);
+    assert(code === 2, `"${cmd}" was not blocked (exit ${code})`);
+  }
+});
+
+check("ADVERSARIAL the guard blocks git pull, a merge by another name", () => {
+  const { code } = runBashGuard("git pull origin main");
+  assert(code === 2, `git pull was not blocked (exit ${code})`);
+});
+
+check("the guard does not block an ordinary command, or accept with no TRELLIS_STAGE", () => {
+  const { code: ordinary } = runBashGuard("npm test");
+  assert(ordinary === 0, `an ordinary command was blocked (exit ${ordinary})`);
+
+  const { TRELLIS_STAGE: _drop, ...envNoStage } = process.env;
+  const r = spawnSync(process.execPath, [path.resolve(here, "../../.claude/hooks/guard-bash.mjs")], {
+    input: JSON.stringify({ tool_input: { command: "node kit/bin/cli.mjs accept n01 --merge" } }),
+    encoding: "utf8",
+    env: envNoStage,
+  });
+  assert(r.status === 0, `accept was blocked with no TRELLIS_STAGE set (exit ${r.status})`);
+});
+
+// ---------------------------------------------- the Bash guard's preflight
+//
+// guard-bash.mjs itself cannot be unit-tested from in here — it is invoked by
+// the harness, not by anything in this process. What CAN be tested is that
+// `auto` refuses to start at all when the guard is not wired up, which is the
+// thing that stops a headless session's Bash tool from being unrestricted in
+// the first place.
+
+const CLI = path.resolve(here, "../bin/cli.mjs");
+
+function autoPreflightRoot({ guarded }) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-guard-"));
+  const g = (...a) => spawnSync("git", a, { cwd: dir, encoding: "utf8" });
+  g("init", "-q", "-b", "main");
+  g("config", "user.email", "a@b.c"); g("config", "user.name", "t");
+  fs.writeFileSync(path.join(dir, "README.md"), "x\n");
+  fs.mkdirSync(path.join(dir, ".claude"), { recursive: true });
+  const settings = guarded
+    ? { hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "node .claude/hooks/guard-bash.mjs" }] }] } }
+    : { hooks: { PreToolUse: [{ matcher: "Edit|Write", hooks: [{ type: "command", command: "node .claude/hooks/protect-runner.mjs" }] }] } };
+  fs.writeFileSync(path.join(dir, ".claude", "settings.json"), JSON.stringify(settings));
+  fs.writeFileSync(path.join(dir, "trellis.config.json"), JSON.stringify({
+    project: "p", baseBranch: "main",
+    driver: { enabled: true, command: "does-not-exist-on-purpose" },
+    paths: { state: ".trellis", worktrees: ".worktrees", graph: ".trellis/graph.json" },
+    tiers: [{ name: "cheap", baseUrl: "http://127.0.0.1:1", model: "m", apiKeyEnv: null, maxAttempts: 1, maxTokens: 100 }],
+  }));
+  g("add", "-A"); g("commit", "-qm", "init");
+  return dir;
+}
+
+check("ADVERSARIAL auto refuses to start with no Bash matcher configured", () => {
+  const dir = autoPreflightRoot({ guarded: false });
+  const r = spawnSync(process.execPath, [CLI, "auto"], { cwd: dir, encoding: "utf8" });
+  assert(r.status !== 0, "auto started with no Bash guard configured");
+  assert(/Bash/.test(r.stdout) && /guard/i.test(r.stdout),
+    `refusal did not name the missing guard: ${r.stdout}${r.stderr}`);
+});
+
+check("auto's preflight passes once the Bash matcher is registered", () => {
+  // It may still die later (driver.command is deliberately nonexistent) —
+  // what matters is that it gets PAST the guard check specifically.
+  const dir = autoPreflightRoot({ guarded: true });
+  const r = spawnSync(process.execPath, [CLI, "auto"], { cwd: dir, encoding: "utf8" });
+  assert(!/No PreToolUse hook matches Bash/.test(r.stdout),
+    `the preflight rejected a properly configured guard: ${r.stdout}${r.stderr}`);
+});
+
+check("ADVERSARIAL accept refuses when TRELLIS_STAGE is set", () => {
+  // Defence in depth, not the real enforcement — bypassable with env -u, which
+  // is exactly why guard-bash.mjs is the layer that actually matters. This
+  // just proves the fallback fires when it is reached at all.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-acc-"));
+  const g = (...a) => spawnSync("git", a, { cwd: dir, encoding: "utf8" });
+  g("init", "-q", "-b", "main"); g("config", "user.email", "a@b.c"); g("config", "user.name", "t");
+  fs.writeFileSync(path.join(dir, "README.md"), "x\n"); g("add", "-A"); g("commit", "-qm", "init");
+  fs.writeFileSync(path.join(dir, "trellis.config.json"), JSON.stringify({
+    project: "p", baseBranch: "main",
+    paths: { state: ".trellis", worktrees: ".worktrees", graph: ".trellis/graph.json" },
+    tiers: [{ name: "cheap", baseUrl: "http://127.0.0.1:1", model: "m", apiKeyEnv: null, maxAttempts: 1, maxTokens: 100 }],
+  }));
+  const r = spawnSync(process.execPath, [CLI, "accept", "n01"], {
+    cwd: dir, encoding: "utf8", env: { ...process.env, TRELLIS_STAGE: "06_triage" },
+  });
+  assert(r.status !== 0, "accept ran to completion inside a stage session");
+  // Specifically the TRELLIS_STAGE die(), not the separate non-TTY warning —
+  // that warning ALSO contains the words "human decision", so asserting on
+  // that phrase alone would pass even with this exact check deleted. Assert
+  // on text unique to the die() message instead.
+  assert(/apply-triage/.test(r.stdout), `the TRELLIS_STAGE refusal did not fire: ${r.stdout}${r.stderr}`);
+  assert(!/No run to accept against/.test(r.stdout),
+    "accept reached past the TRELLIS_STAGE check and failed for an unrelated reason instead");
+});
+
 // -------------------------------------------------------------------- report
 
 await Promise.all(pending);

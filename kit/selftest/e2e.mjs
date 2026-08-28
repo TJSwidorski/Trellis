@@ -549,6 +549,12 @@ console.log(thing);
   // dirty-tree check then refuses to start on the file it just needed to
   // create. This fixture stands in for a real install's .gitignore.
   write(aRoot, ".gitignore", ".trellis/cycle.json\n.trellis/checkpoint.json\n");
+  // `auto` refuses to start at all without a Bash-matched PreToolUse hook
+  // registered — see requireBashGuard in cli.mjs. Real operators configure
+  // this once at install time; this fixture stands in for that.
+  write(aRoot, ".claude/settings.json", JSON.stringify({
+    hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "node .claude/hooks/guard-bash.mjs" }] }] },
+  }));
   write(aRoot, "tests/auto.test.mjs", `
 import assert from "node:assert";
 import { auto } from "../src/auto.mjs";
