@@ -20,6 +20,7 @@ const DEFAULTS = {
     structuralMutants: true, structuralMutantLimit: 8, proposeOnSurvivor: true,
     regateAtLevelBoundaries: true,
   },
+  validate: { decompositionCeiling: 25 },
   specPath: null,
   paths: { state: ".trellis", worktrees: ".worktrees", graph: ".trellis/graph.json" },
 };

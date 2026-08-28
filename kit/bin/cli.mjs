@@ -95,6 +95,15 @@ function cmdValidate({ requireTests = !flags.has("--plan") } = {}) {
 
   log.ok(`Graph valid: ${graph.nodes.length} nodes, ${byLevel.size} level(s) deep, hash ${graph.__hash}`);
   log.info("");
+  // Item 16: a level far wider than any one build wave has actually been run
+  // at is a decomposition smell — too many mutually-independent nodes
+  // crammed into the same wave, more likely to collide at the level-boundary
+  // re-gate (v2.8.2) than a graph broken into narrower waves would be. A
+  // WARNING, not a validation error: 25 is an empirical number from real
+  // runs (nextSlice's own default cap), not a proven ceiling, and promoting
+  // it to something that fails validation would encode that guess as a rule
+  // before .bench/ exists to say whether it's the right one.
+  const ceiling = cfg.validate?.decompositionCeiling ?? 25;
   for (const d of [...byLevel.keys()].sort((a, b) => a - b)) {
     const ids = byLevel.get(d);
     log.info(log.bold(`  level ${d}`) + log.dim(`  (up to ${Math.min(ids.length, cfg.concurrency)} in parallel)`));
@@ -103,6 +112,12 @@ function cmdValidate({ requireTests = !flags.has("--plan") } = {}) {
       const risk = n.risk === "high" ? log.yellow(" [review]") : "";
       log.info(`    ${log.blue(id.padEnd(10))} ${n.title}${risk}`);
       log.info(log.dim(`    ${" ".repeat(10)} writes ${(n.write || []).join(", ")}`));
+    }
+    if (ids.length > ceiling) {
+      log.warn(
+        `level ${d} has ${ids.length} node(s), over the decomposition ceiling of ${ceiling} — ` +
+        `consider whether some of these actually depend on each other and the graph under-declared it.`
+      );
     }
   }
   log.info("");

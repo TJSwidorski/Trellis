@@ -37,6 +37,11 @@
     "regateAtLevelBoundaries": true
   },
 
+  "validate": {
+    "$comment": "decompositionCeiling is a WARNING threshold, not a validation error: trellis validate prints it when a task-graph level has more nodes than this, as a decomposition-coarseness signal (more mutually-\"independent\" nodes in one wave, more surface for the level-boundary re-gate to catch). 25 is the same empirical number nextSlice defaults its own cap to, not a proven ceiling -- raise or lower it per project once .bench/ has real evidence either way.",
+    "decompositionCeiling": 25
+  },
+
   "driver": {
     "$comment": "Autonomous session chaining. OFF by default — read sessions/README.md before enabling. There is no API for remaining subscription quota, so the driver never predicts whether the next session fits; it runs, verifies on disk, and backs off. Set ANTHROPIC_API_KEY to get documented limits and retryable 429s instead of opaque subscription caps.",
     "enabled": false,

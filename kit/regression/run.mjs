@@ -3527,6 +3527,59 @@ check("ADVERSARIAL slice --max reports an oversized level loudly instead of sile
   assert(plan.nodes.every((n) => !("level" in n)), "plan.json's node entries must not carry a persisted level field");
 });
 
+// -------------------------------------------------- decomposition ceiling
+//
+// Item 16: a task-graph level far wider than any real build wave is a
+// decomposition smell, worth naming, but 25 is an empirical guess from real
+// runs, not a proven ceiling -- this must be a WARNING that validate still
+// exits 0 on, never a validation error.
+
+check("ADVERSARIAL validate --plan warns on a level over the decomposition ceiling, but still exits 0", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-decomp-"));
+  const g = (...a) => spawnSync("git", a, { cwd: dir, encoding: "utf8" });
+  g("init", "-q", "-b", "main"); g("config", "user.email", "a@b.c"); g("config", "user.name", "t");
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  // Three independent root nodes (all depth 0), ceiling set to 2 -- the
+  // level is one node over.
+  fs.writeFileSync(path.join(dir, ".trellis/graph.json"), JSON.stringify({
+    version: 1, project: "decomp",
+    nodes: ["a", "b", "c"].map((id) => ({ id, title: id, goal: "g", write: [`src/${id}.mjs`], tests: [], gate: "true" })),
+  }));
+  fs.writeFileSync(path.join(dir, "trellis.config.json"), JSON.stringify({
+    project: "decomp", baseBranch: "main",
+    paths: { state: ".trellis", worktrees: ".worktrees", graph: ".trellis/graph.json" },
+    tiers: [{ name: "cheap", baseUrl: "http://127.0.0.1:1", model: "m", apiKeyEnv: null, maxAttempts: 1 }],
+    validate: { decompositionCeiling: 2 },
+  }));
+  g("add", "-A"); g("commit", "-qm", "init");
+  const cli = path.resolve(kitRoot, "kit/bin/cli.mjs");
+  const r = spawnSync(process.execPath, [cli, "validate", "--plan"], { cwd: dir, encoding: "utf8" });
+  assert(r.status === 0, `a decomposition warning must not fail validation, got exit ${r.status}: ${r.stdout}${r.stderr}`);
+  assert(/over the decomposition ceiling of 2/.test(r.stdout), `expected a loud ceiling warning, got: ${r.stdout}${r.stderr}`);
+});
+
+check("ADVERSARIAL validate --plan says nothing about the ceiling when every level is under it", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-decomp-ok-"));
+  const g = (...a) => spawnSync("git", a, { cwd: dir, encoding: "utf8" });
+  g("init", "-q", "-b", "main"); g("config", "user.email", "a@b.c"); g("config", "user.name", "t");
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  fs.writeFileSync(path.join(dir, ".trellis/graph.json"), JSON.stringify({
+    version: 1, project: "decomp",
+    nodes: [{ id: "a", title: "a", goal: "g", write: ["src/a.mjs"], tests: [], gate: "true" }],
+  }));
+  fs.writeFileSync(path.join(dir, "trellis.config.json"), JSON.stringify({
+    project: "decomp", baseBranch: "main",
+    paths: { state: ".trellis", worktrees: ".worktrees", graph: ".trellis/graph.json" },
+    tiers: [{ name: "cheap", baseUrl: "http://127.0.0.1:1", model: "m", apiKeyEnv: null, maxAttempts: 1 }],
+    validate: { decompositionCeiling: 2 },
+  }));
+  g("add", "-A"); g("commit", "-qm", "init");
+  const cli = path.resolve(kitRoot, "kit/bin/cli.mjs");
+  const r = spawnSync(process.execPath, [cli, "validate", "--plan"], { cwd: dir, encoding: "utf8" });
+  assert(r.status === 0, `expected a clean pass, got exit ${r.status}: ${r.stdout}${r.stderr}`);
+  assert(!/decomposition ceiling/.test(r.stdout), `expected no ceiling warning under it, got: ${r.stdout}`);
+});
+
 const fixDir = path.join(here, "fixtures");
 if (fs.existsSync(fixDir)) {
   for (const f of fs.readdirSync(fixDir).filter((x) => x.endsWith(".json"))) {
