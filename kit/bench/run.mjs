@@ -95,7 +95,22 @@ function session(cwd, prompt, { stage = null, model = null } = {}) {
 
   const started = Date.now();
   return new Promise((resolve) => {
-    const c = spawn("claude", args, { cwd, env: process.env, stdio: ["ignore", "pipe", "pipe"] });
+    // Same latent bug as kit/lib/driver.mjs's runSession, same fix — see
+    // that file's docblock. A globally-installed npm "claude" resolves to a
+    // .cmd shim on Windows, which Node refuses to exec with shell:false;
+    // shell:true needs each arg quoted or a multi-word prompt gets torn
+    // into separate argv entries.
+    const isWin = process.platform === "win32";
+    const winQuote = (a) => `"${String(a).replace(/"/g, '""')}"`;
+    let c;
+    try {
+      c = spawn("claude", isWin ? args.map(winQuote) : args, {
+        cwd, env: process.env, stdio: ["ignore", "pipe", "pipe"], shell: isWin,
+      });
+    } catch (e) {
+      resolve({ lines: [], exitCode: -1, ms: Date.now() - started, error: e.message });
+      return;
+    }
     let out = "", err = "";
     c.stdout.on("data", (d) => (out += d));
     c.stderr.on("data", (d) => (err += d));

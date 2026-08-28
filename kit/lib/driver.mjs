@@ -536,6 +536,33 @@ export function isRetryable(text = "") {
 
 // Runs one headless Claude Code session and returns structured metadata.
 // Never throws on a failed session — the driver decides what a failure means.
+// Windows resolves a globally-installed npm CLI's bare name (the shape
+// `driver.command` is in — "claude", not "claude.cmd") to a `.cmd`/`.ps1`
+// shim trio, and Node's own CVE-2024-27980 fix refuses to exec a `.cmd`/
+// `.bat` directly with `shell:false` (throws EINVAL, synchronously, before
+// any listener attaches) — the bare name alone fares no better, since
+// `spawn` does not do PATHEXT resolution itself and just reports ENOENT.
+// `shell:true` is the fix `kit/lib/gate.mjs`'s `exec()` already uses for the
+// identical reason ("npm test -- foo and Windows .cmd shims both work"),
+// but that call passes one pre-assembled command STRING; this one passes an
+// `args` ARRAY, and `shell:true` on Windows joins array elements with plain
+// spaces and does not escape them (Node's own DEP0190 warning) — a
+// multi-word `stage.prompt` would otherwise arrive at the child torn into
+// several argv entries instead of one. Quoting each element restores the
+// argv boundaries `shell:false` gave for free. Every element here is either
+// a hardcoded `STAGES[].prompt` or operator-set config
+// (driver.command/model/permissionMode), never runtime or model output, so
+// shell-metacharacter injection is not the risk this addresses — argv
+// corruption is.
+//
+// POSIX shims are shebang scripts the kernel already execs correctly under
+// `shell:false`; `shell:true` there would only inherit the unescaped-concat
+// caveat above for no benefit, so this is gated to win32 specifically.
+const IS_WINDOWS = process.platform === "win32";
+function winQuote(a) {
+  return `"${String(a).replace(/"/g, '""')}"`;
+}
+
 export function runSession(root, stage, cfg) {
   return new Promise((resolve) => {
     const args = [
@@ -546,16 +573,38 @@ export function runSession(root, stage, cfg) {
     if (cfg.driver.permissionMode) args.push("--permission-mode", cfg.driver.permissionMode);
     if (cfg.driver.model) args.push("--model", cfg.driver.model);
 
-    const child = spawn(cfg.driver.command, args, {
-      cwd: root,
-      // TRELLIS_STAGE lets a command know which stage invoked it without the
-      // session having to say so. `trellis propose` uses it to decide that a
-      // proposal is model-authored and must wait for a human — a decision that
-      // was previously made by a CLI flag the session was merely asked to pass,
-      // i.e. attested by exactly the party it constrains.
-      env: { ...process.env, TRELLIS_STAGE: stage.id },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    let child;
+    try {
+      // The executable itself needs the same quoting as `args` when
+      // shell:true is in play — confirmed empirically: spawn(command, args,
+      // {shell:true}) on Windows concatenates `command` and `args` into one
+      // command line for cmd.exe the same unescaped way, so a driver.command
+      // resolving to a path containing a space ("C:\Program Files\...", or a
+      // Windows username with a space in it) silently fails to launch
+      // without this — a bare word like "claude" still resolves via PATH
+      // fine when quoted, so this is unconditional on win32, not narrowed to
+      // "only when it has a space".
+      const command = IS_WINDOWS ? winQuote(cfg.driver.command) : cfg.driver.command;
+      child = spawn(command, IS_WINDOWS ? args.map(winQuote) : args, {
+        cwd: root,
+        // TRELLIS_STAGE lets a command know which stage invoked it without the
+        // session having to say so. `trellis propose` uses it to decide that a
+        // proposal is model-authored and must wait for a human — a decision that
+        // was previously made by a CLI flag the session was merely asked to pass,
+        // i.e. attested by exactly the party it constrains.
+        env: { ...process.env, TRELLIS_STAGE: stage.id },
+        stdio: ["ignore", "pipe", "pipe"],
+        shell: IS_WINDOWS,
+      });
+    } catch (e) {
+      // A synchronous throw (the pre-shell:true EINVAL case, and anything
+      // else spawn can throw before it ever hands back a child) used to
+      // escape this Promise's executor and reject it outright — losing the
+      // `spawnFailed` shape `cli.mjs` matches on for its "Is Claude Code on
+      // PATH?" hint, and surfacing as a bare, unhelpful thrown error instead.
+      resolve({ exitCode: -1, costUsd: 0, raw: "", stderr: String(e.message), spawnFailed: true });
+      return;
+    }
 
     let out = "";
     let err = "";
