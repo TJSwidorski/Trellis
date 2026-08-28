@@ -7,6 +7,15 @@ import http from "node:http";
  */
 export function startMockServer(script) {
   const calls = [];
+  // Node id -> prompts seen so far, in first-seen order. The scripted
+  // response index used to be "how many prior calls this node has made" —
+  // correct only when every call carries a distinct prompt, which stops
+  // being true the moment something (parallel sampling, item 14) issues
+  // several concurrent requests sharing ONE attempt's identical prompt.
+  // Counting distinct prompts instead means N calls with the same text are
+  // all "attempt 0"; a genuinely new prompt (a retry with different file
+  // contents or feedback appended) is what advances the index.
+  const distinctPromptsByNode = new Map();
   const server = http.createServer((req, res) => {
     if (req.url.endsWith("/models")) {
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -34,7 +43,9 @@ export function startMockServer(script) {
       const nodeId = (userText.match(/# Task: ([^\n]+)/) || [])[1] || "?";
       const key = `${nodeId}`;
       const seq = (script.responses[key] ||= []);
-      const idx = calls.filter((c) => c.node === key).length;
+      const seenPrompts = (distinctPromptsByNode.get(key) ?? distinctPromptsByNode.set(key, []).get(key));
+      let idx = seenPrompts.indexOf(userText);
+      if (idx === -1) { idx = seenPrompts.length; seenPrompts.push(userText); }
       const entry = seq[Math.min(idx, seq.length - 1)];
       calls.push({ node: key, model, idx, prompt: userText, maxTokens: parsed.max_tokens });
 

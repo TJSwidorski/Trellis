@@ -2459,6 +2459,43 @@ checkAsync("ADVERSARIAL a gate command cannot forge evidence in .trellis/ as a s
   assert(!fs.existsSync(path.join(dir, ".trellis/triage.jsonl")), "the forged evidence file was not removed");
 });
 
+// ------------------------------------------------------- mock-server index
+//
+// Item 22. mock-server.mjs used to derive the scripted response index from
+// raw call count -- correct only when every call for a node carries a
+// distinct prompt. Parallel sampling (item 14, later in this track) issues
+// several concurrent requests sharing ONE attempt's identical prompt, which
+// would have made the mock hand out DIFFERENT scripted responses to
+// samples of the very same attempt. The mock now indexes by distinct
+// prompt text instead.
+
+checkAsync("ADVERSARIAL mock-server indexes by distinct prompt, not raw call count", async () => {
+  const mock = await startMockServer({
+    responses: { n01: [{ content: "first" }, { content: "second" }] },
+  });
+  try {
+    const cfg = { headers: {}, worker: { requestTimeoutMs: 5000 } };
+    const tier = { name: "cheap", baseUrl: mock.url, model: "mock/cheap", maxTokens: 100, temperature: 0.1 };
+    const promptA = "# Task: n01\nsame prompt";
+    const promptB = "# Task: n01\ndifferent prompt";
+
+    // Two calls with the IDENTICAL prompt (simulating N parallel samples of
+    // one attempt) must both be scored as attempt 0 -- same content back.
+    const r1 = await chat(cfg, tier, [{ role: "user", content: promptA }]);
+    const r2 = await chat(cfg, tier, [{ role: "user", content: promptA }]);
+    assert(r1.text === "first" && r2.text === "first",
+      `two calls with the identical prompt must get the same scripted response, got: ${JSON.stringify([r1.text, r2.text])}`);
+
+    // A genuinely different prompt (a real retry) advances to the next index.
+    const r3 = await chat(cfg, tier, [{ role: "user", content: promptB }]);
+    assert(r3.text === "second", `a distinct prompt should advance the index, got: ${r3.text}`);
+
+    assert(mock.calls.filter((c) => c.node === "n01").length === 3, "all three calls should still be logged");
+  } finally {
+    await mock.close();
+  }
+});
+
 // ------------------------------------------------------ provider truncation
 //
 // A too-small max_tokens is not a broken endpoint. An empty completion with
