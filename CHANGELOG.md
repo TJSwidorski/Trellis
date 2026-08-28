@@ -10,6 +10,56 @@ under `kit/schema/`) are **not** tracked by this file. They change only on an
 incompatible on-disk format break, documented in `UPGRADING.md`, not on a routine
 release.
 
+## v2.7.0 – v2.7.5 — the oracle fails closed
+
+Track B of the same remediation series. Track A (v2.6.1–v2.6.22, below) fixed
+enforcement that failed open at the edges; this track does the same to the
+oracle itself — the mechanism that lets Trellis claim a node's tests actually
+prove something. Protected-file heavy, since that mechanism is exactly what
+`kit/lib/evolve.mjs`'s PROTECTED list exists to guard.
+
+- **`copyRepo` carries the dependency tree instead of excluding it entirely**
+  (`kit/lib/verify.mjs`, v2.7.0). `node_modules` was dropped from the scratch
+  copy a mutation or verify-tests check runs the gate in, so any project with
+  real dependencies failed every gate for a reason that had nothing to do with
+  vacuity. Now symlinked (junctioned on Windows) instead.
+- **An environment failure can no longer score as a killed mutant**
+  (`kit/lib/mutate.mjs`, v2.7.1). The same class of bug as v2.6.3, in the
+  mutation scorer: a broken environment made every mutant "survive" the exit
+  code check by exiting non-zero for the wrong reason, reporting a perfect,
+  meaningless mutation score. Must follow v2.7.0 — that broken environment was
+  usually the missing `node_modules` the previous fix closed.
+- **Every verifier fails closed** (v2.7.2). An unrecognised test language used
+  to produce no finding at all; REPORT.md now has a dedicated section for "a
+  mutation oracle that never ran," distinct from a clean pass.
+- **`verify-tests` is a precondition, not an optional command** (`kit/bin/cli.mjs`,
+  `kit/lib/verify.mjs`, v2.7.3). `trellis run` now refuses to start if any
+  node's tests were never proven non-vacuous, or changed since they last were —
+  covering "never verified" and "verified once, then quietly weakened" in one
+  check. A real behaviour break, documented in `UPGRADING.md`; `--skip-verify`
+  or `verify.requirePrecondition: false` opt back out.
+- **An opt-in, resource-limited gate sandbox** (`kit/lib/sandbox.mjs`, v2.7.4).
+  `gate.sandbox`, default off, wraps the gate command in POSIX `ulimit` limits
+  when enabled — a real but explicitly best-effort backstop against a runaway
+  gate, not network or filesystem isolation. `trellis doctor` warns when it's
+  off (the default) and fails loudly when it's on but the platform can't
+  enforce it (Windows has no `ulimit`), rather than silently running
+  unsandboxed. Landed after v2.6.9's tree-kill fix on purpose — a sandbox
+  wrapping broken kill semantics is worse than no sandbox.
+- **Mechanical, zero-token structural mutants, and survivors become held
+  proposals** (`kit/lib/structuralMutants.mjs`, `kit/lib/mutate.mjs`,
+  `kit/lib/runner.mjs`, v2.7.5). A lightweight, honestly-framed sweep of
+  comparison/logical/boolean-literal flips runs alongside any LLM-authored
+  `mutations`, so every node gets some mutation coverage even when the graph
+  declared none. Any mutant that survives — mechanical or LLM-authored — now
+  writes a proposal under `evolution/proposals/` instead of sitting only in
+  `state.json`; always held for a human to merge, never an auto-committed
+  test.
+
+Verification for the whole track: `npm test` green after every commit (units
+56/56, regression 212, e2e 63/63 at the end of the range); every new
+behaviour's test confirmed to fail against the pre-fix code before landing.
+
 ## v2.6.1 – v2.6.22 — fail loudly
 
 An adversarial audit (five independent clean-context reviewers, ten lenses)
