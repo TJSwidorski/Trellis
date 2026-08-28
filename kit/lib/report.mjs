@@ -117,6 +117,34 @@ export function writeReport(root, cfg, graph, state) {
     }
   }
 
+  // A node can declare mutations, run checkMutations, and have EVERY single
+  // one skipped (the mutator's own call failed, it wrote nothing in scope,
+  // or — the case this exists for — every attempt hit a broken environment,
+  // per mutate.mjs's own detectEnvFailure check). `mutationsSkipped` was
+  // stored in state but never read back here, so this looked identical in
+  // the report to a node with no mutations declared at all: an operator had
+  // no way to tell "the oracle ran and found nothing wrong" (which nothing
+  // here establishes, since nothing here ran) from "no oracle was declared
+  // in the first place". Both merge silently; only this section says which.
+  const unverified = Object.entries(state.nodes).filter(([id, s]) => {
+    const declared = (byId.get(id)?.mutations ?? []).length;
+    return declared > 0 && (s.mutationsChecked ?? 0) === 0 && (s.mutationsSkipped ?? []).length > 0;
+  });
+  if (unverified.length) {
+    L.push(`## Mutation oracle never actually ran`);
+    L.push("");
+    L.push(`These nodes declared mutations, but every single one was skipped. This is NOT`);
+    L.push(`the same as a clean pass (checked, nothing survived) — nothing was checked at`);
+    L.push(`all, positive or negative.`);
+    L.push("");
+    for (const [id, s] of unverified) {
+      L.push(`### \`${id}\` — ${byId.get(id)?.title || ""}`);
+      L.push("");
+      for (const reason of s.mutationsSkipped) L.push(`- ${reason}`);
+      L.push("");
+    }
+  }
+
   const audit = Object.entries(state.nodes).filter(([, s]) => s.status === st.STATUS.AUDIT);
   if (audit.length) {
     L.push(`## Merged, flagged for audit`);

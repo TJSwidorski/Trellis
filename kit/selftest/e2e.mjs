@@ -705,6 +705,59 @@ if (other !== 1) throw new Error("nope");
   });
   fs.rmSync(holdRoot, { recursive: true, force: true });
 
+  // ---- ADVERSARIAL: a mutation oracle that never ran must not look like a clean pass ----
+  //
+  // mutationsSkipped was stored in state but never read back in REPORT.md, so
+  // a node whose mutations were ALL skipped (mutator call failed, wrote
+  // nothing in scope, hit a broken environment) looked identical to a node
+  // with no mutations declared at all -- an operator had no way to tell "the
+  // oracle ran and found nothing wrong" from "no oracle ran".
+  const unverifRoot = makeRepo();
+  write(unverifRoot, "tests/thing.test.mjs", "import { thing } from '../src/thing.mjs';\nif (thing() !== 1) throw new Error('nope');\n");
+  write(unverifRoot, ".trellis/graph.json", JSON.stringify({
+    version: 1, project: "unverif",
+    nodes: [{ id: "thing", title: "thing", goal: "export thing()", write: ["src/thing.mjs"],
+      tests: ["tests/thing.test.mjs"], gate: "node tests/thing.test.mjs",
+      mutations: ["off by one somewhere"] }],
+  }, null, 2));
+  const unverifMock = await startMockServer({
+    models: ["mock/cheap"],
+    responses: { thing: [{ content: FILE("src/thing.mjs", "export const thing=()=>1;") }] },
+    // Deliberately no `mutants` key: mock-server.mjs's mutator branch only
+    // fires when `script.mutants` exists, so every mutator call falls
+    // through to the ordinary node-key routing, finds no matching response,
+    // and replies with an empty completion -- which chatWithBackoff throws
+    // on, landing every mutation attempt in `skipped` with checked:0.
+  });
+  write(unverifRoot, "trellis.config.json", JSON.stringify({
+    project: "unverif", baseBranch: "main", concurrency: 1,
+    tiers: [{ name: "cheap", baseUrl: unverifMock.url, model: "mock/cheap", maxAttempts: 1 }],
+    gate: { timeoutMs: 20000 },
+    routing: { enabled: false },
+    verify: { mutationsOnPass: true, onSurvivor: "warn" },
+    boundaries: { denyWrite: [".git/**", ".trellis/**", "trellis.config.json"] },
+  }, null, 2));
+  g(unverifRoot, "add", "-A"); g(unverifRoot, "commit", "-qm", "fixture");
+
+  const unverifCfg = loadConfig(unverifRoot);
+  const unverifGraph = loadGraph(unverifRoot, unverifCfg.paths.graph);
+  const unverifState = st.initState(unverifRoot, unverifCfg, unverifGraph);
+  const { reportPath: unverifReportPath } = await run(unverifCfg, unverifGraph, unverifState, {});
+  await unverifMock.close();
+
+  check("ADVERSARIAL a fully-skipped mutation oracle is visible in state", () => {
+    const s = unverifState.nodes.thing;
+    assert.strictEqual(s.mutationsChecked, 0, `expected 0 checked, got ${s.mutationsChecked}`);
+    assert.ok((s.mutationsSkipped || []).length > 0, `expected at least one skip reason, got: ${JSON.stringify(s.mutationsSkipped)}`);
+    assert.ok((s.survivingMutations || []).length === 0, "nothing should be reported as a survivor either -- nothing was checked");
+  });
+  check("ADVERSARIAL REPORT.md names a mutation oracle that never ran, distinctly from a clean pass", () => {
+    const r = fs.readFileSync(unverifReportPath, "utf8");
+    assert.ok(/Mutation oracle never actually ran/.test(r), `expected the new section header, report was:\n${r}`);
+    assert.ok(/mutator call failed/.test(r), `expected the skip reason to be named, report was:\n${r}`);
+  });
+  fs.rmSync(unverifRoot, { recursive: true, force: true });
+
   // ---- auto driver, build stage ----
   //
   // `trellis auto` chains sessions headless. Every stage but 05_build spawns a
