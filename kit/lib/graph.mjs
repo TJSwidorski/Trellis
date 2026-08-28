@@ -151,11 +151,19 @@ export function validateGraph(graph, cfg, repoRoot, { requireTests = true } = {}
     }
   }
 
-  if (errors.length) return { errors, warnings };
-
   // ---- cycle detection (DFS, iterative) ----
+  //
+  // Runs even when field errors already exist above (a missing title, an
+  // unclaimed scope bullet, ...) -- an author fixing one error class at a
+  // time used to discover a cycle, then a write collision, only after every
+  // earlier error was already fixed: three round trips where one report
+  // would do. Safe to run unconditionally: it only ever reads `byId` and
+  // `.deps`, and a dependency id absent from `byId` (a node with no id was
+  // never added to it, and an unknown-dep reference is already reported as
+  // a field error above) is treated as inert below rather than dereferenced.
   const WHITE = 0, GREY = 1, BLACK = 2;
   const color = new Map([...byId.keys()].map((k) => [k, WHITE]));
+  outer:
   for (const start of byId.keys()) {
     if (color.get(start) !== WHITE) continue;
     const stack = [[start, 0]];
@@ -168,10 +176,11 @@ export function validateGraph(graph, cfg, repoRoot, { requireTests = true } = {}
       if (i < deps.length) {
         frame[1]++;
         const d = deps[i];
+        if (!byId.has(d)) continue;
         if (color.get(d) === GREY) {
           const cycle = trail.slice(trail.indexOf(d)).concat(d).join(" -> ");
           errors.push(`Dependency cycle: ${cycle}`);
-          return { errors, warnings };
+          break outer;
         }
         if (color.get(d) === WHITE) stack.push([d, 0]);
       } else {
@@ -181,6 +190,15 @@ export function validateGraph(graph, cfg, repoRoot, { requireTests = true } = {}
       }
     }
   }
+
+  // The remaining checks assume a structurally sound, acyclic graph: write
+  // collision detection walks ancestors() (memoizes incorrectly on a cycle
+  // until it is hardened separately), and every check below indexes fields
+  // (write, tags, covers) that a field error above may mean are malformed
+  // rather than merely absent. Reporting the cycle above cost nothing extra;
+  // running these against a graph already known to be broken could crash
+  // instead of reporting a third class of error.
+  if (errors.length) return { errors, warnings };
 
   // ---- concurrency collision detection ----
   const anc = ancestors(byId);

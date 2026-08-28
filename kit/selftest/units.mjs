@@ -256,6 +256,55 @@ check("ADVERSARIAL env detection ignores prose that merely mentions imports", ()
   assert.strictEqual(detectEnvFailure("1 test failed: cannot find the user record"), null);
 });
 
+// ---------- unit: validateGraph surfaces every error class in one pass ----------
+//
+// validateGraph used to `return` the instant it found a field error, so a
+// graph with both a missing field AND a real dependency cycle only ever
+// reported the field error -- an author fixing errors one class at a time
+// discovered the cycle only after the earlier round trip. Cycle detection
+// now runs unconditionally; the collision/tags/coverage checks stay gated
+// on acyclicity, since they assume well-formed fields and a hardened
+// transitive-closure walk.
+const graphCfg = { boundaries: { denyWrite: [] }, gate: {} };
+check("validateGraph reports a cycle in the same pass as an unrelated field error", () => {
+  const g = {
+    nodes: [
+      // missing "title" -- a field error
+      { id: "a", goal: "do a", write: ["a.mjs"], gate: "true", deps: ["b"] },
+      { id: "b", title: "b", goal: "do b", write: ["b.mjs"], gate: "true", deps: ["a"] },
+    ],
+  };
+  const { errors } = validateGraph(g, graphCfg, os.tmpdir(), { requireTests: false });
+  assert.ok(errors.some((e) => /missing "title"/.test(e)), `expected the field error, got: ${JSON.stringify(errors)}`);
+  assert.ok(errors.some((e) => /Dependency cycle/.test(e)), `expected the cycle to surface too, got: ${JSON.stringify(errors)}`);
+});
+check("validateGraph does not attempt the collision scan on a cyclic graph", () => {
+  // Two nodes claiming the SAME write path would normally be a collision
+  // error too, but they're also mutually dependent -- a cyclic graph must
+  // report only the cycle, not crash or double-report while walking
+  // ancestors() on data that is not yet known to be acyclic.
+  const g = {
+    nodes: [
+      { id: "a", title: "a", goal: "do a", write: ["shared.mjs"], gate: "true", deps: ["b"] },
+      { id: "b", title: "b", goal: "do b", write: ["shared.mjs"], gate: "true", deps: ["a"] },
+    ],
+  };
+  const { errors } = validateGraph(g, graphCfg, os.tmpdir(), { requireTests: false });
+  assert.strictEqual(errors.length, 1, `expected exactly the cycle error, got: ${JSON.stringify(errors)}`);
+  assert.match(errors[0], /Dependency cycle/);
+});
+check("validateGraph still runs the collision scan when the graph is acyclic and otherwise valid", () => {
+  const g = {
+    nodes: [
+      { id: "a", title: "a", goal: "do a", write: ["shared.mjs"], gate: "true" },
+      { id: "b", title: "b", goal: "do b", write: ["shared.mjs"], gate: "true" },
+    ],
+  };
+  const { errors } = validateGraph(g, graphCfg, os.tmpdir(), { requireTests: false });
+  assert.ok(errors.some((e) => /can run concurrently but both claim write access/.test(e)),
+    `expected the write-collision error, got: ${JSON.stringify(errors)}`);
+});
+
 for (const [s,n,m] of R) console.log(s==="pass"?`  \u001b[32m✓\u001b[0m ${n}`:`  \u001b[31m✗ ${n}\u001b[0m\n      ${m}`);
 console.log(`\n${R.filter(r=>r[0]==="pass").length}/${R.length} unit checks passed`);
 export const failed = R.some(r=>r[0]!=="pass");
