@@ -7,7 +7,16 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Development happens on Windows 11; several fixes in this history are
+        # process-spawn and filesystem behavior that only diverges on win32
+        # (child_process shell semantics, path separators, case-insensitive
+        # FS). ubuntu-only CI let a Windows-only bug ship green before — see
+        # CHANGELOG v2.6.0.
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
