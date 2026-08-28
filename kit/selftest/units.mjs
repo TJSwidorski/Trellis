@@ -12,6 +12,7 @@ import { scopeBullets } from "../lib/spec.mjs";
 import { detectEnvFailure } from "../lib/envfail.mjs";
 import { chat, readCapped } from "../lib/provider.mjs";
 import { exec } from "../lib/gate.mjs";
+import { sandboxSupported, wrapForSandbox } from "../lib/sandbox.mjs";
 import http from "node:http";
 import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
@@ -595,6 +596,79 @@ setTimeout(() => {
     assert.strictEqual(result.code, 0, `script did not exit cleanly: ${JSON.stringify(result)}`);
     assert.strictEqual(result.output, "✓",
       `expected the reconstructed character, got ${JSON.stringify(result.output)} -- a split multi-byte character was corrupted`);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+check("sandboxSupported is true on POSIX platforms and false on win32", () => {
+  assert.strictEqual(sandboxSupported("win32"), false);
+  assert.strictEqual(sandboxSupported("linux"), true);
+  assert.strictEqual(sandboxSupported("darwin"), true);
+});
+
+check("wrapForSandbox leaves the command untouched when sandbox.enabled is false", () => {
+  const cmd = "npm test";
+  assert.strictEqual(wrapForSandbox(cmd, { enabled: false, maxMemoryMb: 128 }, "linux"), cmd);
+  assert.strictEqual(wrapForSandbox(cmd, null, "linux"), cmd);
+  assert.strictEqual(wrapForSandbox(cmd, undefined, "linux"), cmd);
+});
+
+check("ADVERSARIAL wrapForSandbox leaves the command untouched on a platform ulimit can't enforce", () => {
+  // enabled: true but win32 has no ulimit -- if this silently produced a
+  // wrapped command anyway, the gate would run a shell fragment ("ulimit
+  // -v ...; exec ...") that cmd.exe cannot parse, breaking every gate
+  // command on Windows the moment someone turned the sandbox on. doctor is
+  // where that gap gets surfaced instead.
+  const cmd = "npm test";
+  const wrapped = wrapForSandbox(cmd, { enabled: true, maxMemoryMb: 128, maxCpuSeconds: 10, maxFileSizeMb: 1 }, "win32");
+  assert.strictEqual(wrapped, cmd);
+});
+
+check("wrapForSandbox prepends ulimit statements ahead of the real command on a supported platform", () => {
+  const wrapped = wrapForSandbox("npm test", { enabled: true, maxMemoryMb: 128, maxCpuSeconds: 10, maxFileSizeMb: 1 }, "linux");
+  assert.match(wrapped, /^ulimit -v \d+; ulimit -t 10; ulimit -f \d+; exec npm test$/,
+    `expected ulimit -v/-t/-f ahead of "exec npm test", got: ${wrapped}`);
+  // exec replaces the shell with the real command so the limits bind to it
+  // (and anything it execs) rather than just the short-lived wrapper shell.
+  assert.ok(wrapped.endsWith("exec npm test"));
+});
+
+check("wrapForSandbox omits a limit that was not configured, but keeps the ones that were", () => {
+  const wrapped = wrapForSandbox("npm test", { enabled: true, maxCpuSeconds: 30 }, "linux");
+  assert.strictEqual(wrapped, "ulimit -t 30; exec npm test");
+});
+
+check("wrapForSandbox is a no-op when enabled but no limits are configured at all", () => {
+  assert.strictEqual(wrapForSandbox("npm test", { enabled: true }, "linux"), "npm test");
+});
+
+checkAsync("ADVERSARIAL a real ulimit -f gate sandbox kills an oversized write, and an unsandboxed run of the same command does not", async () => {
+  // The one part of sandbox.mjs that unit-level string assertions above
+  // cannot prove: that the wrapped command actually constrains a real
+  // process. This only runs where sandboxSupported() is true -- win32 (the
+  // primary dev platform for this repo) has no ulimit at all, so this test
+  // is a documented no-op there and is exercised for real on the
+  // ubuntu-latest CI leg, matching the precedent set by the UNC-path
+  // regression test in kit/regression/run.mjs.
+  if (!sandboxSupported()) return;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-sandbox-"));
+  const scriptPath = path.join(dir, "write-big.mjs");
+  // 5MB, deliberately far past any plausible interpretation of `ulimit -f`'s
+  // block-size units for a 1MB config value -- this must fail regardless of
+  // whether the shell in question treats -f as 512-byte or 1024-byte blocks.
+  fs.writeFileSync(scriptPath,
+    "require('fs').writeFileSync('big.bin', Buffer.alloc(5*1024*1024));\n");
+  try {
+    const sandboxed = await exec(`node ${JSON.stringify(scriptPath)}`, dir, 5000, process.env,
+      { enabled: true, maxFileSizeMb: 1 });
+    assert.notStrictEqual(sandboxed.code, 0,
+      `expected the oversized write to fail under ulimit -f, got: ${JSON.stringify(sandboxed)}`);
+
+    fs.rmSync(path.join(dir, "big.bin"), { force: true });
+    const unsandboxed = await exec(`node ${JSON.stringify(scriptPath)}`, dir, 5000, process.env, { enabled: false });
+    assert.strictEqual(unsandboxed.code, 0,
+      `the same write should succeed with the sandbox off: ${JSON.stringify(unsandboxed)}`);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

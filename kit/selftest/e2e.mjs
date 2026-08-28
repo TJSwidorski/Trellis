@@ -13,6 +13,7 @@ import { scopeBullets } from "../lib/spec.mjs";
 import * as ledger from "../lib/ledger.mjs";
 import * as st from "../lib/state.mjs";
 import * as log from "../lib/log.mjs";
+import { sandboxSupported } from "../lib/sandbox.mjs";
 
 import { fileURLToPath } from "node:url";
 const CLI = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../bin/cli.mjs");
@@ -827,6 +828,58 @@ if (other !== 1) throw new Error("nope");
       `--skip-verify should have bypassed the precondition: ${skip.stdout}${skip.stderr}`);
   });
   fs.rmSync(preRoot, { recursive: true, force: true });
+
+  // ---- ADVERSARIAL: `trellis doctor` names the sandbox gap instead of staying silent ----
+  //
+  // Item 7 / the sandbox is opt-in and off by default -- silence there is
+  // correct. But silence about it being off, or about a config that turns
+  // it on landing on a platform that can't enforce it, is exactly the
+  // "fails open" shape the rest of this series exists to close.
+  const sbMock = await startMockServer({ models: ["m"], responses: {} });
+  const sbRoot = makeRepo();
+  write(sbRoot, "trellis.config.json", JSON.stringify({
+    project: "sandboxdoc", baseBranch: "main",
+    tiers: [{ name: "cheap", baseUrl: sbMock.url, model: "m", apiKeyEnv: null, maxAttempts: 1 }],
+  }, null, 2));
+  g(sbRoot, "add", "-A"); g(sbRoot, "commit", "-qm", "fixture");
+
+  // spawnSync would block this process's event loop for the whole child
+  // lifetime -- including the mock HTTP server's own event loop, since it
+  // runs in this same process -- so doctor's tier probe would never get a
+  // response and hang forever. Async spawn lets both run concurrently.
+  const runCli = (cwd, args) => new Promise((resolve) => {
+    const c = spawn("node", [CLI, ...args], { cwd });
+    let stdout = "", stderr = "";
+    c.stdout.on("data", (d) => (stdout += d));
+    c.stderr.on("data", (d) => (stderr += d));
+    c.on("close", (status) => resolve({ status, stdout, stderr }));
+  });
+
+  const docOff = await runCli(sbRoot, ["doctor"]);
+  check("ADVERSARIAL doctor warns that gate commands are unsandboxed when sandbox.enabled is false (the default)", () => {
+    assert.match(docOff.stdout + docOff.stderr, /gate commands run unsandboxed/);
+  });
+
+  write(sbRoot, "trellis.config.json", JSON.stringify({
+    project: "sandboxdoc", baseBranch: "main",
+    tiers: [{ name: "cheap", baseUrl: sbMock.url, model: "m", apiKeyEnv: null, maxAttempts: 1 }],
+    gate: { sandbox: { enabled: true, maxMemoryMb: 128, maxCpuSeconds: 10, maxFileSizeMb: 1 } },
+  }, null, 2));
+  g(sbRoot, "add", "-A"); g(sbRoot, "commit", "-qm", "enable sandbox");
+
+  const docOn = await runCli(sbRoot, ["doctor"]);
+  check(sandboxSupported()
+    ? "ADVERSARIAL doctor confirms the sandbox is actually enforced on a platform that supports it"
+    : "ADVERSARIAL doctor fails loudly when sandbox.enabled is true but this platform can't enforce it", () => {
+    if (sandboxSupported()) {
+      assert.match(docOn.stdout + docOn.stderr, /gate sandbox enforced/);
+    } else {
+      assert.notStrictEqual(docOn.status, 0, "doctor should refuse to call this Ready when the sandbox can't run");
+      assert.match(docOn.stdout + docOn.stderr, /no ulimit.*running WITHOUT the limits/s);
+    }
+  });
+  await sbMock.close();
+  fs.rmSync(sbRoot, { recursive: true, force: true });
 
   // ---- auto driver, build stage ----
   //

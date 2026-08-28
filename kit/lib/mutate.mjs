@@ -105,7 +105,7 @@ export async function checkMutations(cfg, node, worktree, root, { onStep, onCall
         continue;
       }
 
-      const r = await exec(node.gate, scratch, cfg.gate.timeoutMs, gateEnv(cfg));
+      const r = await exec(node.gate, scratch, cfg.gate.timeoutMs, gateEnv(cfg), cfg.gate?.sandbox);
 
       // A missing dependency exits non-zero exactly like a killed mutant —
       // verify.mjs's own null-stub check already treats this as disqualifying

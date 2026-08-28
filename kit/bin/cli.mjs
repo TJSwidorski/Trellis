@@ -8,6 +8,7 @@ import { loadGraph, validateGraph, indexNodes, levels } from "../lib/graph.mjs";
 import { repoRoot, git, currentBranch, isClean, removeWorktree, syncWorkspaceFile, mergeNode, changedPaths } from "../lib/worktree.mjs";
 import { norm, readJsonOrNull } from "../lib/paths.mjs";
 import { listModels } from "../lib/provider.mjs";
+import { sandboxSupported } from "../lib/sandbox.mjs";
 import * as st from "../lib/state.mjs";
 import * as log from "../lib/log.mjs";
 import { run } from "../lib/runner.mjs";
@@ -193,6 +194,22 @@ async function cmdDoctor() {
       problems++;
       log.fail(`${tier.name}: ${e.message}`);
     }
+  }
+
+  log.info("");
+  log.info(log.bold("Gate"));
+  const sandbox = cfg.gate?.sandbox;
+  if (!sandbox?.enabled) {
+    log.warn(`gate commands run unsandboxed (gate.sandbox.enabled: false) — a node's gate command has ` +
+      `no resource limits beyond the OS default. See kit/lib/sandbox.mjs before enabling.`);
+  } else if (!sandboxSupported()) {
+    problems++;
+    log.fail(`gate.sandbox.enabled is true, but ${process.platform} has no ulimit — gate commands are ` +
+      `running WITHOUT the limits the config claims. This is a Windows/macOS-without-sh gap, not ` +
+      `something fixable from config.`);
+  } else {
+    log.ok(`gate sandbox enforced (ulimit: ${sandbox.maxMemoryMb ?? "∞"}MB mem / ` +
+      `${sandbox.maxCpuSeconds ?? "∞"}s CPU / ${sandbox.maxFileSizeMb ?? "∞"}MB files)`);
   }
 
   log.info("");

@@ -326,7 +326,7 @@ export async function verifyTests(cfg, graph, nodes, root, { log = () => {} } = 
         continue;
       }
 
-      const r = await exec(node.gate, scratch, cfg.gate.timeoutMs, gateEnv(cfg));
+      const r = await exec(node.gate, scratch, cfg.gate.timeoutMs, gateEnv(cfg), cfg.gate?.sandbox);
       if (r.code === 0) {
         findings.push({
           nodeId: node.id,

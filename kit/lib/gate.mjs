@@ -3,6 +3,7 @@ import { changedPaths, revertPaths, ignoredPaths } from "./worktree.mjs";
 import { matchDeny, matchAllow } from "./paths.mjs";
 import { detectEnvFailure, envFailureMessage } from "./envfail.mjs";
 import { killTree, DETACH_FOR_TREE_KILL } from "./proc.mjs";
+import { wrapForSandbox } from "./sandbox.mjs";
 
 /**
  * Three checks, in order. The first two are free and catch the failure modes
@@ -102,7 +103,7 @@ export async function runGate(cfg, node, worktree) {
     return { ok: false, kind: "no-gate", feedback: "No gate command configured for this node.", changed };
   }
 
-  const res = await exec(cmd, worktree, cfg.gate.timeoutMs, gateEnv(cfg));
+  const res = await exec(cmd, worktree, cfg.gate.timeoutMs, gateEnv(cfg), cfg.gate?.sandbox);
   if (res.timedOut) {
     return {
       ok: false,
@@ -210,16 +211,20 @@ export function gateEnv(cfg, base = process.env) {
   return env;
 }
 
-export function exec(command, cwd, timeoutMs, env = process.env) {
+export function exec(command, cwd, timeoutMs, env = process.env, sandbox = null) {
   return new Promise((resolve) => {
     // shell:true so "npm test -- foo" and Windows .cmd shims both work. That
     // makes `child` the SHELL, not the gate command itself — see killTree's
     // docblock in proc.mjs for why a timeout used to leave the real test
     // runner running forever, holding the stdio pipes open and hanging this
-    // promise, instead of the command actually being killed.
+    // promise, instead of the command actually being killed. The same shell
+    // is what lets wrapForSandbox prepend `ulimit` builtins ahead of the
+    // real command when the (opt-in, off by default) sandbox is enabled.
     // `detached` (POSIX only; a no-op flag on Windows) puts the shell in its
     // own process group so killTree can signal the whole group, not just it.
-    const child = spawn(command, { cwd, shell: true, windowsHide: true, env, detached: DETACH_FOR_TREE_KILL });
+    const child = spawn(wrapForSandbox(command, sandbox), {
+      cwd, shell: true, windowsHide: true, env, detached: DETACH_FOR_TREE_KILL,
+    });
     let out = "";
     let timedOut = false;
     // Per-stream decoders, not `d.toString()` per chunk: a multi-byte UTF-8

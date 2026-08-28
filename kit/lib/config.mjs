@@ -7,7 +7,10 @@ const DEFAULTS = {
   concurrency: 3,
   tiers: [],
   headers: {},
-  gate: { defaultCommand: null, timeoutMs: 300000, feedbackChars: 4000 },
+  gate: {
+    defaultCommand: null, timeoutMs: 300000, feedbackChars: 4000,
+    sandbox: { enabled: false, maxMemoryMb: 2048, maxCpuSeconds: 300, maxFileSizeMb: 500 },
+  },
   worker: { requestTimeoutMs: 180000, maxContextFileBytes: 40000 },
   boundaries: { denyWrite: [] },
   budget: { maxTotalAttempts: null, maxWorkerTokens: null, maxWallClockMs: null, maxCostUsd: null },

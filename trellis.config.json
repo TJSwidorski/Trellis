@@ -99,7 +99,14 @@
     "timeoutMs": 300000,
     "$stripEnv": "Environment variables removed before the gate command runs. Tier apiKeyEnv names are stripped automatically; add anything else the project must not expose to code a worker just wrote.",
     "stripEnv": [],
-    "feedbackChars": 4000
+    "feedbackChars": 4000,
+    "sandbox": {
+      "$comment": "Best-effort resource containment for gate commands, via the POSIX shell's ulimit — not an isolation boundary, and not enforced on Windows (trellis doctor warns either way). Off by default; enable once you've read kit/lib/sandbox.mjs's docblock on what it does and does not bound.",
+      "enabled": false,
+      "maxMemoryMb": 2048,
+      "maxCpuSeconds": 300,
+      "maxFileSizeMb": 500
+    }
   },
 
   "worker": {
