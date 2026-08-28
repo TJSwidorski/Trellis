@@ -25,9 +25,20 @@ export function event(type, payload = {}) {
   if (stream) stream.write(JSON.stringify(rec) + "\n");
 }
 
+/**
+ * Returns a promise that resolves once the stream has actually finished
+ * flushing to disk. `stream.end()` alone begins that process asynchronously
+ * — a caller that reads run.jsonl right after calling this with no await
+ * (as a test verifying the last event a run wrote is exactly this shape)
+ * could race the final buffered write and see a truncated file. Existing
+ * fire-and-forget callers are unaffected: an unawaited resolved promise
+ * behaves exactly like the `undefined` this returned before.
+ */
 export function closeRunLog() {
-  if (stream) stream.end();
+  const s = stream;
   stream = null;
+  if (!s) return Promise.resolve();
+  return new Promise((resolve) => s.end(resolve));
 }
 
 export function info(msg) {

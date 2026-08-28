@@ -166,6 +166,14 @@ export async function run(cfg, graph, state, { dryRun = false, only = null, hist
       if (weak && (cfg.verify?.onSurvivor ?? "warn") === "hold") {
         state.nodes[id].status = st.STATUS.REVIEW;
         state.nodes[id].reason = "surviving mutants; held unmerged by verify.onSurvivor=hold";
+        // Same disposition as the high-risk branch above (REVIEW, held
+        // unmerged), but this one used to log neither a console line nor a
+        // run.jsonl event -- a held-on-survivor node vanished from the
+        // console, from run.jsonl, and from any consumer counting terminal
+        // events per node, distinguishable from the high-risk case only by
+        // reading state.json's `reason` field by hand.
+        log.node(id, log.yellow(`passed — held unmerged on ${wt.branch} (surviving mutants)`));
+        log.event("node.review", { id, branch: wt.branch, reason: "onSurvivor-hold" });
         return;
       }
 

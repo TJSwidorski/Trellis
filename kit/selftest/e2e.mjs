@@ -12,6 +12,7 @@ import { normalizeNode } from "../lib/graph.mjs";
 import { scopeBullets } from "../lib/spec.mjs";
 import * as ledger from "../lib/ledger.mjs";
 import * as st from "../lib/state.mjs";
+import * as log from "../lib/log.mjs";
 
 import { fileURLToPath } from "node:url";
 const CLI = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../bin/cli.mjs");
@@ -649,6 +650,60 @@ if (other !== 1) throw new Error("nope");
     assert.ok(stuck > 0, "rollup must count the deadlock as stuck, not silently finished");
   });
   fs.rmSync(onlyRoot, { recursive: true, force: true });
+
+  // ---- ADVERSARIAL: verify.onSurvivor="hold" logs exactly like the high-risk hold ----
+  //
+  // Structurally the same disposition as the risk:"high" branch immediately
+  // above it in runner.mjs (STATUS.REVIEW, held unmerged) -- but it used to
+  // emit neither a console line nor a run.jsonl event, so a held-on-survivor
+  // node vanished from both, distinguishable from the high-risk case only by
+  // reading state.json's `reason` field by hand.
+  const holdRoot = makeRepo();
+  write(holdRoot, "tests/weak.test.mjs", "import { clamp } from '../src/weak.mjs';\nif (clamp(5) !== 5) throw new Error('nope');\n");
+  write(holdRoot, ".trellis/graph.json", JSON.stringify({
+    version: 1, project: "hold",
+    nodes: [{ id: "weak", title: "weak", goal: "export clamp(n)", write: ["src/weak.mjs"],
+      tests: ["tests/weak.test.mjs"], gate: "node tests/weak.test.mjs",
+      mutations: ["the upper bound is exclusive instead of inclusive"] }],
+  }, null, 2));
+  const holdMock = await startMockServer({
+    models: ["mock/cheap"],
+    responses: { weak: [{ content: FILE("src/weak.mjs", "export const clamp=(n)=>n<0?0:(n>10?10:n);") }] },
+    // The test never asserts clamp(11), so it cannot tell an inclusive bound
+    // from an exclusive one -- the mutant must SURVIVE.
+    mutants: { "upper bound is exclusive": FILE("src/weak.mjs", "export const clamp=(n)=>n<0?0:(n>=10?9:n);") },
+  });
+  write(holdRoot, "trellis.config.json", JSON.stringify({
+    project: "hold", baseBranch: "main", concurrency: 1,
+    tiers: [{ name: "cheap", baseUrl: holdMock.url, model: "mock/cheap", maxAttempts: 1 }],
+    gate: { timeoutMs: 20000 },
+    routing: { enabled: false },
+    verify: { mutationsOnPass: true, onSurvivor: "hold" },
+    boundaries: { denyWrite: [".git/**", ".trellis/**", "trellis.config.json"] },
+  }, null, 2));
+  g(holdRoot, "add", "-A"); g(holdRoot, "commit", "-qm", "fixture");
+
+  const holdCfg = loadConfig(holdRoot);
+  const holdGraph = loadGraph(holdRoot, holdCfg.paths.graph);
+  const holdState = st.initState(holdRoot, holdCfg, holdGraph);
+  log.openRunLog(path.join(holdRoot, ".trellis"));
+  await run(holdCfg, holdGraph, holdState, {});
+  await log.closeRunLog();
+  await holdMock.close();
+
+  check("ADVERSARIAL onSurvivor=hold reaches STATUS.REVIEW, same as a high-risk hold", () => {
+    assert.strictEqual(holdState.nodes.weak.status, "review",
+      `expected the surviving-mutant node held for review, got ${holdState.nodes.weak.status}`);
+  });
+  check("ADVERSARIAL onSurvivor=hold logs a node.review event, not silence", () => {
+    const runLog = fs.readFileSync(path.join(holdRoot, ".trellis", "run.jsonl"), "utf8")
+      .split("\n").filter(Boolean).map((l) => JSON.parse(l));
+    const reviewEvent = runLog.find((r) => r.type === "node.review" && r.id === "weak");
+    assert.ok(reviewEvent, `expected a node.review event for "weak" in run.jsonl, got: ${JSON.stringify(runLog)}`);
+    assert.strictEqual(reviewEvent.reason, "onSurvivor-hold",
+      `expected the event to distinguish this from a high-risk hold, got: ${JSON.stringify(reviewEvent)}`);
+  });
+  fs.rmSync(holdRoot, { recursive: true, force: true });
 
   // ---- auto driver, build stage ----
   //
