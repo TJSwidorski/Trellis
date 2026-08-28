@@ -1479,6 +1479,25 @@ check("ADVERSARIAL a proposal touching the vocabulary never auto-applies", () =>
   assert(r.held === true, "the proposal did not record that it is held");
 });
 
+check("ADVERSARIAL a proposal touching OPERATING.md never auto-applies either", () => {
+  // OPERATING.md documents the checkpoint -- the one place `auto` stops for a
+  // human. Auto-applying an edit to the document describing when the loop is
+  // allowed to stop unattended would be the loop quietly relaxing its own leash.
+  assert(classify("OPERATING.md") === "advisory", "precondition: OPERATING.md is advisory prose");
+  for (const spelling of ["OPERATING.md", "./OPERATING.md", "OPERATING.MD", ".\\OPERATING.md"]) {
+    assert(!autoAppliable(spelling, { evolve: { autoApplyAdvisory: true } }),
+      `"${spelling}" auto-applies — the loop could relax its own checkpoint documentation`);
+  }
+  const root = proposalRoot();
+  const r = writeProposal(root, {
+    title: "reword the checkpoint section", targets: ["OPERATING.md"], evidence: "e", rationale: "r", change: "c",
+  });
+  const text = fs.readFileSync(path.join(root, r.file), "utf8");
+  assert(/\*\*Applies:\*\* only when a human merges it/.test(text),
+    "an OPERATING.md proposal was marked auto-applying");
+  assert(r.held === true, "the proposal did not record that it is held");
+});
+
 check("ADVERSARIAL anything written by the evolve stage waits for a human", () => {
   // Otherwise the system writes prose about how it should behave and that prose
   // applies with nobody in the path.
