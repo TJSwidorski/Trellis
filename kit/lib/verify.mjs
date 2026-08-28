@@ -133,11 +133,43 @@ export function importedNames(testSource, testFilePath, targetRel, root) {
 }
 
 /**
+ * Whether a module path resolves to CommonJS rather than ESM under Node's own
+ * rules, so buildStub can emit syntax the test's own `require()` (importedNames
+ * already parses REQUIRE_DESTRUCTURE_RE / REQUIRE_BARE_RE, so CJS test files
+ * are an explicitly supported input) can actually load.
+ *
+ * `.mjs`/`.mts` are always ESM; `.cjs`/`.cts` are always CommonJS; anything
+ * else (`.js`, `.jsx`, `.ts`, `.tsx`) depends on the nearest ancestor
+ * package.json's `"type"` field, exactly as Node resolves it — ESM only when
+ * that field is literally `"module"`, CommonJS otherwise (including when no
+ * package.json is found at all, which is Node's own default).
+ */
+export function isCJSTarget(root, targetRel) {
+  const ext = path.extname(targetRel);
+  if (ext === ".mjs" || ext === ".mts") return false;
+  if (ext === ".cjs" || ext === ".cts") return true;
+  let dir = path.resolve(root, path.dirname(targetRel));
+  const top = path.resolve(root);
+  for (;;) {
+    const pkgPath = path.join(dir, "package.json");
+    if (fs.existsSync(pkgPath)) {
+      try {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+        return pkg.type !== "module";
+      } catch { /* an unparsable package.json is not this function's problem */ }
+    }
+    if (dir === top || dir === path.dirname(dir)) break; // reached repo root or filesystem root
+    dir = path.dirname(dir);
+  }
+  return true; // Node's own default with no package.json found
+}
+
+/**
  * A stub that imports cleanly and does nothing useful. Importable matters: a
  * module-not-found error would prove only that the file is absent, not that the
  * tests discriminate.
  */
-export function buildStub(names) {
+export function buildStub(names, { cjs = false } = {}) {
   // Each export must survive being used as a function, an object, an array, or a
   // primitive without throwing — otherwise the test dies on a TypeError and we
   // learn nothing about whether it actually asserts anything. A callable Proxy
@@ -163,12 +195,24 @@ export function buildStub(names) {
     "});",
     "",
   ];
-  for (const n of names) {
-    if (n === "__default__") continue;
-    lines.push(`export const ${n} = inert();`);
+  // Only the export syntax below differs between the two module systems —
+  // `require('./calc.js')` on a CommonJS-resolved target throws a bare
+  // SyntaxError on the `export` keyword before the test ever runs, which
+  // used to be scored as a non-zero exit indistinguishable from a real
+  // assertion failure, i.e. "non-vacuous" — a test asserting nothing was
+  // certified as having teeth.
+  if (cjs) {
+    lines.push("module.exports = {");
+    for (const n of names) lines.push(`  ${n === "__default__" ? "default" : n}: inert(),`);
+    lines.push("};");
+  } else {
+    for (const n of names) {
+      if (n === "__default__") continue;
+      lines.push(`export const ${n} = inert();`);
+    }
+    if (names.includes("__default__")) lines.push(`export default inert();`);
+    if (!names.length) lines.push("export {};");
   }
-  if (names.includes("__default__")) lines.push(`export default inert();`);
-  if (!names.length) lines.push("export {};");
   return lines.join("\n") + "\n";
 }
 
@@ -255,7 +299,7 @@ export async function verifyTests(cfg, graph, nodes, root, { log = () => {} } = 
         stubbedCount++;
         const abs = path.join(scratch, target);
         fs.mkdirSync(path.dirname(abs), { recursive: true });
-        fs.writeFileSync(abs, buildStub([...names]));
+        fs.writeFileSync(abs, buildStub([...names], { cjs: isCJSTarget(scratch, target) }));
       }
 
       // Every target skipped means no test in this node imports anything from

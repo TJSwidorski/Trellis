@@ -5,7 +5,7 @@ import { startMockServer } from "./mock-server.mjs";
 import { loadConfig } from "../lib/config.mjs";
 import { loadGraph, validateGraph, normalizeNode, ancestors, levels } from "../lib/graph.mjs";
 import { run } from "../lib/runner.mjs";
-import { verifyTests, buildStub, importedNames } from "../lib/verify.mjs";
+import { verifyTests, buildStub, importedNames, isCJSTarget } from "../lib/verify.mjs";
 import { planTiers } from "../lib/routing.mjs";
 import { tierStats, recordsFor, summarise } from "../lib/ledger.mjs";
 import { scopeBullets } from "../lib/spec.mjs";
@@ -14,6 +14,8 @@ import { chat, readCapped } from "../lib/provider.mjs";
 import { exec } from "../lib/gate.mjs";
 import http from "node:http";
 import { pathToFileURL } from "node:url";
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
 import { meterSession, summariseArm, compare } from "../bench/meter.mjs";
 import * as ledger from "../lib/ledger.mjs";
 import * as st from "../lib/state.mjs";
@@ -46,6 +48,69 @@ check("buildStub produces importable inert exports", () => {
   const s = buildStub(["foo","bar"]);
   assert.ok(s.includes("export const foo"));
   assert.ok(s.includes("export const bar"));
+});
+
+// buildStub always emitted ESM `export` syntax regardless of the target's
+// actual module system -- but importedNames explicitly supports require()
+// (REQUIRE_DESTRUCTURE_RE, REQUIRE_BARE_RE), so a CommonJS test file was an
+// intended input all along. Against a CJS-resolved target, `require()` on
+// the stub threw a bare SyntaxError on `export` before the test's own
+// assertions ever ran -- scored as a non-zero exit indistinguishable from a
+// genuine assertion failure, i.e. "non-vacuous" for a test that could not
+// even load its target.
+check("buildStub emits CommonJS syntax that Node's own require() actually accepts", () => {
+  const s = buildStub(["foo", "bar"], { cjs: true });
+  // Not `/\bexport\b/` -- the header comment itself says "Every export is
+  // inert" in prose. Check for the actual ESM keyword usage that would
+  // throw a SyntaxError under require(), not the word anywhere in the file.
+  assert.ok(!/^\s*export\s/m.test(s), `CJS stub must not contain an ESM export statement: ${s}`);
+  assert.ok(/module\.exports/.test(s), `expected module.exports, got: ${s}`);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-cjsstub-"));
+  const p = path.join(dir, "stub.cjs");
+  fs.writeFileSync(p, s);
+  const { foo, bar } = require(p);
+  assert.strictEqual(typeof foo, "function", "expected the inert proxy to load as a callable");
+  assert.strictEqual(foo(), null, "expected calling the inert stub to return null, not throw");
+  assert.strictEqual(bar(), null);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+check("buildStub({cjs:true}) with no names produces a loadable empty exports object", () => {
+  const s = buildStub([], { cjs: true });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-cjsstub-empty-"));
+  const p = path.join(dir, "stub.cjs");
+  fs.writeFileSync(p, s);
+  assert.deepStrictEqual(require(p), {});
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+check("isCJSTarget: .mjs/.mts are always ESM, .cjs/.cts are always CommonJS", () => {
+  assert.strictEqual(isCJSTarget("/r", "src/a.mjs"), false);
+  assert.strictEqual(isCJSTarget("/r", "src/a.mts"), false);
+  assert.strictEqual(isCJSTarget("/r", "src/a.cjs"), true);
+  assert.strictEqual(isCJSTarget("/r", "src/a.cts"), true);
+});
+check("isCJSTarget: a .js target with no package.json defaults to CommonJS, Node's own default", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-cjsdetect-"));
+  fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+  assert.strictEqual(isCJSTarget(dir, "src/a.js"), true);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+check("isCJSTarget: a .js target under package.json type:module resolves as ESM", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-cjsdetect-"));
+  fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ type: "module" }));
+  assert.strictEqual(isCJSTarget(dir, "src/a.js"), false);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+check("isCJSTarget: a nested package.json overrides the repo root's", () => {
+  // A monorepo package can declare its own type independent of the root's.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-cjsdetect-"));
+  fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ type: "module" }));
+  fs.mkdirSync(path.join(dir, "pkg", "src"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "pkg", "package.json"), JSON.stringify({ type: "commonjs" }));
+  assert.strictEqual(isCJSTarget(dir, "pkg/src/a.js"), true,
+    "the nested package.json's type:commonjs should win over the root's type:module");
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 // Four of six realistic import forms used to produce no stub at all: the gate
