@@ -36,32 +36,54 @@ export const STAGES = [
     id: "01_ingest",
     prompt: "Read sessions/01_ingest/CONTEXT.md and do exactly what it says. Nothing else.",
     verify: (root) => ingestCurrentForSpec(root),
+    // Nothing to commit: ingest.json / product-graph.derived.json are working
+    // state, not a deliverable — no docs anywhere ask the operator to commit
+    // them by hand either.
+    commits: () => [],
   },
   {
     id: "02_slice",
     prompt: "Read sessions/02_slice/CONTEXT.md and do exactly what it says. Nothing else.",
     verify: (root, cfg) => sliceAssembledTaskGraph(root, cfg),
+    // Only the two JSON files this stage's own verify inspects. The contract
+    // ALSO tells the session to commit any interface file it writes — on
+    // purpose left off this list. If one is left uncommitted, auto halting
+    // on "unexpected" modifications is the correct behaviour: it means the
+    // session did not do what its contract said, and that is worth a human
+    // looking rather than auto silently sweeping it in.
+    commits: () => [".trellis/plan.json", ".trellis/graph.json"],
   },
   {
     id: "03_cases",
     prompt: "Read sessions/03_cases/CONTEXT.md and do exactly what it says. Nothing else.",
     verify: (root, cfg) => casesCoverPlan(root, cfg),
+    commits: () => [".trellis/cases.json"],
   },
   {
     id: "04_tests",
     prompt: "Read sessions/04_tests/CONTEXT.md and do exactly what it says. Nothing else.",
     verify: (root, cfg) => testsExistAndAreNonVacuous(root, cfg),
+    // The declared test paths are the whole point of this stage, and they are
+    // the only thing known ahead of time — read from THIS cycle's graph.json.
+    commits: (root) => {
+      const graph = readJson(root, ".trellis/graph.json");
+      return (graph?.nodes ?? []).flatMap((n) => n.tests ?? []);
+    },
   },
   {
     id: "05_build",
     prompt: null, // no model: the deterministic runner owns this stage
     run: "runner",
     verify: (root, cfg) => buildFinishedThisCycle(root, cfg),
+    // The runner commits each node's work itself as it merges (commitWorktree,
+    // one commit per landed node) — there is nothing left for auto to batch.
+    commits: () => [],
   },
   {
     id: "06_triage",
     prompt: "Read sessions/06_triage/CONTEXT.md and do exactly what it says. Nothing else.",
     verify: (root, cfg) => triageRecordedEvidence(root, cfg),
+    commits: () => [".trellis/triage.json", ".trellis/triage.jsonl", ".trellis/friction.jsonl", ".trellis/built.json"],
   },
   {
     id: "07_evolve",
@@ -71,6 +93,10 @@ export const STAGES = [
     periodic: true,
     prompt: "Read sessions/07_evolve/CONTEXT.md and do exactly what it says. Nothing else.",
     verify: (root, cfg) => evolveConsideredEverything(root, cfg),
+    commits: (root) => {
+      const j = readJson(root, ".trellis/evolve.json");
+      return [".trellis/evolve.json", ...(j?.proposals ?? [])];
+    },
   },
 ];
 

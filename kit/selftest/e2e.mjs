@@ -543,12 +543,13 @@ console.log(thing);
   // config belongs, so cfg.tiers was undefined and the stage threw. `auto` is off
   // by default, so nothing ever exercised this branch.
   const aRoot = makeRepo();
-  // Real installs ship a .gitignore that keeps .trellis/cycle.json untracked
-  // (see the shipped .gitignore) — without it, resumeOrInit's lazy cycle-1
-  // begin writes cycle.json as an untracked file, and the runner's own
-  // dirty-tree check then refuses to start on the file it just needed to
-  // create. This fixture stands in for a real install's .gitignore.
-  write(aRoot, ".gitignore", ".trellis/cycle.json\n.trellis/checkpoint.json\n");
+  // The REAL shipped .gitignore, not a hand-picked subset — a partial one
+  // here previously let this fixture pass while missing state.json/
+  // REPORT.md/run.jsonl/ledger.jsonl/sessions.jsonl/trellis.code-workspace,
+  // every one of which auto's commit step then reports as "unexpected".
+  // Copying the actual file is what keeps this fixture from drifting from
+  // reality the same way QUICKSTART.md once did.
+  write(aRoot, ".gitignore", fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../.gitignore"), "utf8"));
   // `auto` refuses to start at all without a Bash-matched PreToolUse hook
   // registered — see requireBashGuard in cli.mjs. Real operators configure
   // this once at install time; this fixture stands in for that.
@@ -609,6 +610,77 @@ assert.strictEqual(auto(), "ok");
       `no REPORT.md\nstdout: ${auto.stdout}\nstderr: ${auto.stderr}`);
   });
   fs.rmSync(aRoot, { recursive: true, force: true });
+
+  // ---- auto halts on a modification it did not declare, rather than sweeping
+  // it into a commit. This is the check that would have caught this exact
+  // mistake earlier in the design: a partial .gitignore in an earlier version
+  // of THIS fixture made state.json/REPORT.md/run.jsonl/ledger.jsonl/
+  // sessions.jsonl/trellis.code-workspace all look "unexpected" and halted
+  // every run — the fix belonged in .gitignore, not in loosening this check.
+  const hRoot = makeRepo();
+  write(hRoot, ".gitignore", fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../.gitignore"), "utf8"));
+  write(hRoot, ".claude/settings.json", JSON.stringify({
+    hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "node .claude/hooks/guard-bash.mjs" }] }] },
+  }));
+  write(hRoot, "tests/halt.test.mjs", `
+import assert from "node:assert";
+import { halt } from "../src/halt.mjs";
+assert.strictEqual(halt(), "ok");
+`.trim());
+  write(hRoot, ".trellis/graph.json", JSON.stringify({
+    version: 1, project: "halt",
+    nodes: [{ id: "halt", title: "halt", goal: "export halt()", write: ["src/halt.mjs"],
+      tests: ["tests/halt.test.mjs"], gate: "node tests/halt.test.mjs" }],
+  }, null, 2));
+  write(hRoot, "trellis.config.json", JSON.stringify({
+    project: "halt", baseBranch: "main", concurrency: 1,
+    driver: { enabled: true, command: "claude", maxTurns: 10, maxAttempts: 1 },
+    tiers: [{ name: "cheap", baseUrl: "http://127.0.0.1:1", model: "mock/cheap", maxAttempts: 1 }],
+    gate: { timeoutMs: 30000 }, routing: { enabled: false }, verify: { mutationsOnPass: false },
+    budget: { maxTotalAttempts: null, maxWorkerTokens: null, maxWallClockMs: null, maxCostUsd: null },
+    boundaries: { denyWrite: [".git/**", ".trellis/**", "trellis.config.json"] },
+  }, null, 2));
+  g(hRoot, "add", "-A"); g(hRoot, "commit", "-qm", "fixture");
+  // The file auto did not declare and cannot know about — simulates a stray
+  // edit left in the working tree by anything other than this stage.
+  write(hRoot, "NOTES.md", "an operator's scratch note, sitting in the tree\n");
+
+  const halted = spawnSync("node", [CLI, "auto", "--stage", "05_build"], { cwd: hRoot, encoding: "utf8" });
+  check("ADVERSARIAL an undeclared file in the tree is never swept into a commit", () => {
+    // For 05_build specifically, the RUNNER's own pre-existing dirty-tree
+    // check (kit/lib/runner.mjs) fires before commitStageOutput's newer,
+    // narrower check ever gets a chance to — the runner refuses to start at
+    // all on any dirty tree, which is a stricter, earlier gate for this one
+    // stage. What matters here is the outcome both mechanisms exist to
+    // guarantee: auto must never exit 0 with a stray file quietly committed.
+    assert.notStrictEqual(halted.status, 0, "auto exited 0 despite an undeclared file in the tree");
+    const stillDirty = g(hRoot, "status", "--porcelain").stdout;
+    assert.ok(/NOTES\.md/.test(stillDirty), "NOTES.md should still be sitting there, untouched, not swept into a commit");
+    const log = g(hRoot, "log", "--oneline").stdout;
+    assert.ok(!/NOTES/.test(log), "NOTES.md ended up committed somewhere");
+  });
+  fs.rmSync(hRoot, { recursive: true, force: true });
+
+  // ---- --dry-run runs nothing
+  const dRoot = makeRepo();
+  write(dRoot, "trellis.config.json", JSON.stringify({
+    project: "dry", baseBranch: "main",
+    driver: { enabled: true, command: "does-not-exist" },
+    paths: { state: ".trellis", worktrees: ".worktrees", graph: ".trellis/graph.json" },
+    tiers: [{ name: "cheap", baseUrl: "http://127.0.0.1:1", model: "m", apiKeyEnv: null, maxAttempts: 1, maxTokens: 100 }],
+  }));
+  write(dRoot, ".claude/settings.json", JSON.stringify({
+    hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "node .claude/hooks/guard-bash.mjs" }] }] },
+  }));
+  g(dRoot, "add", "-A"); g(dRoot, "commit", "-qm", "fixture");
+  const dry = spawnSync("node", [CLI, "auto", "--dry-run"], { cwd: dRoot, encoding: "utf8" });
+  check("auto --dry-run prints the plan and runs nothing", () => {
+    assert.strictEqual(dry.status, 0, dry.stdout + dry.stderr);
+    assert.ok(/Stage plan/.test(dry.stdout), dry.stdout);
+    assert.ok(!fs.existsSync(path.join(dRoot, ".trellis/cycle.json")), "--dry-run began a cycle");
+    assert.ok(!fs.existsSync(path.join(dRoot, ".trellis/sessions.jsonl")), "--dry-run recorded a session");
+  });
+  fs.rmSync(dRoot, { recursive: true, force: true });
 
   // `trellis verify-tests` used to always exit 0 unless a HARD finding forced
   // `die()` — so a run where every node was soft-skipped (a language it does

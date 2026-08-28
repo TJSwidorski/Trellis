@@ -5,7 +5,8 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { loadConfig, tierKey } from "../lib/config.mjs";
 import { loadGraph, validateGraph, indexNodes, levels } from "../lib/graph.mjs";
-import { repoRoot, git, currentBranch, isClean, removeWorktree, syncWorkspaceFile, mergeNode } from "../lib/worktree.mjs";
+import { repoRoot, git, currentBranch, isClean, removeWorktree, syncWorkspaceFile, mergeNode, changedPaths } from "../lib/worktree.mjs";
+import { norm } from "../lib/paths.mjs";
 import { listModels } from "../lib/provider.mjs";
 import * as st from "../lib/state.mjs";
 import * as log from "../lib/log.mjs";
@@ -598,20 +599,26 @@ const RECORD_ONLY_VERDICTS = new Set(["cut", "defer"]);
  *   anything else (cut, defer, blocked, ...) -> recorded, no state change
  *
  * `--dry-run` is the default. `--apply` is required to write anything.
+ *
+ * Factored out of the command so `trellis auto` can call the identical logic
+ * automatically right after 06_triage verifies — the whole point of a
+ * one-command cycle is that the operator does not separately remember to run
+ * this. Returns `null` (rather than dying) when there is nothing to apply, so
+ * the auto loop can treat "no triage yet" as "nothing to do" instead of a
+ * hard stop.
  */
-function cmdApplyTriage() {
-  const { root, cfg } = ctx();
+function applyTriageCore(root, cfg, { apply, quiet = false } = {}) {
+  const log2 = quiet ? { info() {}, ok() {}, warn() {}, bold: (s) => s, dim: (s) => s } : log;
   const state = st.loadState(root, cfg);
-  if (!state) die("No run to apply triage against.");
+  if (!state) return null;
 
   const triagePath = path.resolve(root, ".trellis/triage.json");
-  if (!fs.existsSync(triagePath)) die(".trellis/triage.json does not exist — nothing to apply.");
+  if (!fs.existsSync(triagePath)) return null;
   let triage;
-  try { triage = JSON.parse(fs.readFileSync(triagePath, "utf8")); } catch { die(".trellis/triage.json is not valid JSON."); }
+  try { triage = JSON.parse(fs.readFileSync(triagePath, "utf8")); } catch { return null; }
   const decisions = Array.isArray(triage.decisions) ? triage.decisions : [];
-  if (!decisions.length) die(".trellis/triage.json has no decisions.");
+  if (!decisions.length) return null;
 
-  const apply = flags.has("--apply");
   const rows = { reset: [], refused: [], accepted: [], checkpoint: [], recorded: [], unknown: [] };
 
   for (const d of decisions) {
@@ -636,24 +643,24 @@ function cmdApplyTriage() {
     rows.recorded.push({ id, verdict, why: RECORD_ONLY_VERDICTS.has(verdict) ? "recorded only" : "no mechanised action for this verdict" });
   }
 
-  log.info(log.bold(`triage decisions: ${decisions.length}`));
-  if (rows.reset.length) log.ok(`${rows.reset.length} rejected node(s) to reset: ${rows.reset.join(", ")}`);
-  if (rows.accepted.length) log.ok(`${rows.accepted.length} landed node(s) to mark accepted (bookkeeping only): ${rows.accepted.join(", ")}`);
+  log2.info(log2.bold(`triage decisions: ${decisions.length}`));
+  if (rows.reset.length) log2.ok(`${rows.reset.length} rejected node(s) to reset: ${rows.reset.join(", ")}`);
+  if (rows.accepted.length) log2.ok(`${rows.accepted.length} landed node(s) to mark accepted (bookkeeping only): ${rows.accepted.join(", ")}`);
   if (rows.refused.length) {
-    log.warn(`${rows.refused.length} rejected but already landed — a merge revert is a human decision, not applying:`);
-    for (const r of rows.refused) log.info(`  ${r.id} (${r.status})${r.reason ? `: ${r.reason}` : ""}`);
+    log2.warn(`${rows.refused.length} rejected but already landed — a merge revert is a human decision, not applying:`);
+    for (const r of rows.refused) log2.info(`  ${r.id} (${r.status})${r.reason ? `: ${r.reason}` : ""}`);
   }
   if (rows.checkpoint.length) {
-    log.warn(`${rows.checkpoint.length} accepted but held for review — never auto-applied, written to checkpoint:`);
-    for (const c of rows.checkpoint) log.info(`  ${c.id}${c.reason ? `: ${c.reason}` : ""}`);
+    log2.warn(`${rows.checkpoint.length} accepted but held for review — never auto-applied, written to checkpoint:`);
+    for (const c of rows.checkpoint) log2.info(`  ${c.id}${c.reason ? `: ${c.reason}` : ""}`);
   }
-  if (rows.recorded.length) log.info(log.dim(`${rows.recorded.length} decision(s) recorded, no action: ${rows.recorded.map((r) => r.id).join(", ")}`));
-  if (rows.unknown.length) log.warn(`${rows.unknown.length} decision(s) named a node not in this run's state — skipped.`);
+  if (rows.recorded.length) log2.info(log2.dim(`${rows.recorded.length} decision(s) recorded, no action: ${rows.recorded.map((r) => r.id).join(", ")}`));
+  if (rows.unknown.length) log2.warn(`${rows.unknown.length} decision(s) named a node not in this run's state — skipped.`);
 
   if (!apply) {
-    log.info("");
-    log.info(log.dim("Dry run. Nothing was changed. Re-run with --apply to write these."));
-    return;
+    log2.info("");
+    log2.info(log2.dim("Dry run. Nothing was changed. Re-run with --apply to write these."));
+    return { rows, applied: false };
   }
 
   for (const id of rows.reset) {
@@ -679,18 +686,28 @@ function cmdApplyTriage() {
   // derived cache rather than leave it showing the pre-apply picture.
   writeBuilt(root, cfg);
 
+  // Written unconditionally, including an empty `nodes: []`. Writing it only
+  // when rows.checkpoint is non-empty left a PRIOR run's checkpoint on disk
+  // forever once every node in it was finally accepted — `trellis auto`
+  // reads this file unconditionally, so the loop kept reporting the same
+  // stale checkpoint after the nodes it named were already merged.
   const checkpointPath = path.resolve(root, ".trellis/checkpoint.json");
-  if (rows.checkpoint.length) {
-    fs.writeFileSync(checkpointPath, JSON.stringify({ at: new Date().toISOString(), nodes: rows.checkpoint }, null, 2) + "\n");
-  }
+  fs.writeFileSync(checkpointPath, JSON.stringify({ at: new Date().toISOString(), nodes: rows.checkpoint }, null, 2) + "\n");
 
-  log.info("");
-  log.ok(`applied: ${rows.reset.length} reset, ${rows.accepted.length} bookkept, ${rows.checkpoint.length} sent to checkpoint`);
+  log2.info("");
+  log2.ok(`applied: ${rows.reset.length} reset, ${rows.accepted.length} bookkept, ${rows.checkpoint.length} sent to checkpoint`);
   if (rows.checkpoint.length) {
-    log.info(log.dim(`See .trellis/checkpoint.json. Review those branches, then:`));
-    log.info(log.dim(`  node kit/bin/cli.mjs accept ${rows.checkpoint.map((c) => c.id).join(" ")} --merge`));
+    log2.info(log2.dim(`See .trellis/checkpoint.json. Review those branches, then:`));
+    log2.info(log2.dim(`  node kit/bin/cli.mjs accept ${rows.checkpoint.map((c) => c.id).join(" ")} --merge`));
   }
-  if (rows.reset.length) log.info(log.dim("Next: node kit/bin/cli.mjs run --resume"));
+  if (rows.reset.length) log2.info(log2.dim("Next: node kit/bin/cli.mjs run --resume"));
+  return { rows, applied: true };
+}
+
+function cmdApplyTriage() {
+  const { root, cfg } = ctx();
+  const result = applyTriageCore(root, cfg, { apply: flags.has("--apply") });
+  if (!result) die("No run, or no .trellis/triage.json with decisions — nothing to apply.");
 }
 
 // ------------------------------------------------------------------ status
@@ -955,27 +972,80 @@ function requireBashGuard(root) {
   }
 }
 
-async function cmdAuto() {
-  const { root, cfg } = ctx();
-  if (!cfg.driver?.enabled) {
-    die("driver.enabled is false in trellis.config.json. Read the driver section before turning this on.");
+/**
+ * 05_build's session cost was hardcoded to 0 — worker spend is real money and
+ * was invisible to `trellis sessions` and to any budget decision about
+ * whether a multi-cycle `--cycles N` run is affordable. Computed from the
+ * same per-tier usage the ledger already tracks, against the cost-per-1k
+ * fields already in trellis.config.json.
+ */
+function runnerCostUsd(state, cfg) {
+  const usage = st.usageByTier(state);
+  let total = 0;
+  for (const [tierName, u] of Object.entries(usage)) {
+    const tier = cfg.tiers.find((t) => t.name === tierName);
+    if (!tier) continue;
+    total += (u.prompt / 1000) * (tier.costPer1kInput ?? 0);
+    total += (u.completion / 1000) * (tier.costPer1kOutput ?? 0);
   }
-  requireBashGuard(root);
+  return total;
+}
 
-  // Periodic stages are reachable only by name. Without this, adding one would
-  // silently make every ordinary run spend an extra expensive session.
-  const only = flagVal("stage");
-  const stages = only ? STAGES.filter((s) => s.id === only) : DEFAULT_CHAIN;
-  if (!stages.length) die(`Unknown stage ${only}. One of: ${STAGES.map((s) => s.id).join(", ")}`);
+/**
+ * Commit what a stage was declared to produce, and refuse to guess about
+ * anything else. `stage.commits(root, cfg)` names the paths; anything the
+ * git tree shows modified OUTSIDE that list halts the whole loop rather than
+ * being swept in — the failure mode this avoids is exactly the one from
+ * hand-running `git add -A` mid-session: the wrong file ends up in the wrong
+ * commit. If a session's contract says IT commits something (02_slice's
+ * interface files), and it did not, that is the halt surfacing exactly the
+ * thing a human needs to look at.
+ *
+ * Uses changedPaths() (worktree.mjs) rather than re-parsing `git status
+ * --porcelain` here — that function's own docblock documents at length why a
+ * second hand-rolled parse of porcelain output silently drops the first
+ * character of the first path (an unstaged-modification record starts with a
+ * LEADING SPACE, and the untrimmed `raw: true` form is required to see it).
+ */
+function commitStageOutput(root, cfg, stage) {
+  const declared = (stage.commits ? stage.commits(root, cfg) : [])
+    .filter((p) => fs.existsSync(path.resolve(root, p)));
 
-  const stats = sessionStats(root);
-  if (Object.keys(stats).length) {
-    log.info("Observed cost per stage (from your own runs, not an estimate):");
-    for (const [stage, s] of Object.entries(stats)) {
-      log.info(`  ${stage.padEnd(12)} median $${s.median.toFixed(2)}  p90 $${s.p90.toFixed(2)}  (${s.runs} runs)`);
-    }
+  if (declared.length) git(root, ["add", "--", ...declared]);
+
+  const declaredSet = new Set(declared.map((p) => norm(p)));
+  const unexpected = changedPaths(root).filter((f) => !declaredSet.has(f));
+
+  if (unexpected.length) {
+    return { ok: false, unexpected };
   }
+  if (!declared.length) return { ok: true, committed: false };
 
+  const cyc = currentCycle(root, cfg);
+  const r = git(root, ["commit", "-m", `trellis(${stage.id}): cycle ${cyc?.cycle ?? "?"}`]);
+  if (!r.ok) return { ok: false, unexpected: [], commitFailed: true, message: r.err };
+  return { ok: true, committed: true, paths: declared };
+}
+
+/**
+ * Replaces a hard die() on stage exhaustion. The stage is idempotent — that
+ * was already true — so the new part is leaving a machine-readable artifact
+ * saying exactly where things stopped and what to type next, instead of only
+ * a console line that scrolled away. In `--cycles` mode this is also what
+ * stops the outer loop from rolling to a cycle that never finished this one.
+ */
+function writeHandback(root, cfg, { cycle, stage, attempts, detail }) {
+  const p = path.resolve(root, ".trellis/handback.json");
+  const nextCommand = `node kit/bin/cli.mjs auto --stage ${stage}`;
+  fs.writeFileSync(p, JSON.stringify({ at: new Date().toISOString(), cycle, stage, attempts, detail, nextCommand }, null, 2) + "\n");
+  log.fail(`${stage} did not complete after ${attempts} attempts — ${detail}`);
+  log.info(log.dim(`Nothing was corrupted — the stage is idempotent. See .trellis/handback.json. Next:`));
+  log.info(log.dim(`  ${nextCommand}`));
+  process.exitCode = 1;
+}
+
+/** Runs one stage chain (the default chain, or a single --stage) to completion. */
+async function runStageChain(root, cfg, stages) {
   for (const stage of stages) {
     const pre = stage.verify(root, cfg);
     if (pre.ok && !flags.has("--force")) {
@@ -983,9 +1053,6 @@ async function cmdAuto() {
       continue;
     }
 
-    // Gate the arsenal for this stage before the session starts. Mechanical, and
-    // costs zero model tokens — the session simply finds fewer, more relevant
-    // skills in .claude/skills/ than if the whole catalogue were always present.
     const skills = applySkills(root, cfg, stage.id, { dryRun: stage.run === "runner" });
     if (stage.run !== "runner") {
       log.info(log.dim(`  skills: ${skills.active.map((a) => a.name).join(", ") || "none"}`));
@@ -1003,8 +1070,6 @@ async function cmdAuto() {
 
       let result;
       if (stage.run === "runner") {
-        // The build stage is the existing deterministic runner. No model here.
-        // Same entry point as `trellis run` — see resumeOrInit for why.
         const graph = loadGraph(root, cfg.paths.graph);
         const { errors } = validateGraph(graph, cfg, root);
         if (errors.length) {
@@ -1012,10 +1077,8 @@ async function cmdAuto() {
           die("Graph is invalid. Nothing was run.");
         }
         const state = resumeOrInit(root, cfg, graph, { resume: true });
-        // run() writes REPORT.md itself; a second writeReport here would be
-        // both redundant and wrong.
         await run(cfg, graph, state, { history: ledger.read(root, cfg) });
-        result = { exitCode: 0, costUsd: 0 };
+        result = { exitCode: 0, costUsd: runnerCostUsd(state, cfg) };
       } else {
         result = await runSession(root, stage, cfg);
         if (result.spawnFailed) {
@@ -1026,23 +1089,36 @@ async function cmdAuto() {
       const check = stage.verify(root, cfg);
       recordSession(root, {
         stage: stage.id,
+        cycle: currentCycle(root, cfg)?.cycle ?? null,
         attempt,
         exitCode: result.exitCode,
         costUsd: result.costUsd,
         sessionId: result.sessionId ?? null,
+        durationMs: result.durationMs ?? null,
+        numTurns: result.numTurns ?? null,
         verified: check.ok,
         detail: check.detail,
       });
 
       if (check.ok) {
         log.ok(`${stage.id} verified — ${check.detail}`);
+        const committed = commitStageOutput(root, cfg, stage);
+        if (!committed.ok) {
+          if (committed.commitFailed) die(`Could not commit ${stage.id}'s output: ${committed.message}`);
+          log.fail(`${stage.id} verified, but the tree has changes outside what this stage declares:`);
+          for (const line of committed.unexpected) log.info(`  ${line}`);
+          log.info(log.dim(
+            `If the session was supposed to commit these itself, check its contract. ` +
+              `Otherwise commit or revert them by hand, then re-run.`
+          ));
+          process.exitCode = 1;
+          return { ok: false, haltedAt: stage.id };
+        }
+        if (committed.committed) log.info(log.dim(`  committed: ${committed.paths.join(", ")}`));
         done = true;
         break;
       }
 
-      // The session claimed nothing; the disk decided. Distinguish "ran out of
-      // room" from "produced wrong output" only to pick a backoff, not to decide
-      // success — both are incomplete and both re-run the same idempotent stage.
       const throttled = isRetryable(result.stderr ?? "") || isRetryable(result.raw ?? "");
       log.warn(`${stage.id} incomplete — ${check.detail}`);
 
@@ -1056,15 +1132,105 @@ async function cmdAuto() {
     }
 
     if (!done) {
-      die(
-        `${stage.id} did not complete after ${cfg.driver.maxAttempts} attempts.\n` +
-          `Nothing was corrupted — the stage is idempotent, so re-run \`trellis auto --stage ${stage.id}\` ` +
-          `when you have room, or run that session by hand.`
-      );
+      writeHandback(root, cfg, {
+        cycle: currentCycle(root, cfg)?.cycle ?? null,
+        stage: stage.id,
+        attempts: attempt,
+        detail: `did not complete after ${cfg.driver.maxAttempts} attempts`,
+      });
+      return { ok: false, haltedAt: stage.id };
+    }
+  }
+  return { ok: true };
+}
+
+function cmdAutoDryRun(root, cfg, only) {
+  const stages = only ? STAGES.filter((s) => s.id === only) : DEFAULT_CHAIN;
+  const stats = sessionStats(root);
+  log.info(log.bold("Stage plan:"));
+  for (const stage of stages) {
+    const pre = stage.verify(root, cfg);
+    const s = stats[stage.id];
+    const cost = s ? `  observed median $${s.median.toFixed(2)}, p90 $${s.p90.toFixed(2)} (${s.runs} runs)` : "";
+    log.info(`  ${pre.ok ? "skip  " : "run   "} ${stage.id.padEnd(12)} ${pre.ok ? `already satisfied (${pre.detail})` : pre.detail}${cost}`);
+  }
+  log.info("");
+  log.info(log.dim("Nothing was run. Drop --dry-run to execute this plan."));
+}
+
+/**
+ * One command driving a whole cycle — plan, build, triage — stopping only at
+ * the checkpoint MISSION.md requires: a high-risk node held for a human.
+ * `--cycles N` repeats this across N passes, beginning a new cycle each time,
+ * for as long as nothing needs a human and nothing gets stuck.
+ */
+async function cmdAuto() {
+  const { root, cfg } = ctx();
+  if (!cfg.driver?.enabled) {
+    die("driver.enabled is false in trellis.config.json. Read the driver section before turning this on.");
+  }
+  requireBashGuard(root);
+
+  // Periodic stages are reachable only by name. Without this, adding one would
+  // silently make every ordinary run spend an extra expensive session.
+  const only = flagVal("stage");
+  if (only && !STAGES.some((s) => s.id === only)) die(`Unknown stage ${only}. One of: ${STAGES.map((s) => s.id).join(", ")}`);
+
+  if (flags.has("--dry-run")) return cmdAutoDryRun(root, cfg, only);
+
+  const stats = sessionStats(root);
+  if (Object.keys(stats).length) {
+    log.info("Observed cost per stage (from your own runs, not an estimate):");
+    for (const [stage, s] of Object.entries(stats)) {
+      log.info(`  ${stage.padEnd(12)} median $${s.median.toFixed(2)}  p90 $${s.p90.toFixed(2)}  (${s.runs} runs)`);
     }
   }
 
-  log.ok("All stages verified.");
+  // A single --stage invocation is one pass, not a loop — it is how you drive
+  // one thing by hand (including 07_evolve, which must never be swept into a
+  // --cycles loop). Only the default chain cycles.
+  const maxCycles = only ? 1 : Math.max(1, flagInt("cycles") ?? 1);
+
+  for (let i = 0; i < maxCycles; i++) {
+    const stages = only ? STAGES.filter((s) => s.id === only) : DEFAULT_CHAIN;
+
+    if (!only) {
+      // First iteration: reuse an in-progress cycle if one exists (resuming
+      // after a handback), or lazily begin cycle 1. Every iteration after the
+      // first is, by construction, a NEW pass — begin one explicitly.
+      if (i === 0) cycleIdFor(root, cfg);
+      else beginCycle(root, cfg, { version: currentCycle(root, cfg)?.version ?? "v1" });
+      log.info(log.bold(`\n=== cycle ${currentCycle(root, cfg)?.cycle} ===`));
+    }
+
+    const result = await runStageChain(root, cfg, stages);
+    if (!result.ok) return; // handback already written; exitCode already set
+
+    if (only) { log.ok(`${only} verified.`); return; }
+
+    // The checkpoint: MISSION.md's one non-negotiable stop. apply-triage
+    // mechanises everything reversible automatically; anything it could not
+    // apply — a high-risk node still held for review — stops the loop here,
+    // unconditionally, regardless of how many cycles were requested.
+    applyTriageCore(root, cfg, { apply: true });
+    const checkpointPath = path.resolve(root, ".trellis/checkpoint.json");
+    if (fs.existsSync(checkpointPath)) {
+      let cp;
+      try { cp = JSON.parse(fs.readFileSync(checkpointPath, "utf8")); } catch { cp = null; }
+      if (cp?.nodes?.length) {
+        const remaining = maxCycles - i - 1;
+        log.warn(`\nCycle ${currentCycle(root, cfg)?.cycle} built. ${cp.nodes.length} high-risk node(s) need your eyes:`);
+        for (const n of cp.nodes) log.info(`  ${n.id.padEnd(24)} git show trellis/${n.id}`);
+        log.info("");
+        log.info("When you have reviewed them:");
+        log.info(`  node kit/bin/cli.mjs accept ${cp.nodes.map((n) => n.id).join(" ")} --merge`);
+        if (remaining > 0) log.info(`  node kit/bin/cli.mjs auto --cycles ${remaining}`);
+        return;
+      }
+    }
+
+    log.ok(`Cycle ${currentCycle(root, cfg)?.cycle} complete.`);
+  }
 }
 
 // ------------------------------------------------------------------ evolve
@@ -1628,8 +1794,11 @@ Product graph — authored outside Trellis, handed in complete:
     --version v1|v2             Which release to slice from (default v1)
 
 Autonomy and evolution:
-  trellis auto [--stage id]   Drive the session pipeline headless, verifying on disk
+  trellis auto [--stage id]   Drive one whole cycle headless, verifying every stage on disk
                                 07_evolve is periodic: reachable only by --stage
+    --cycles N                   Drive N cycles back to back (ignored with --stage)
+                                  Stops early, unconditionally, at any high-risk checkpoint
+    --dry-run                    Print the stage plan and estimated cost; run nothing
     --force                     Re-run a stage even if its artifact already exists
   trellis sessions            Measured cost per stage from your own runs
   trellis evolve              Rejection codes and failure kinds with enough evidence
