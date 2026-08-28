@@ -456,7 +456,7 @@ async function cmdRun() {
  * "not awaiting review" is a dead end — it names the wall without naming the
  * door. Each other status has a real next command.
  */
-function acceptVerbFor(status, id) {
+function acceptVerbFor(status, id, state) {
   if (status === st.STATUS.EXHAUSTED) {
     return `Nothing to accept — it never passed a gate. Use \`trellis reject ${id}\` to rebuild it, ` +
       `or \`trellis run --resume --retry-failed\` to retry in place.`;
@@ -466,8 +466,14 @@ function acceptVerbFor(status, id) {
       `\`trellis reject ${id}\` to rebuild it from a clean tree.`;
   }
   if (status === st.STATUS.BUDGET) {
-    return `The run's budget stopped before this node was attempted. ` +
-      `\`trellis run --resume\` picks it up once the ceiling is raised or the run allows it.`;
+    // BUDGET is shared by two stop causes — see runner.mjs's comment on its
+    // terminal breach check. "Raise the ceiling" is nonsense advice when an
+    // environment fault, not a budget cap, halted the run.
+    const envHalted = Boolean(state?.envHalt);
+    return `The run stopped before this node was attempted` +
+      `${envHalted ? " (an environment failure halted the run)" : " (a budget ceiling was hit)"}. ` +
+      `\`trellis run --resume\` picks it up once ` +
+      `${envHalted ? "the environment is fixed" : "the ceiling is raised or the run allows it"}.`;
   }
   if (st.LANDED.has(status)) {
     return `It is already merged into the base branch. Nothing to accept — there is no review pending.`;
@@ -506,7 +512,7 @@ function cmdAccept() {
     const s = state.nodes[id];
     if (!s) die(`No node "${id}" in the current run.`);
     if (![st.STATUS.REVIEW, st.STATUS.WEAK_TESTS, st.STATUS.AUDIT].includes(s.status)) {
-      die(`"${id}" is ${s.status}, not awaiting review. ` + acceptVerbFor(s.status, id));
+      die(`"${id}" is ${s.status}, not awaiting review. ` + acceptVerbFor(s.status, id, state));
     }
     const branch = s.branch || `trellis/${id}`;
 

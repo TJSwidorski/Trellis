@@ -535,6 +535,76 @@ console.log(thing);
   });
   fs.rmSync(eRoot, { recursive: true, force: true });
 
+  // ---- ADVERSARIAL: an env halt must not leave OTHER nodes silently PENDING ----
+  //
+  // The single-node fixture above proves the failing node itself stays
+  // resumable. It says nothing about a graph where other, independent nodes
+  // were simply never launched — those used to stay PENDING forever, which
+  // rollup() counts as neither done nor stuck, finishedAt was still stamped,
+  // and `trellis run` exited 0 having built nothing. This is the actual
+  // failure scenario: a real multi-node graph where the halt is invisible.
+  const emRoot = makeRepo();
+  write(emRoot, "tests/envfail.test.mjs", `
+import { thing } from "a-package-that-is-definitely-not-installed";
+console.log(thing);
+`.trim());
+  write(emRoot, ".trellis/graph.json", JSON.stringify({
+    version: 1,
+    project: "envhalt-multi",
+    nodes: [
+      { id: "envfail", title: "envfail", goal: "export thing", write: ["src/thing.mjs"],
+        tests: ["tests/envfail.test.mjs"], gate: "node tests/envfail.test.mjs" },
+      // No dependency relationship to envfail at all — independently ready
+      // from the first tick, and never given a chance to launch.
+      { id: "untouched", title: "untouched", goal: "export other", write: ["src/other.mjs"],
+        tests: ["tests/other.test.mjs"], gate: "node tests/other.test.mjs" },
+    ],
+  }, null, 2));
+  write(emRoot, "tests/other.test.mjs", `
+import { other } from "../src/other.mjs";
+if (other !== 1) throw new Error("nope");
+`.trim());
+  const emMock = await startMockServer({
+    models: ["mock/cheap"],
+    responses: { envfail: [{ content: FILE("src/thing.mjs", "export const thing=1;") }] },
+  });
+  write(emRoot, "trellis.config.json", JSON.stringify({
+    project: "envhalt-multi",
+    baseBranch: "main",
+    concurrency: 1,
+    tiers: [{ name: "cheap", baseUrl: emMock.url, model: "mock/cheap", maxAttempts: 1 }],
+    gate: { timeoutMs: 30000 },
+    routing: { enabled: false },
+    verify: { mutationsOnPass: false },
+    budget: { maxTotalAttempts: null, maxWorkerTokens: null, maxWallClockMs: null, maxCostUsd: null },
+    boundaries: { denyWrite: [".git/**", ".trellis/**", "trellis.config.json"] },
+  }, null, 2));
+  g(emRoot, "add", "-A"); g(emRoot, "commit", "-qm", "fixture");
+
+  const emCfg = loadConfig(emRoot);
+  const emGraph = loadGraph(emRoot, emCfg.paths.graph);
+  const emState = st.initState(emRoot, emCfg, emGraph);
+  await run(emCfg, emGraph, emState, {});
+  await emMock.close();
+
+  check("ADVERSARIAL an env halt marks every other untried node, not just the one that failed", () => {
+    assert.strictEqual(emState.nodes.envfail.status, st.STATUS.PENDING,
+      "the node that actually failed stays PENDING so --resume retries it in place");
+    assert.strictEqual(emState.nodes.untouched.status, st.STATUS.BUDGET,
+      `expected the never-launched node to be marked ${st.STATUS.BUDGET}, was ${emState.nodes.untouched.status}`);
+  });
+  check("ADVERSARIAL an env-halted run does not report success", () => {
+    const { stuck } = st.rollup(emState);
+    assert.ok(stuck > 0, "rollup must count the halted run as stuck, not silently finished");
+  });
+  check("ADVERSARIAL the report explains an env halt, not a budget ceiling", () => {
+    const reportPath = path.join(emRoot, ".trellis", "REPORT.md");
+    const r = fs.readFileSync(reportPath, "utf8");
+    assert.ok(r.includes("environment"), "report should name the environment as the cause");
+    assert.ok(!/raising the ceiling/.test(r), "must not tell the operator to raise a budget ceiling for an env halt");
+  });
+  fs.rmSync(emRoot, { recursive: true, force: true });
+
   // ---- auto driver, build stage ----
   //
   // `trellis auto` chains sessions headless. Every stage but 05_build spawns a

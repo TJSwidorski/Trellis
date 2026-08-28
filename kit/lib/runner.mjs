@@ -232,18 +232,29 @@ export async function run(cfg, graph, state, { dryRun = false, only = null, hist
     state.envHalt = { id: envHalt.id, hint: envHalt.hint, matched: envHalt.matched };
   }
 
-  // A budget stop leaves everything untried marked so `--resume` picks it up and
-  // the report says plainly that the run was cut short rather than finished.
-  const breach = budget.check();
+  // A budget stop OR an environment halt leaves everything untried marked so
+  // `--resume` picks it up and the report says plainly that the run was cut
+  // short rather than finished. This used to re-derive `budget.check()` alone,
+  // omitting the envHalt term the launch loop already uses at line 198 above —
+  // so an environment-halted run left every untried node PENDING, which
+  // rollup() counts as neither done nor stuck, `finishedAt` was still set, and
+  // the run reported success (exit 0) having built nothing.
+  //
+  // The node that actually hit the broken environment is excluded: it is
+  // deliberately left PENDING by launch() above, with its own specific reason,
+  // so `--resume` retries THAT node once the dependency is installed. BUDGET
+  // status is for nodes that were never attempted at all.
+  const breach = budget.check() || (envHalt ? "environment failure" : null);
   if (breach) {
-    log.warn(`Budget stop: ${breach}. In-flight nodes finished; the rest are untouched.`);
+    log.warn(`Run stop: ${breach}. In-flight nodes finished; the rest are untouched.`);
     for (const id of nodes.keys()) {
+      if (id === envHalt?.id) continue;
       if (state.nodes[id].status === st.STATUS.PENDING) {
         state.nodes[id].status = st.STATUS.BUDGET;
         state.nodes[id].reason = breach;
       }
     }
-    log.event("run.budget_stop", { reason: breach, ...budget.snapshot() });
+    log.event("run.budget_stop", { reason: breach, envHalt: Boolean(envHalt), ...budget.snapshot() });
   }
 
   state.finishedAt = new Date().toISOString();

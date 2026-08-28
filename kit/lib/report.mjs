@@ -47,7 +47,11 @@ export function writeReport(root, cfg, graph, state) {
   L.push(`- graph: ${state.graphHash}`);
   L.push(`- finished: ${state.finishedAt || "(in progress)"}`);
   L.push(`- result: **${done}/${total} landed**${stuck ? `, ${stuck} need attention` : ""}`);
-  if (state.budget?.breach) L.push(`- **run cut short: ${state.budget.breach}**`);
+  if (state.budget?.breach) {
+    L.push(`- **run cut short: ${state.budget.breach}**`);
+  } else if (state.envHalt) {
+    L.push(`- **run cut short: environment failure — ${state.envHalt.hint ?? state.envHalt.id}**`);
+  }
   L.push("");
 
   L.push(`## Status`);
@@ -127,9 +131,21 @@ export function writeReport(root, cfg, graph, state) {
 
   const budgetStopped = Object.entries(state.nodes).filter(([, s]) => s.status === st.STATUS.BUDGET);
   if (budgetStopped.length) {
-    L.push(`## Never attempted — budget stop`);
-    L.push("");
-    L.push(`${state.budget?.breach}. Resume with \`node kit/bin/cli.mjs run --resume\` after raising the ceiling.`);
+    // BUDGET status is shared by two different stop causes — see runner.mjs's
+    // comment above its terminal breach check. Phrase the guidance for
+    // whichever one actually happened; "raise the ceiling" is nonsense advice
+    // for a run an environment fault halted.
+    if (state.envHalt) {
+      L.push(`## Never attempted — environment halt`);
+      L.push("");
+      L.push(`Stopped after \`${state.envHalt.id}\` hit a broken environment ` +
+        `(${state.envHalt.hint ?? "see above"}). Fix the environment, then ` +
+        `\`node kit/bin/cli.mjs run --resume\`.`);
+    } else {
+      L.push(`## Never attempted — budget stop`);
+      L.push("");
+      L.push(`${state.budget?.breach}. Resume with \`node kit/bin/cli.mjs run --resume\` after raising the ceiling.`);
+    }
     L.push("");
     for (const [id] of budgetStopped) L.push(`- \`${id}\``);
     L.push("");
