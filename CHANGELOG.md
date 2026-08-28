@@ -10,6 +10,44 @@ under `kit/schema/`) are **not** tracked by this file. They change only on an
 incompatible on-disk format break, documented in `UPGRADING.md`, not on a routine
 release.
 
+## v2.8.1 – v2.8.3 — levels
+
+Track C of the same remediation series, per the user's own restated rule for
+how a slice should be cut: build in levels, and find the maximum number of
+WHOLE levels that fit under the cap — some batches may be much smaller than
+the cap, but no batch ever starts a wave of sibling work it can't finish
+just because a few more nodes happened to fit. (v2.8.0, a discriminating
+fixture proven against the OLD flat-cutoff behaviour, was folded into
+v2.8.1 rather than tagged separately — it had no standalone value once the
+algorithm it existed to prove landed in the same commit.)
+
+- **Slices are cut in whole dependency levels, never split** (`kit/lib/product.mjs`,
+  v2.8.1). `nextSlice` now computes depth via `graph.mjs`'s hardened `levels()`
+  over the remaining, unbuilt candidate pool, and walks levels in order,
+  taking each one whole while under the cap. The one exception: a level that
+  is oversized all by itself is taken whole anyway (`overflowed: true`) — a
+  level cannot be half-planned. `level` is never persisted onto a node (the
+  task-graph schema's `additionalProperties:false` has no room for it,
+  and it is metadata about the cut); `.trellis/plan.json` carries it instead.
+- **Re-gate at level boundaries** (`kit/lib/runner.mjs`, v2.8.2). Each node's
+  own gate only ever proved its tests accept its own implementation in
+  isolation, on a worktree branched before any dependency-level sibling had
+  merged. Once every node at a depth has resolved, every node that actually
+  merged there gets its gate re-run against the current `baseBranch` —
+  catching two siblings that each pass alone but conflict once both are
+  actually merged together. A failure holds the (already-merged, never
+  reverted) node for review via the existing REVIEW status, rather than a
+  new one — a real behaviour break, documented in `UPGRADING.md`.
+- **A decomposition ceiling, as a warning** (`kit/bin/cli.mjs`, v2.8.3).
+  `trellis validate --plan` now flags a task-graph level wider than
+  `validate.decompositionCeiling` (default 25) — more surface for v2.8.2's
+  re-gate to catch a conflict in. Deliberately a warning, never a validation
+  failure: 25 is an empirical number, not a proven ceiling.
+
+Verification for the whole track: `npm test` green after every commit (units
+56/56, regression 218, e2e 68/68 at the end of the range); every new
+behaviour's test confirmed to fail against the pre-fix code before landing.
+
 ## v2.7.0 – v2.7.5 — the oracle fails closed
 
 Track B of the same remediation series. Track A (v2.6.1–v2.6.22, below) fixed
