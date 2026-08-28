@@ -34,7 +34,7 @@ import { runGate } from "../lib/gate.mjs";
 import { checkMutations } from "../lib/mutate.mjs";
 import { Budget } from "../lib/budget.mjs";
 import { writeReport, untrustedBlock } from "../lib/report.mjs";
-import { matchAny, matchDeny, matchAllow, FS_CASE_INSENSITIVE } from "../lib/paths.mjs";
+import { matchAny, matchDeny, matchAllow, FS_CASE_INSENSITIVE, globsOverlap } from "../lib/paths.mjs";
 import { recordsFor, ledgerPath } from "../lib/ledger.mjs";
 import { initState, resumePlan, nodeHash } from "../lib/state.mjs";
 import { currentCycle, beginCycle, cycleIdFor } from "../lib/cycle.mjs";
@@ -2062,6 +2062,30 @@ check("an allow list follows the filesystem, and does not widen scope where it s
   assert(matchAllow("SRC/a.mjs", ["src/**"]) === FS_CASE_INSENSITIVE,
     `allow-list folding must track the filesystem (FS_CASE_INSENSITIVE=${FS_CASE_INSENSITIVE})`);
   assert(!matchAllow("other/a.mjs", ["src/**"]), "allow list matched something outside the scope");
+});
+
+check("ADVERSARIAL globsOverlap agrees with matchAllow's own case-folding decision", () => {
+  // globsOverlap decides whether two nodes may run CONCURRENTLY
+  // (validateGraph's collision check) -- a question about the actual
+  // filesystem the two worktrees share, not about glob syntax. It used to
+  // never fold at all, so on a case-insensitive filesystem two globs that
+  // matchAllow treats as the SAME file (folded) compared as non-overlapping
+  // here (unfolded): validation passed, both nodes launched concurrently,
+  // and both could write the identical physical path underneath differently
+  // cased declarations.
+  const overlap = globsOverlap(["src/components/Form.tsx"], ["src/Components/*.tsx"]);
+  if (FS_CASE_INSENSITIVE) {
+    assert(overlap, "on a case-insensitive filesystem these are the same file and must be reported as overlapping");
+    // And it must actually be the property that matters: matchAllow (what
+    // the gate uses to admit a write) must agree these are the same path.
+    assert(matchAllow("src/components/Form.tsx", ["src/Components/*.tsx"]),
+      "test premise broken: matchAllow does not actually fold these two on this filesystem");
+  } else {
+    assert(!overlap, "on a case-sensitive filesystem these are genuinely different files");
+  }
+  // A clearly distinct pair must never be reported as overlapping regardless
+  // of platform -- folding must not make the check trigger-happy.
+  assert(!globsOverlap(["src/alpha.mjs"], ["src/beta.mjs"]), "unrelated files were wrongly reported as overlapping");
 });
 
 check("ADVERSARIAL the shipped denyWrite covers the files a gate command reads", () => {
