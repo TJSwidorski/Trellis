@@ -338,20 +338,63 @@ export function indexNodes(graph) {
   return new Map(graph.nodes.map((n) => [n.id, n]));
 }
 
-/** Longest-path depth per node, for a readable plan printout. */
+/**
+ * Longest-path depth per node: root nodes (no deps) are level 0, and every
+ * other node is one more than the deepest of its own dependencies. Used
+ * today only for `trellis validate`'s human-readable printout, and about to
+ * become load-bearing for level-aware slicing and level-boundary re-gating
+ * -- promoted to a hardened shared primitive now, on the low-stakes
+ * presentation path, before it carries scheduling weight.
+ *
+ * The old recursive version had the same unsoundness `ancestors()` did: a
+ * node re-entered while already on the current path returned a placeholder
+ * depth of 0 (`if (seen.has(id)) return 0`), which then got permanently
+ * cached via `depth.set(id, d)` for the node ABOVE the re-entry point in the
+ * same call chain -- not just the one that closed the loop. On a graph this
+ * function does not itself validate as acyclic, that under-reports depth
+ * for every node whose longest path happens to pass through the cycle,
+ * silently sorting them into an earlier level than their real dependency
+ * chain implies.
+ *
+ * Rewritten as an iterative topological pass so a node's depth is only ever
+ * computed once every one of its dependencies has a KNOWN depth, and a
+ * dependency still unresolved when the graph runs out of visitable nodes
+ * (only possible via a cycle) is reported rather than silently defaulted.
+ * `validateGraph`'s own cycle check always runs before anything here does in
+ * practice, so this mirrors `ancestors()`'s posture: not reachable as a live
+ * bug today, hardened because the function is exported and level-aware
+ * scheduling is about to depend on it being right.
+ */
 export function levels(graph) {
   const byId = indexNodes(graph);
   const depth = new Map();
-  const calc = (id, seen = new Set()) => {
-    if (depth.has(id)) return depth.get(id);
-    if (seen.has(id)) return 0;
-    seen.add(id);
-    const deps = byId.get(id).deps || [];
-    const d = deps.length ? 1 + Math.max(...deps.map((x) => calc(x, seen))) : 0;
-    depth.set(id, d);
-    return d;
-  };
-  for (const id of byId.keys()) calc(id);
+  const indegree = new Map();
+  const dependants = new Map(); // id -> ids that depend on it
+  for (const id of byId.keys()) { indegree.set(id, 0); dependants.set(id, []); }
+  for (const [id, n] of byId) {
+    const deps = (n.deps || []).filter((d) => byId.has(d));
+    indegree.set(id, deps.length);
+    for (const d of deps) dependants.get(d).push(id);
+  }
+
+  const queue = [...byId.keys()].filter((id) => indegree.get(id) === 0);
+  for (const id of queue) depth.set(id, 0);
+  let head = 0;
+  while (head < queue.length) {
+    const id = queue[head++];
+    for (const dep of dependants.get(id)) {
+      const d = depth.get(dep) ?? -1;
+      const candidate = depth.get(id) + 1;
+      if (candidate > d) depth.set(dep, candidate);
+      indegree.set(dep, indegree.get(dep) - 1);
+      if (indegree.get(dep) === 0) queue.push(dep);
+    }
+  }
+  // A node whose indegree never reached 0 sits on or downstream of a cycle
+  // validateGraph should already have rejected. Fall back to depth 0 rather
+  // than leaving it out of the map entirely -- every caller here indexes
+  // every node id, and an absent entry is a worse surprise than a wrong one.
+  for (const id of byId.keys()) if (!depth.has(id)) depth.set(id, 0);
   return depth;
 }
 

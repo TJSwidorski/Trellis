@@ -3,7 +3,7 @@ import fs from "node:fs"; import os from "node:os"; import path from "node:path"
 import assert from "node:assert"; import { spawnSync } from "node:child_process";
 import { startMockServer } from "./mock-server.mjs";
 import { loadConfig } from "../lib/config.mjs";
-import { loadGraph, validateGraph, normalizeNode, ancestors } from "../lib/graph.mjs";
+import { loadGraph, validateGraph, normalizeNode, ancestors, levels } from "../lib/graph.mjs";
 import { run } from "../lib/runner.mjs";
 import { verifyTests, buildStub, importedNames } from "../lib/verify.mjs";
 import { planTiers } from "../lib/routing.mjs";
@@ -360,6 +360,38 @@ check("ADVERSARIAL ancestors terminates and stays sound on a cyclic graph", () =
   }
   // d is untouched by the cycle and must be reported exactly.
   assert.deepStrictEqual([...anc.get("d")], []);
+});
+
+// ---------- unit: levels() is a longest-path, cycle-safe, iterative primitive ----------
+check("levels computes longest-path depth, not shortest", () => {
+  // a is a root. b and c both depend only on a (depth 1 each). e depends on
+  // c (depth 2). d depends on BOTH b (depth 1) and e (depth 2) -- its own
+  // depth must be 1 + the DEEPEST dependency, not the shallowest.
+  const g = { nodes: [
+    { id: "a", deps: [] },
+    { id: "b", deps: ["a"] },
+    { id: "c", deps: ["a"] },
+    { id: "e", deps: ["c"] },
+    { id: "d", deps: ["b", "e"] },
+  ] };
+  const depth = levels(g);
+  assert.strictEqual(depth.get("a"), 0);
+  assert.strictEqual(depth.get("b"), 1);
+  assert.strictEqual(depth.get("c"), 1);
+  assert.strictEqual(depth.get("e"), 2);
+  assert.strictEqual(depth.get("d"), 3, `d must be 1 + its DEEPEST dep (e, depth 2), not its shallowest (b, depth 1)`);
+});
+check("ADVERSARIAL levels terminates and covers every node on a cyclic graph", () => {
+  const g = { nodes: [
+    { id: "a", deps: ["b"] },
+    { id: "b", deps: ["a"] },
+    { id: "d", deps: [] }, // unrelated, must still get a real depth
+  ] };
+  const depth = levels(g); // must return, not hang or throw
+  assert.strictEqual(depth.size, 3, "every node must appear in the map, even one on a cycle");
+  assert.strictEqual(depth.get("d"), 0);
+  assert.strictEqual(typeof depth.get("a"), "number");
+  assert.strictEqual(typeof depth.get("b"), "number");
 });
 
 for (const [s,n,m] of R) console.log(s==="pass"?`  \u001b[32m✓\u001b[0m ${n}`:`  \u001b[31m✗ ${n}\u001b[0m\n      ${m}`);
