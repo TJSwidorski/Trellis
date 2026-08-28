@@ -222,22 +222,41 @@ export function exec(command, cwd, timeoutMs, env = process.env) {
     const child = spawn(command, { cwd, shell: true, windowsHide: true, env, detached: DETACH_FOR_TREE_KILL });
     let out = "";
     let timedOut = false;
-    const cap = (d) => {
-      out += d.toString();
+    // Per-stream decoders, not `d.toString()` per chunk: a multi-byte UTF-8
+    // character (a non-ASCII assertion message, a `✓`/`✗` reporter glyph)
+    // landing on a pipe chunk boundary used to decode each half independently
+    // to U+FFFD, corrupting both the feedback text sent back to the model and
+    // detectEnvFailure's own pattern matching against `output` below — which
+    // could misclassify a real ModuleNotFoundError as an ordinary test
+    // failure exactly when the corruption lands inside the matched text.
+    // `{ stream: true }` holds any trailing incomplete byte sequence for the
+    // next chunk instead of decoding it prematurely; stdout and stderr get
+    // independent decoders because they are logically separate byte streams
+    // that happen to interleave into the same accumulator.
+    const stdoutDecoder = new TextDecoder("utf-8");
+    const stderrDecoder = new TextDecoder("utf-8");
+    const cap = (decoder) => (d) => {
+      out += decoder.decode(d, { stream: true });
       if (out.length > 2_000_000) out = out.slice(-1_000_000);
     };
-    child.stdout?.on("data", cap);
-    child.stderr?.on("data", cap);
+    child.stdout?.on("data", cap(stdoutDecoder));
+    child.stderr?.on("data", cap(stderrDecoder));
     const timer = setTimeout(() => {
       timedOut = true;
       killTree(child);
     }, timeoutMs);
+    // Flush whatever a decoder is still holding — at most 3 bytes of a
+    // not-yet-complete UTF-8 sequence — so the very last character of output
+    // is never silently dropped.
+    const flush = () => { out += stdoutDecoder.decode() + stderrDecoder.decode(); };
     child.on("error", (e) => {
       clearTimeout(timer);
+      flush();
       resolve({ code: -1, output: out + `\n[spawn error] ${e.message}`, timedOut });
     });
     child.on("close", (code) => {
       clearTimeout(timer);
+      flush();
       resolve({ code, output: out, timedOut });
     });
   });

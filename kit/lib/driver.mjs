@@ -638,8 +638,18 @@ export function runSession(root, stage, cfg) {
 
     let out = "";
     let err = "";
-    child.stdout.on("data", (d) => (out += d));
-    child.stderr.on("data", (d) => (err += d));
+    // Per-stream decoders, not the implicit `d.toString()` a bare `out += d`
+    // coercion does per chunk: a multi-byte UTF-8 character in the session's
+    // JSON output landing on a pipe chunk boundary decoded each half
+    // independently to U+FFFD, so `JSON.parse(out)` below could throw on
+    // perfectly well-formed JSON whose only fault was arriving in two reads —
+    // silently recorded as costUsd:0/sessionId:null via the bare catch, not
+    // as the parse failure it actually was. See gate.mjs's exec() for the
+    // identical fix and reasoning.
+    const outDecoder = new TextDecoder("utf-8");
+    const errDecoder = new TextDecoder("utf-8");
+    child.stdout.on("data", (d) => (out += outDecoder.decode(d, { stream: true })));
+    child.stderr.on("data", (d) => (err += errDecoder.decode(d, { stream: true })));
 
     // A plain SIGTERM used to be the whole timeout mechanism: on Windows this
     // signals only the cmd.exe wrapper (see the spawn options above), and even
@@ -658,6 +668,10 @@ export function runSession(root, stage, cfg) {
 
     child.on("close", (code) => {
       clearTimeout(killer);
+      // Flush whatever a decoder is still holding — at most 3 bytes of a
+      // not-yet-complete UTF-8 sequence — before JSON.parse ever sees `out`.
+      out += outDecoder.decode();
+      err += errDecoder.decode();
       let parsed = null;
       try { parsed = JSON.parse(out); } catch { /* text before json, or truncated */ }
       resolve({

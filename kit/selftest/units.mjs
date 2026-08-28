@@ -509,6 +509,32 @@ setInterval(() => {}, 1000);
     `command is still alive and holding it open: ${lastErr?.message}`);
 });
 
+checkAsync("ADVERSARIAL exec() reconstructs a multi-byte UTF-8 character split across two pipe chunks", async () => {
+  // A `d.toString()` per chunk decodes each half of a split character
+  // independently to U+FFFD -- the bug this proves is fixed. "✓" (U+2713)
+  // is 3 bytes in UTF-8 (E2 9C 93); writing byte 1 and then bytes 2-3 in two
+  // separate process.stdout.write() calls, with a real delay between them,
+  // reliably arrives at the parent as two separate 'data' events rather
+  // than one the OS happened to coalesce.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-utf8-"));
+  const scriptPath = path.join(dir, "split-utf8.mjs");
+  fs.writeFileSync(scriptPath, `
+process.stdout.write(Buffer.from([0xE2]));
+setTimeout(() => {
+  process.stdout.write(Buffer.from([0x9C, 0x93]));
+  process.exit(0);
+}, 50);
+`.trim() + "\n");
+  try {
+    const result = await exec(`node ${JSON.stringify(scriptPath)}`, dir, 5000);
+    assert.strictEqual(result.code, 0, `script did not exit cleanly: ${JSON.stringify(result)}`);
+    assert.strictEqual(result.output, "✓",
+      `expected the reconstructed character, got ${JSON.stringify(result.output)} -- a split multi-byte character was corrupted`);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 await Promise.all(pending);
 
 for (const [s,n,m] of R) console.log(s==="pass"?`  \u001b[32m✓\u001b[0m ${n}`:`  \u001b[31m✗ ${n}\u001b[0m\n      ${m}`);
