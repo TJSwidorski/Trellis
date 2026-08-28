@@ -605,6 +605,51 @@ if (other !== 1) throw new Error("nope");
   });
   fs.rmSync(emRoot, { recursive: true, force: true });
 
+  // ---- ADVERSARIAL: --only naming a node without its dependency must not report success ----
+  //
+  // `run --only b` where b depends on a, and a is not also named: a is
+  // excluded from readySet() by the --only filter, b is excluded because a
+  // never lands. markBlocked() only recognises a DOOMED dependency
+  // (exhausted/blocked/conflict/review); a merely unattempted one is neither
+  // doomed nor ready, so this used to deadlock with zero attempts and zero
+  // status changes -- rollup() counted both nodes as neither done nor
+  // stuck, and the run reported "0/2 landed" with exit code 0.
+  const onlyRoot = makeRepo();
+  write(onlyRoot, ".trellis/graph.json", JSON.stringify({
+    version: 1,
+    project: "only-deadlock",
+    nodes: [
+      { id: "a", title: "a", goal: "g", write: ["src/a.mjs"], tests: [], gate: "true" },
+      { id: "b", title: "b", goal: "g", write: ["src/b.mjs"], tests: [], gate: "true", deps: ["a"] },
+    ],
+  }, null, 2));
+  write(onlyRoot, "trellis.config.json", JSON.stringify({
+    project: "only-deadlock", baseBranch: "main", concurrency: 1,
+    tiers: [{ name: "cheap", baseUrl: "http://127.0.0.1:1", model: "m", apiKeyEnv: null, maxAttempts: 1, maxTokens: 100 }],
+    routing: { enabled: false },
+    boundaries: { denyWrite: [".git/**", ".trellis/**", "trellis.config.json"] },
+  }, null, 2));
+  g(onlyRoot, "add", "-A"); g(onlyRoot, "commit", "-qm", "fixture");
+
+  const onlyCfg = loadConfig(onlyRoot);
+  const onlyGraph = loadGraph(onlyRoot, onlyCfg.paths.graph);
+  const onlyState = st.initState(onlyRoot, onlyCfg, onlyGraph);
+  await run(onlyCfg, onlyGraph, onlyState, { only: ["b"] });
+
+  check("ADVERSARIAL --only naming a node without its dependency marks both unreachable, not silently pending", () => {
+    assert.strictEqual(onlyState.nodes.a.status, "blocked",
+      `expected "a" (excluded by --only) marked unreachable, got ${onlyState.nodes.a.status}`);
+    assert.strictEqual(onlyState.nodes.b.status, "blocked",
+      `expected "b" (dep never lands) marked unreachable, got ${onlyState.nodes.b.status}`);
+    assert.match(onlyState.nodes.b.reason, /unreachable/);
+  });
+  check("ADVERSARIAL a deadlocked --only run does not report success", () => {
+    const { stuck, done } = st.rollup(onlyState);
+    assert.strictEqual(done, 0, "nothing was actually built");
+    assert.ok(stuck > 0, "rollup must count the deadlock as stuck, not silently finished");
+  });
+  fs.rmSync(onlyRoot, { recursive: true, force: true });
+
   // ---- auto driver, build stage ----
   //
   // `trellis auto` chains sessions headless. Every stage but 05_build spawns a

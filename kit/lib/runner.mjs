@@ -259,6 +259,29 @@ export async function run(cfg, graph, state, { dryRun = false, only = null, hist
     log.event("run.budget_stop", { reason: breach, envHalt: Boolean(envHalt), ...budget.snapshot() });
   }
 
+  // A node still PENDING once the loop has genuinely run out of ready work
+  // (no breach, no envHalt on it) never got a chance at all — most commonly
+  // `--only api.handler` where api.handler depends on api.types and only
+  // api.handler was named, so neither node is ever in readySet(): api.types
+  // is excluded by the --only filter, api.handler is excluded because its
+  // dep never lands. markBlocked() only recognises a DOOMED dependency
+  // (exhausted/blocked/conflict/review) — a merely unattempted one is
+  // neither doomed nor ready, so this deadlock produced zero attempts, zero
+  // marks, and rollup() counted it as neither done nor stuck: `trellis run
+  // --only <id>` on a typo'd or incomplete scope exited 0 having done
+  // nothing.
+  for (const id of nodes.keys()) {
+    if (id === envHalt?.id) continue; // deliberately left pending; see above
+    if (state.nodes[id].status === st.STATUS.PENDING) {
+      state.nodes[id].status = st.STATUS.BLOCKED;
+      state.nodes[id].reason =
+        "unreachable in this run — its dependency chain never became ready" +
+        (only ? " (with --only, every dependency a named node needs must also be named, already landed, or already in scope)" : "");
+      log.node(id, log.red(`unreachable — ${state.nodes[id].reason}`));
+      log.event("node.unreachable", { id });
+    }
+  }
+
   state.finishedAt = new Date().toISOString();
   state.budget = budget.snapshot();
   st.saveState(root, cfg, state);
