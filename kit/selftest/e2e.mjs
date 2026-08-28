@@ -543,6 +543,12 @@ console.log(thing);
   // config belongs, so cfg.tiers was undefined and the stage threw. `auto` is off
   // by default, so nothing ever exercised this branch.
   const aRoot = makeRepo();
+  // Real installs ship a .gitignore that keeps .trellis/cycle.json untracked
+  // (see the shipped .gitignore) — without it, resumeOrInit's lazy cycle-1
+  // begin writes cycle.json as an untracked file, and the runner's own
+  // dirty-tree check then refuses to start on the file it just needed to
+  // create. This fixture stands in for a real install's .gitignore.
+  write(aRoot, ".gitignore", ".trellis/cycle.json\n.trellis/checkpoint.json\n");
   write(aRoot, "tests/auto.test.mjs", `
 import assert from "node:assert";
 import { auto } from "../src/auto.mjs";
@@ -645,6 +651,10 @@ assert.strictEqual(auto(), "ok");
   // stayed RUNNING forever after: invisible to readySet, invisible to
   // markBlocked, and the run reported "finished" with it silently unbuilt.
   const rRoot = makeRepo();
+  // See the aRoot fixture above: resumeOrInit's lazy cycle-1 begin writes
+  // .trellis/cycle.json as an untracked file, and the runner refuses to
+  // start on a tree it just made dirty itself without this.
+  write(rRoot, ".gitignore", ".trellis/cycle.json\n.trellis/checkpoint.json\n");
   write(rRoot, "tests/a.test.mjs", `
 import assert from "node:assert";
 import { a } from "../src/a.mjs";

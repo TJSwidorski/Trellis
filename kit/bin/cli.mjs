@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { loadConfig, tierKey } from "../lib/config.mjs";
 import { loadGraph, validateGraph, indexNodes, levels } from "../lib/graph.mjs";
@@ -27,6 +28,7 @@ import { actionable, unknownCodes, kindActionable, kindByTier, writeProposal, cl
 import { loadCodes, allCodes, groupSimilar, bucketOf, normaliseCode, CODES_DOC } from "../lib/codes.mjs";
 import * as friction from "../lib/friction.mjs";
 import * as triage from "../lib/triage.mjs";
+import { currentCycle, beginCycle, cycleIdFor } from "../lib/cycle.mjs";
 import {
   loadRegistry, resolveActive, materialise, blockedByAudit, missingPlugins,
   recordActivation, readActivations, neverActivated,
@@ -314,7 +316,11 @@ function cmdLedger() {
  * subtree silently unbuilt.
  */
 function normaliseResumedStatus(root, cfg, id, s, { retryFailed = false } = {}) {
-  if (s.status === st.STATUS.RUNNING || s.status === st.STATUS.BLOCKED) {
+  // BUDGET joins RUNNING/BLOCKED, not the retryFailed branch below: a
+  // budget-stopped node was never actually attempted, only skipped because a
+  // ceiling was hit — runner.mjs's own comment already claims "--resume
+  // picks it up", which nothing here was doing until now.
+  if (s.status === st.STATUS.RUNNING || s.status === st.STATUS.BLOCKED || s.status === st.STATUS.BUDGET) {
     s.status = st.STATUS.PENDING;
     s.reason = null;
   }
@@ -348,11 +354,16 @@ function resumeOrInit(root, cfg, graph, { resume = false, retryFailed = false } 
   // merged node back to pending, rebuilding them all at real cost, behind one
   // warning line.
   if (state && resume && !st.resumable(state, graph)) {
-    const { dirty, keep, gone } = st.resumePlan(state, graph);
+    const { dirty, keep, gone } = st.resumePlan(state, graph, { root });
     if (keep.length) {
-      const fresh = st.initState(root, cfg, graph);
-      fresh.runId = state.runId;
-      fresh.startedAt = state.startedAt;
+      // Not always state.runId: if a NEW cycle began since state.json was
+      // last written (beginCycle minted a fresh id), this salvage is for the
+      // new cycle, and its runId must roll with it. If no new cycle began,
+      // cycleIdFor() returns the SAME id state.runId already holds — this is
+      // still just a same-cycle contract fix, and behaves exactly as before.
+      const runId = cycleIdFor(root, cfg);
+      const fresh = st.initState(root, cfg, graph, { runId });
+      fresh.startedAt = runId === state.runId ? state.startedAt : fresh.startedAt;
       for (const id of keep) {
         if (state.nodes[id]) {
           fresh.nodes[id] = normaliseResumedStatus(
@@ -373,7 +384,7 @@ function resumeOrInit(root, cfg, graph, { resume = false, retryFailed = false } 
     log.warn("graph.json changed since the last run — starting a fresh run.");
     log.info(log.dim("  Pass --resume to keep the nodes the change did not invalidate."));
   }
-  return st.initState(root, cfg, graph);
+  return st.initState(root, cfg, graph, { runId: cycleIdFor(root, cfg) });
 }
 
 async function cmdRun() {
@@ -569,9 +580,17 @@ function cmdIngest() {
 
   for (const w of warnings) log.warn(w);
 
+  // A hash of the source file, not of anything derived — re-ingesting an
+  // unchanged spec every cycle is pure waste, and this is what lets `auto`
+  // skip 01_ingest on a second pass without skipping it on a first.
+  const specHash = errors.length
+    ? null
+    : crypto.createHash("sha256").update(fs.readFileSync(path.resolve(root, rel))).digest("hex").slice(0, 16);
+
   const out = {
     at: new Date().toISOString(),
     source: rel,
+    specHash,
     errors,
     warnings,
     counts: errors.length
@@ -610,6 +629,30 @@ function cmdIngest() {
   }
 }
 
+// ------------------------------------------------------------------- cycle
+
+/**
+ * Declare a new pass at the product graph, explicitly. Plain `trellis run`
+ * keeps working without this — it lazily begins cycle 1 the first time
+ * nothing exists yet — but coming back for a SECOND pass has to be a
+ * deliberate act, or nothing can tell "still working on this one" from
+ * "starting the next one", and the entire evidence-arithmetic in `evolve`
+ * depends on being able to tell them apart.
+ */
+function cmdCycle() {
+  const { root, cfg } = ctx();
+  const prior = currentCycle(root, cfg);
+  if (prior && !flags.has("--force")) {
+    log.info(`Currently on cycle ${prior.cycle} (${prior.id}), started ${prior.startedAt}.`);
+    log.info(log.dim("Pass --force to begin a new one anyway."));
+    return;
+  }
+  const version = flagVal("version") || prior?.version || "v1";
+  const c = beginCycle(root, cfg, { version });
+  log.ok(`Cycle ${c.cycle} begun (${c.id}), version ${version}.`);
+  log.info(log.dim("Next: node kit/bin/cli.mjs slice --max 25"));
+}
+
 // ----------------------------------------------------------------- promote
 
 function cmdPromote() {
@@ -634,7 +677,7 @@ function cmdPromote() {
 // ------------------------------------------------------------------- slice
 
 function cmdSlice() {
-  const { root } = ctx();
+  const { root, cfg } = ctx();
   const graph = loadProductGraph(root, flagVal("product") || PRODUCT_GRAPH_DEFAULT);
   const { errors, graph: derived } = validateProductGraph(graph);
   if (errors.length) die("Run `trellis ingest` first — the graph does not validate.");
@@ -652,6 +695,12 @@ function cmdSlice() {
 
   const plan = {
     at: new Date().toISOString(),
+    // Stamped mechanically here rather than left for a session to remember,
+    // the way triage's `run` field has to be — this command is code, not a
+    // model, so there is no reason to trust anything less than 100%. This is
+    // the field 02_slice's stage verify checks to tell "cut for this pass"
+    // from "cut for a previous one and never re-sliced".
+    cycle: cycleIdFor(root, cfg),
     version,
     built_before: built,
     nodes: slice.nodes.map((n) => ({
@@ -1346,6 +1395,9 @@ trellis — Claude Code orchestrates, open-source models do the work.
 Product graph — authored outside Trellis, handed in complete:
   trellis ingest              Validate the product graph, derive high-risk nodes
   trellis promote             Which v2 nodes are unblocked and could ship in v1
+  trellis cycle                Declare a new pass — begins cycle 1 lazily if you skip this
+    --force                     Begin a new cycle even if the current one is unfinished
+    --version v1|v2              Which release this cycle targets
   trellis slice [--max 25]    Cut the next buildable slice into .trellis/plan.json
     --version v1|v2             Which release to slice from (default v1)
 
@@ -1390,6 +1442,7 @@ const table = {
   reject: cmdReject,
   status: cmdStatus,
   clean: cmdClean,
+  cycle: cmdCycle,
   ingest: cmdIngest,
   promote: cmdPromote,
   slice: cmdSlice,

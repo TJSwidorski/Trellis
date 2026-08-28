@@ -17,6 +17,13 @@ each node, produce the *implementation* contract the runner needs — `write` pa
 `read` context, `gate` command, `tags`, `mutations` — and assemble
 `.trellis/graph.json` in the task-graph schema (`kit/schema/graph.schema.json`).
 
+**Stamp `"cycle"` at the top of `graph.json`, copied verbatim from
+`.trellis/cycle.json`'s `id` field.** `plan.json` already carries it — the CLI wrote
+that one — but `graph.json` is your work, and nothing else can stamp it for you.
+Without it, this stage's proof of completion cannot tell a graph you assembled for
+this pass from one left over from an earlier one, and a second `trellis auto` would
+report the stage already satisfied without you ever having run.
+
 Two rules that prevent the failure modes we have actually hit:
 
 - **Write scopes must be disjoint across nodes that can run concurrently.** Two

@@ -78,6 +78,7 @@ const RUNTIME_PATHS = [
   // The cross-run evidence files. Written by triage and by `trellis friction`
   // as runs happen; absent on a fresh install, and that is correct.
   "triage.jsonl", "friction.jsonl", "skills.jsonl", "ledger.jsonl", "evolve.json",
+  "cycle.json", "cases.json", "checkpoint.json",
 ];
 
 /**
