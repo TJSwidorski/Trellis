@@ -59,7 +59,7 @@
       "apiKeyEnv": "OPENROUTER_API_KEY",
       "maxAttempts": 3,
       "temperature": 0.1,
-      "maxTokens": 8000,
+      "maxTokens": 16000,
       "costPer1kInput": 0.00027,
       "costPer1kOutput": 0.0011
     },
@@ -70,7 +70,7 @@
       "apiKeyEnv": "OPENROUTER_API_KEY",
       "maxAttempts": 2,
       "temperature": 0.1,
-      "maxTokens": 8000,
+      "maxTokens": 16000,
       "costPer1kInput": 0.0006,
       "costPer1kOutput": 0.0025
     },
@@ -81,7 +81,7 @@
       "apiKeyEnv": "OPENROUTER_API_KEY",
       "maxAttempts": 2,
       "temperature": 0.1,
-      "maxTokens": 8000,
+      "maxTokens": 16000,
       "costPer1kInput": 0.0009,
       "costPer1kOutput": 0.0035
     }

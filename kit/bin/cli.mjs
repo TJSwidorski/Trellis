@@ -299,6 +299,35 @@ function cmdLedger() {
 // --------------------------------------------------------------------- run
 
 /**
+ * RUNNING and BLOCKED are interrupted-mid-run statuses, never a rest state a
+ * node should be resumed INTO. A node stuck RUNNING means the process died
+ * while it was live; one stuck BLOCKED reflects a dependency graph that has
+ * since moved on. Left alone, that node is invisible to everything: readySet
+ * only looks at PENDING, markBlocked only reconsiders PENDING, and neither
+ * its dependants nor a human staring at `trellis status` can tell it apart
+ * from one still legitimately in flight.
+ *
+ * Both callers of resumeOrInit's two branches must normalise the same way —
+ * the salvage branch used to copy state.nodes[id] verbatim, including
+ * status, so a RUNNING node whose contract had not changed stayed RUNNING
+ * forever after a graph edit, and the run reported "finished" with a whole
+ * subtree silently unbuilt.
+ */
+function normaliseResumedStatus(root, cfg, id, s, { retryFailed = false } = {}) {
+  if (s.status === st.STATUS.RUNNING || s.status === st.STATUS.BLOCKED) {
+    s.status = st.STATUS.PENDING;
+    s.reason = null;
+  }
+  if (s.status === st.STATUS.EXHAUSTED && retryFailed) {
+    s.status = st.STATUS.PENDING;
+    s.attempts = [];
+    s.reason = null;
+    removeWorktree(root, cfg, id, { quiet: true });
+  }
+  return s;
+}
+
+/**
  * Load prior state and apply resume semantics, or start fresh.
  *
  * Shared by `run` and `auto` on purpose. These two drifted once — `auto` called
@@ -309,16 +338,7 @@ function resumeOrInit(root, cfg, graph, { resume = false, retryFailed = false } 
   const state = st.loadState(root, cfg);
   if (state && st.resumable(state, graph) && resume) {
     for (const [id, s] of Object.entries(state.nodes)) {
-      if (s.status === st.STATUS.RUNNING || s.status === st.STATUS.BLOCKED) {
-        s.status = st.STATUS.PENDING;
-        s.reason = null;
-      }
-      if (s.status === st.STATUS.EXHAUSTED && retryFailed) {
-        s.status = st.STATUS.PENDING;
-        s.attempts = [];
-        s.reason = null;
-        removeWorktree(root, cfg, id, { quiet: true });
-      }
+      normaliseResumedStatus(root, cfg, id, s, { retryFailed });
     }
     log.info(log.dim(`Resuming run ${state.runId}`));
     return state;
@@ -334,7 +354,11 @@ function resumeOrInit(root, cfg, graph, { resume = false, retryFailed = false } 
       fresh.runId = state.runId;
       fresh.startedAt = state.startedAt;
       for (const id of keep) {
-        if (state.nodes[id]) fresh.nodes[id] = { ...state.nodes[id], hash: fresh.nodes[id].hash };
+        if (state.nodes[id]) {
+          fresh.nodes[id] = normaliseResumedStatus(
+            root, cfg, id, { ...state.nodes[id], hash: fresh.nodes[id].hash }, { retryFailed }
+          );
+        }
       }
       log.warn(`graph.json changed. Keeping ${keep.length} node(s); rebuilding ${dirty.length}.`);
       if (dirty.length) log.info(log.dim(`  rebuilding: ${dirty.slice(0, 8).join(", ")}${dirty.length > 8 ? "…" : ""}`));

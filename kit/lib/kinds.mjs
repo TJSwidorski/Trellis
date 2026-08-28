@@ -22,6 +22,7 @@ export const FLAG_TO_KIND = Object.freeze({
   traversal: "traversal",
   denied: "denied",
   "out-of-scope": "out-of-scope",
+  truncated: "truncated",
   malformed: "malformed",
 });
 
@@ -44,6 +45,7 @@ export const KINDS = Object.freeze(
     "no-files",
     "provider-error",
     "error",
+    "truncated",
     // extract.mjs, via worstFlag
     "traversal",
     "denied",

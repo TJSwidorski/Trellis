@@ -10,6 +10,46 @@ under `kit/schema/`) are **not** tracked by this file. They change only on an
 incompatible on-disk format break, documented in `UPGRADING.md`, not on a routine
 release.
 
+## v2.4.0 — the worker loop
+
+Quality and cost, not safety — five fixes to how a worker actually gets
+retried, paid for, resumed, and read back.
+
+- **The prompt is rebuilt every attempt, not once before the loop**
+  (`kit/lib/worker.mjs`). A retry used to ask the model to fix code it could
+  not see — for a brand-new file, "Current contents of files you may edit"
+  was simply absent on attempt 1 and stayed built from that snapshot forever
+  after. Likely the single largest quality change in this release.
+- **Truncation gets a bigger cap on the same tier, not escalation**
+  (`kit/lib/provider.mjs`, `kit/lib/extract.mjs`, `kit/lib/worker.mjs`, new
+  `truncated` kind). An empty completion with `finish_reason=length` was
+  marked `transient:true`, so `chatWithBackoff` retried the identical request
+  at the identical cap up to three times before the caller ever learned
+  anything was wrong. The common shape — two files complete, a third cut off
+  mid-fence — is now checked before "produced nothing usable", not nested
+  inside it, so a real truncation no longer burns a full escalation to solve
+  what was never a capability problem. Base `maxTokens` raised 8000 → 16000
+  (`trellis.config.json`, `kit/lib/config.mjs`'s default) — whole-file
+  emission at 8k was the truncation source in the first place.
+- **Mutation-check spend is now counted** (`kit/lib/mutate.mjs`,
+  `kit/lib/runner.mjs`). One provider call per mutation per passing node
+  reached neither `maxCostUsd` nor `maxTotalAttempts` before this — at 40
+  nodes × 3 mutations that's roughly half the real spend going unmetered.
+- **A `RUNNING` node kept across a graph-changed salvage no longer stays
+  stuck forever** (`kit/bin/cli.mjs`). The salvage path copied node state
+  verbatim, including status; a node interrupted mid-run whose own contract
+  hadn't changed stayed `running` after `--resume` — invisible to the ready
+  set, invisible to `markBlocked`, silently unbuilt while the run reported
+  finished.
+- **Gate output can no longer close its own report fence early**
+  (`kit/lib/report.mjs`, new `untrustedBlock`). A worker's own code produced
+  the gate stdout quoted in `REPORT.md`; a fixed triple-backtick fence closed
+  on the first backtick run inside that text, and whatever followed rendered
+  as ordinary report body in the orchestrator's own context. The fence is now
+  always longer than the longest backtick run the body contains, and the
+  block is explicitly labelled untrusted. `REPORT.md` is also now written
+  atomically (tmp + rename), matching `saveState`.
+
 ## v2.3.0 — authenticate the evidence, make the docs true
 
 The self-improvement loop's evidence stream had an unvalidated `run` field —

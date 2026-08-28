@@ -3,18 +3,26 @@ import { tierKey } from "./config.mjs";
 const TRANSIENT = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
 
 export class ProviderError extends Error {
-  constructor(message, { status, transient = false } = {}) {
+  constructor(message, { status, transient = false, truncated = false } = {}) {
     super(message);
     this.status = status;
     this.transient = transient;
+    // A too-small output cap, not a broken endpoint. Retrying the identical
+    // request changes nothing, so this must never be `transient` — see the
+    // empty-completion throw below.
+    this.truncated = truncated;
   }
 }
 
 /**
  * One chat completion against any OpenAI-compatible endpoint.
- * Returns { text, usage, model, ms }.
+ * Returns { text, usage, model, ms, finish }.
+ *
+ * `maxTokens` overrides `tier.maxTokens` for this call only, so a caller that
+ * hit a truncated reply can retry the same tier with more room without
+ * mutating the tier config or affecting other nodes.
  */
-export async function chat(cfg, tier, messages, { signal } = {}) {
+export async function chat(cfg, tier, messages, { signal, maxTokens } = {}) {
   const key = tierKey(tier);
   if (tier.apiKeyEnv && !key) {
     throw new ProviderError(`Environment variable ${tier.apiKeyEnv} is not set (tier "${tier.name}").`);
@@ -32,7 +40,7 @@ export async function chat(cfg, tier, messages, { signal } = {}) {
     model: tier.model,
     messages,
     temperature: tier.temperature,
-    max_tokens: tier.maxTokens,
+    max_tokens: maxTokens ?? tier.maxTokens,
     stream: false,
   };
 
@@ -72,8 +80,17 @@ export async function chat(cfg, tier, messages, { signal } = {}) {
   const choice = json.choices?.[0];
   const text = choice?.message?.content ?? "";
   if (!text.trim()) {
+    // finish_reason=length means the model hit the output cap before writing
+    // anything usable — a too-small max_tokens, not a flaky endpoint. This
+    // used to be transient:true unconditionally, so chatWithBackoff retried
+    // the identical request up to three times at the identical cap: same
+    // failure, same reason, three times over, before the caller ever saw it.
+    // Only genuine provider flakiness should retry blind; a truncation needs
+    // a bigger cap, which only the caller (runNode) can decide to grant.
+    const truncated = choice?.finish_reason === "length";
     throw new ProviderError(`${tier.name} returned an empty completion (finish_reason=${choice?.finish_reason}).`, {
-      transient: true,
+      transient: !truncated,
+      truncated,
     });
   }
 
@@ -87,11 +104,11 @@ export async function chat(cfg, tier, messages, { signal } = {}) {
 }
 
 /** chat() with backoff on transient failures only. */
-export async function chatWithBackoff(cfg, tier, messages, { attempts = 3 } = {}) {
+export async function chatWithBackoff(cfg, tier, messages, { attempts = 3, maxTokens } = {}) {
   let last;
   for (let i = 0; i < attempts; i++) {
     try {
-      return await chat(cfg, tier, messages);
+      return await chat(cfg, tier, messages, { maxTokens });
     } catch (e) {
       last = e;
       if (!(e instanceof ProviderError) || !e.transient || i === attempts - 1) throw e;

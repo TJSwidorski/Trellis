@@ -36,7 +36,7 @@ export function startMockServer(script) {
       const seq = (script.responses[key] ||= []);
       const idx = calls.filter((c) => c.node === key).length;
       const entry = seq[Math.min(idx, seq.length - 1)];
-      calls.push({ node: key, model, idx, prompt: userText });
+      calls.push({ node: key, model, idx, prompt: userText, maxTokens: parsed.max_tokens });
 
       if (entry?.httpError) {
         res.writeHead(entry.httpError, { "Content-Type": "application/json" });
@@ -44,11 +44,15 @@ export function startMockServer(script) {
       }
 
       const content = typeof entry === "function" ? entry({ model, idx, prompt: userText }) : entry?.content ?? "";
+      // finishReason lets a fixture script finish_reason:"length" — a truncated
+      // reply, either empty (the provider-level truncation path) or carrying
+      // whatever partial content the entry provides (the mid-file path).
+      const finishReason = (typeof entry === "object" && entry?.finishReason) || "stop";
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         id: "mock",
         model,
-        choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }],
+        choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: finishReason }],
         usage: { prompt_tokens: Math.ceil(userText.length / 4), completion_tokens: Math.ceil(String(content).length / 4) },
       }));
     });

@@ -67,7 +67,11 @@ export function loadConfig(repoRoot, file) {
     }
     t.maxAttempts = t.maxAttempts ?? 2;
     t.temperature = t.temperature ?? 0.1;
-    t.maxTokens = t.maxTokens ?? 8000;
+    // Whole-file emission at 8000 was the truncation source, and escalating
+    // a tier to solve a token cap pays for capability that was never the
+    // problem — worker.mjs's per-attempt cap doubling (up to maxTokensCeiling)
+    // handles genuinely large nodes on top of this.
+    t.maxTokens = t.maxTokens ?? 16000;
   });
   return cfg;
 }

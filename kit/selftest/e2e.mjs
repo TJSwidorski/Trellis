@@ -637,6 +637,86 @@ assert.strictEqual(auto(), "ok");
   });
   fs.rmSync(nRoot, { recursive: true, force: true });
 
+  // ---- resume salvage: a RUNNING node must not stay stuck forever ----
+  //
+  // The graph-changed salvage path used to copy state.nodes[id] verbatim,
+  // including status. A node genuinely RUNNING when the process died — its
+  // own contract untouched by whatever graph edit triggered the salvage —
+  // stayed RUNNING forever after: invisible to readySet, invisible to
+  // markBlocked, and the run reported "finished" with it silently unbuilt.
+  const rRoot = makeRepo();
+  write(rRoot, "tests/a.test.mjs", `
+import assert from "node:assert";
+import { a } from "../src/a.mjs";
+assert.strictEqual(a(), 1);
+`.trim());
+  write(rRoot, "tests/b.test.mjs", `
+import assert from "node:assert";
+import { b } from "../src/b.mjs";
+assert.strictEqual(b(), 1);
+`.trim());
+  const rGraph = {
+    version: 1,
+    project: "salvage",
+    nodes: [
+      { id: "a", title: "a", goal: "export a()", write: ["src/a.mjs"], tests: ["tests/a.test.mjs"], gate: "node tests/a.test.mjs" },
+      { id: "b", title: "b", goal: "export b()", write: ["src/b.mjs"], tests: ["tests/b.test.mjs"], gate: "node tests/b.test.mjs" },
+    ],
+  };
+  write(rRoot, ".trellis/graph.json", JSON.stringify(rGraph, null, 2));
+  const rMock = await startMockServer({
+    responses: {
+      a: [{ content: FILE("src/a.mjs", "export const a = () => 1;") }],
+      b: [{ content: FILE("src/b.mjs", "export const b = () => 1;") }],
+    },
+  });
+  write(rRoot, "trellis.config.json", JSON.stringify({
+    project: "salvage", baseBranch: "main", concurrency: 2,
+    tiers: [{ name: "cheap", baseUrl: rMock.url, model: "mock/cheap", maxAttempts: 1 }],
+    gate: { timeoutMs: 20000 },
+    routing: { enabled: false },
+    verify: { mutationsOnPass: false },
+    budget: { maxTotalAttempts: null, maxWorkerTokens: null, maxWallClockMs: null, maxCostUsd: null },
+    boundaries: { denyWrite: [".git/**", ".trellis/**", "trellis.config.json"] },
+  }, null, 2));
+  g(rRoot, "add", "-A"); g(rRoot, "commit", "-qm", "fixture");
+
+  // A well-formed prior state against the ORIGINAL graph, with the
+  // interrupted status hand-injected: node "a" was RUNNING when the process
+  // died. Built through initState rather than by hand so the hashes are real.
+  const rCfg1 = loadConfig(rRoot);
+  const rGraphLoaded1 = loadGraph(rRoot, rCfg1.paths.graph);
+  const rState = st.initState(rRoot, rCfg1, rGraphLoaded1);
+  rState.nodes.a.status = "running";
+  st.saveState(rRoot, rCfg1, rState);
+
+  // Edit the graph WITHOUT touching node "a"'s contract — only "b"'s title,
+  // which nodeHash does not read — so this changes the FILE hash (triggering
+  // the salvage path) while "a" still lands in `keep` (its own hash did not
+  // change).
+  rGraph.nodes[1].title = "b (renamed)";
+  write(rRoot, ".trellis/graph.json", JSON.stringify(rGraph, null, 2));
+  g(rRoot, "add", "-A"); g(rRoot, "commit", "-qm", "rename b");
+
+  const rRun = await new Promise((resolve) => {
+    const c = spawn("node", [CLI, "run", "--resume"], { cwd: rRoot });
+    let stdout = "", stderr = "";
+    c.stdout.on("data", (d) => (stdout += d));
+    c.stderr.on("data", (d) => (stderr += d));
+    c.on("close", (status) => resolve({ status, stdout, stderr }));
+  });
+  const rFinalState = JSON.parse(fs.readFileSync(path.join(rRoot, ".trellis/state.json"), "utf8"));
+  check("ADVERSARIAL a RUNNING node kept across a graph-changed salvage does not stay stuck forever", () => {
+    assert.notStrictEqual(rFinalState.nodes.a.status, "running",
+      `node "a" was RUNNING before the graph changed and is still "running" after --resume\n` +
+      `stdout: ${rRun.stdout}\nstderr: ${rRun.stderr}`);
+    assert.strictEqual(rFinalState.nodes.a.status, "merged",
+      `expected node "a" to have been rebuilt and merged after the salvage, got "${rFinalState.nodes.a.status}"\n` +
+      `stdout: ${rRun.stdout}`);
+  });
+  await rMock.close();
+  fs.rmSync(rRoot, { recursive: true, force: true });
+
   // ---- report ----
   let failed = 0;
   for (const [status, name, msg] of results) {

@@ -141,6 +141,7 @@ export async function run(cfg, graph, state, { dryRun = false, only = null, hist
             log.node(id, survived
               ? log.red(`mutant SURVIVED: ${mutation.slice(0, 70)}`)
               : log.dim(`mutant killed: ${mutation.slice(0, 60)}`)),
+          onCall: (a) => budget.record(a),
         });
         state.nodes[id].survivingMutations = mut.survivors;
         state.nodes[id].mutationsChecked = mut.checked;

@@ -38,7 +38,7 @@ Rules:
 /**
  * @returns {Promise<{ checked:number, survivors:Array<{mutation:string,reason:string}>, skipped:string[] }>}
  */
-export async function checkMutations(cfg, node, worktree, root, { onStep } = {}) {
+export async function checkMutations(cfg, node, worktree, root, { onStep, onCall } = {}) {
   const mutations = node.mutations || [];
   if (!mutations.length) return { checked: 0, survivors: [], skipped: [] };
 
@@ -73,6 +73,11 @@ export async function checkMutations(cfg, node, worktree, root, { onStep } = {})
       skipped.push(`${mutation} — mutator call failed: ${e.message}`);
       continue;
     }
+    // One provider call per mutation per node, and none of it reached
+    // Budget before this — onAttempt only fires from runNode. At 40 nodes x
+    // 3 mutations that is ~120 unmetered completions: maxCostUsd and
+    // maxTotalAttempts were enforced against roughly half the real spend.
+    onCall?.({ tier: tier.name, usage: reply.usage });
 
     const blocks = parseBlocks(reply.text).filter((b) => b.kind === "write");
     if (!blocks.length) {

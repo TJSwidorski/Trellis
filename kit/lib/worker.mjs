@@ -149,15 +149,30 @@ function applyBlocks({ writes, deletes }) {
  */
 export async function runNode(cfg, node, worktree, { onAttempt } = {}) {
   const system = roleTemplate(node.role);
-  const basePrompt = buildPrompt(cfg, node, worktree);
   const attempts = [];
   let lastFeedback = null;
 
   for (const tier of cfg.tiers) {
+    // A too-small output cap is answered with a bigger cap on the SAME tier,
+    // not by escalating to a more expensive model — a stronger model does not
+    // write shorter files. Capped at two free retries per tier so a
+    // pathologically large node cannot spin forever; past that it escalates
+    // like any other failure.
+    let cap = tier.maxTokens;
+    let truncationRetries = 0;
+    const ceiling = tier.maxTokensCeiling ?? tier.maxTokens * 4;
+
     for (let a = 1; a <= tier.maxAttempts; a++) {
+      // Rebuilt every attempt, not just once before the loop. The worktree
+      // holds whatever the PREVIOUS attempt wrote — applyBlocks ran before
+      // this point on any earlier iteration — so "Current contents of files
+      // you may edit" reflects it. Built once up front, a retry asked the
+      // model to fix code it could not see; for a brand-new file that
+      // section was simply absent from the prompt.
+      const prompt = buildPrompt(cfg, node, worktree);
       const messages = [{ role: "system", content: system }];
       if (lastFeedback) {
-        messages.push({ role: "user", content: basePrompt });
+        messages.push({ role: "user", content: prompt });
         messages.push({ role: "assistant", content: "(previous attempt — files omitted)" });
         messages.push({
           role: "user",
@@ -166,15 +181,34 @@ export async function runNode(cfg, node, worktree, { onAttempt } = {}) {
             `Fix it. Re-emit every file you change, complete, using the same ### FILE: format.`,
         });
       } else {
-        messages.push({ role: "user", content: basePrompt });
+        messages.push({ role: "user", content: prompt });
       }
 
       const record = { tier: tier.name, model: tier.model, attempt: a, startedAt: new Date().toISOString() };
       let reply;
       try {
-        reply = await chatWithBackoff(cfg, tier, messages);
+        reply = await chatWithBackoff(cfg, tier, messages, { maxTokens: cap });
       } catch (e) {
         record.ok = false;
+        // A plain if, not a nested ternary: the regression suite extracts kind
+        // literals from source text via a single-level ternary regex, and a
+        // third branch nested into the existing one would make "provider-error"
+        // and "error" invisible to it — see kit/regression/run.mjs's kinds check.
+        if (e instanceof ProviderError && e.truncated) {
+          record.kind = "truncated";
+          record.reason = e.message;
+          attempts.push(record);
+          onAttempt?.(record);
+          if (truncationRetries < 2) {
+            truncationRetries++;
+            cap = Math.min(cap * 2, ceiling);
+            lastFeedback = "Your previous reply was cut off before any file completed. Re-emit every file, complete.";
+            a--; // free retry: does not consume the tier's attempt budget
+            continue;
+          }
+          lastFeedback = null;
+          break; // out of room even at the ceiling; a bigger model may fare better
+        }
         record.kind = e instanceof ProviderError ? "provider-error" : "error";
         record.reason = e.message;
         attempts.push(record);
@@ -193,6 +227,33 @@ export async function runNode(cfg, node, worktree, { onAttempt } = {}) {
         denyWrite: cfg.boundaries.denyWrite,
         frozen: node.tests || [],
       });
+
+      // Checked BEFORE the empty-writes test, not nested inside it. The
+      // common truncation shape is two complete files and a third cut off
+      // mid-fence — screened.writes.length is 2, not 0 — and nesting this
+      // inside "produced nothing usable" meant that shape skipped straight
+      // to applying the partial set and running the gate, which failed and
+      // escalated a tier to solve what was never a capability problem.
+      if (screened.flags.has("truncated")) {
+        record.ok = false;
+        record.kind = "truncated";
+        record.reason = screened.rejections.join("; ");
+        attempts.push(record);
+        onAttempt?.(record);
+        // Whatever DID complete is worth keeping — the next attempt's fresh
+        // prompt will show it under "current contents", so the model only
+        // has to finish what it started rather than regenerate everything.
+        applyBlocks(screened);
+        if (truncationRetries < 2) {
+          truncationRetries++;
+          cap = Math.min(cap * 2, ceiling);
+          lastFeedback = "Your previous reply was cut off mid-file. Re-emit every file, complete.";
+          a--; // free retry: does not consume the tier's attempt budget
+          continue;
+        }
+        lastFeedback = "You keep running out of room. Re-emit every file, complete, as concisely as correctness allows.";
+        continue;
+      }
 
       if (!screened.writes.length && !screened.deletes.length) {
         record.ok = false;

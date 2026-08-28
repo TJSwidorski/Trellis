@@ -73,7 +73,21 @@ export function screenBlocks(blocks, { worktree, allowWrite, denyWrite, frozen }
 
   for (const b of blocks) {
     if (b.kind === "error") {
-      flags.add("malformed");
+      // Two different failures were wearing one flag. "No fence after the FILE
+      // header" means the model does not understand the output contract — a
+      // formatting problem. "Unterminated fence" means the model understood
+      // fine and got cut off mid-file — a truncation, distinguished so it can
+      // be answered with a bigger cap instead of a formatting correction.
+      //
+      // Written as two separate calls rather than one call with a ternary
+      // argument: the regression suite extracts flag names from source text
+      // by pattern-matching a quoted string literal directly inside the call,
+      // and a ternary in that position is invisible to it.
+      if (b.reason === "unterminated code fence") {
+        flags.add("truncated");
+      } else {
+        flags.add("malformed");
+      }
       rejections.push(`${b.path}: ${b.reason}`);
       continue;
     }
@@ -114,7 +128,9 @@ export function screenBlocks(blocks, { worktree, allowWrite, denyWrite, frozen }
  * report should say so.
  */
 export function worstFlag(flags) {
-  for (const f of ["frozen", "traversal", "denied", "out-of-scope", "malformed"]) {
+  // "truncated" sits above "malformed": a model that ran out of room
+  // understood the contract and needs more room, not a formatting correction.
+  for (const f of ["frozen", "traversal", "denied", "out-of-scope", "truncated", "malformed"]) {
     if (flags.has(f)) return f === "frozen" ? "test-tampering" : f;
   }
   return null;
