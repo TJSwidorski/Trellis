@@ -2671,24 +2671,49 @@ function stateFor(nodes) {
 check("a resume after an unrelated edit keeps the nodes that did not change", () => {
   // One edited contract used to send every merged node back to pending and
   // rebuild the lot, at real cost, behind a single log.warn.
+  //
+  // stateFor() marks every node "merged" -- realistic for a resume fixture,
+  // since resumePlan only matters once a run has actually built something --
+  // which makes b's edited contract a LANDED-and-dirty node: it must be
+  // reported in landedDirty, not silently auto-rebuilt via `dirty`. See the
+  // adversarial check below this one for the guard that enforces that.
   const before = [rnode("a"), rnode("b"), rnode("c")];
   const state = stateFor(before);
   const after = { __hash: "h1", nodes: [rnode("a"), rnode("b", { goal: "changed" }), rnode("c")] };
-  const { dirty, keep } = resumePlan(state, after, { root: RNODE_ROOT });
+  const { dirty, keep, landedDirty } = resumePlan(state, after, { root: RNODE_ROOT });
   assert(keep.includes("a") && keep.includes("c"), `unrelated nodes were discarded: keep=${keep}`);
-  assert(dirty.length === 1 && dirty[0] === "b", `expected only b to be rebuilt, got ${dirty}`);
+  assert(dirty.length === 0, `a landed node must never be silently auto-rebuilt via dirty, got dirty=${dirty}`);
+  assert(landedDirty.length === 1 && landedDirty[0] === "b",
+    `expected only b reported as landed-and-dirty, got ${landedDirty}`);
 });
 
 check("ADVERSARIAL a node built against a changed dependency is rebuilt", () => {
-  // b was proven against a version of a that no longer exists. Keeping it would
-  // be claiming a proof that never happened.
+  // b was proven against a version of a that no longer exists. Keeping it
+  // silently would be claiming a proof that never happened -- but since
+  // every node here is landed (stateFor's fixture), none of the three may be
+  // auto-rebuilt either. Both must be true at once: the change propagates to
+  // every dependant, AND every affected node is routed through landedDirty
+  // rather than dirty.
   const before = [rnode("a"), rnode("b", { deps: ["a"] }), rnode("c", { deps: ["b"] })];
   const state = stateFor(before);
   const after = { __hash: "h1", nodes: [rnode("a", { goal: "changed" }), rnode("b", { deps: ["a"] }), rnode("c", { deps: ["b"] })] };
-  const { dirty, keep } = resumePlan(state, after, { root: RNODE_ROOT });
-  assert(dirty.includes("a") && dirty.includes("b") && dirty.includes("c"),
-    `the change did not propagate downstream: dirty=${dirty}`);
-  assert(keep.length === 0, `something downstream of a changed node was kept: ${keep}`);
+  const { dirty, landedDirty } = resumePlan(state, after, { root: RNODE_ROOT });
+  assert(landedDirty.includes("a") && landedDirty.includes("b") && landedDirty.includes("c"),
+    `the change did not propagate downstream: landedDirty=${landedDirty}`);
+  assert(dirty.length === 0, `a landed node must never be silently auto-rebuilt via dirty, got dirty=${dirty}`);
+});
+
+check("ADVERSARIAL resumePlan refuses to auto-rebuild a landed node — even one with no dependants", () => {
+  // The other two checks above prove propagation reaches a landed node. This
+  // proves the guard fires even for the simplest case: a single landed node,
+  // no deps, no dependants, whose own contract changed.
+  const before = [rnode("solo")];
+  const state = stateFor(before);
+  const after = { __hash: "h1", nodes: [rnode("solo", { goal: "changed" })] };
+  const { dirty, keep, landedDirty } = resumePlan(state, after, { root: RNODE_ROOT });
+  assert(dirty.length === 0, `expected the landed node kept out of dirty entirely, got ${dirty}`);
+  assert(landedDirty.length === 1 && landedDirty[0] === "solo", `expected landedDirty=["solo"], got ${landedDirty}`);
+  assert(keep.includes("solo"), "a landed-dirty node's prior state must be preserved, not dropped");
 });
 
 check("cosmetic edits do not rebuild anything", () => {
@@ -2789,9 +2814,14 @@ check("ADVERSARIAL resumePlan({root}) rebuilds a node whose test content changed
   // the test until each mutant fails. Path unchanged, content changed.
   fs.writeFileSync(testPath, "assert.strictEqual(1, 1); assert.strictEqual(2, 2);\n");
 
-  const { dirty: dirtyWithRoot } = resumePlan(state, after, { root: dir });
-  assert(dirtyWithRoot.includes("a"),
-    "a strengthened test file did not mark its node dirty even though resumePlan was given the root to see it");
+  // "weak-tests" is a LANDED status (state.mjs's LANDED set), so this must
+  // surface via landedDirty, not dirty -- the node already merged, and
+  // strengthening its test does not un-merge it automatically.
+  const { dirty: dirtyWithRoot, landedDirty: landedDirtyWithRoot } = resumePlan(state, after, { root: dir });
+  assert(dirtyWithRoot.length === 0,
+    "a landed node must never be silently auto-rebuilt via dirty, even when its test content changed");
+  assert(landedDirtyWithRoot.includes("a"),
+    "a strengthened test file did not mark its landed node as landed-dirty even though resumePlan was given the root to see it");
 });
 
 // ------------------------------------- stage 02 must assemble the task graph

@@ -356,7 +356,23 @@ function resumeOrInit(root, cfg, graph, { resume = false, retryFailed = false } 
   // merged node back to pending, rebuilding them all at real cost, behind one
   // warning line.
   if (state && resume && !st.resumable(state, graph)) {
-    const { dirty, keep, gone } = st.resumePlan(state, graph, { root });
+    const { dirty, keep, gone, landedDirty } = st.resumePlan(state, graph, { root });
+    // A landed node whose contract (or a dependency's) changed is never
+    // silently rebuilt: its code is already on the base branch, and
+    // resetting it to pending would rebuild it from a base that STILL
+    // CONTAINS that merge — automatically doing exactly what `trellis
+    // reject` refuses to do without a human revert first. Halt and name
+    // each one, the same instruction `trellis reject` already gives for the
+    // ordinary case.
+    if (landedDirty.length) {
+      die(
+        `${landedDirty.length} already-landed node(s) changed since they merged: ${landedDirty.join(", ")}.\n` +
+        `Their code is on ${cfg.baseBranch}. Trellis will not rewrite history by rebuilding them in place.\n` +
+        `Revert each merge yourself if the old version should not ship, then \`trellis run --resume\` again — ` +
+        `or if the new contract is what you actually want going forward, leave them merged and treat the ` +
+        `difference as accepted drift.`
+      );
+    }
     if (keep.length) {
       // Not always state.runId: if a NEW cycle began since state.json was
       // last written (beginCycle minted a fresh id), this salvage is for the

@@ -997,6 +997,55 @@ assert.strictEqual(b(), 1);
   });
   fs.rmSync(rjRoot, { recursive: true, force: true });
 
+  // ---- run --resume must not silently rebuild a landed node in place ----
+  //
+  // resumePlan's own unit tests (kit/regression/run.mjs) prove the data-level
+  // guard. This proves the CLI actually acts on it: `trellis run --resume`
+  // after a merged node's contract changed must halt loudly, not reset the
+  // node to pending and rebuild it from a base branch that still contains
+  // its old merge -- exactly what `trellis reject` already refuses to do for
+  // the same node, without a human reverting the merge first.
+  const ldRoot = makeRepo();
+  write(ldRoot, "trellis.config.json", JSON.stringify({
+    project: "landeddirty", baseBranch: "main",
+    paths: { state: ".trellis", worktrees: ".worktrees", graph: ".trellis/graph.json" },
+    tiers: [{ name: "cheap", baseUrl: "http://127.0.0.1:1", model: "m", apiKeyEnv: null, maxAttempts: 1, maxTokens: 100 }],
+  }));
+  write(ldRoot, "tests/landed.test.mjs", "assert.strictEqual(1, 1);\n");
+  write(ldRoot, ".trellis/graph.json", JSON.stringify({
+    version: 1, project: "landeddirty",
+    nodes: [{ id: "landed", title: "landed", goal: "original goal", write: ["src/landed.mjs"],
+      tests: ["tests/landed.test.mjs"], gate: "true" }],
+  }, null, 2));
+  g(ldRoot, "add", "-A"); g(ldRoot, "commit", "-qm", "fixture");
+
+  const ldCfg = loadConfig(ldRoot);
+  const ldGraph0 = loadGraph(ldRoot, ldCfg.paths.graph);
+  const ldState = st.initState(ldRoot, ldCfg, ldGraph0, { runId: "r1" });
+  ldState.nodes.landed.status = "merged";
+  ldState.nodes.landed.branch = "trellis/landed";
+  st.saveState(ldRoot, ldCfg, ldState);
+
+  // Change the landed node's own contract -- moves its hash, and moves
+  // graph.__hash too, which is what routes `run --resume` into the salvage
+  // path (resumeOrInit) rather than the ordinary resume path.
+  const ldGraphEdited = JSON.parse(fs.readFileSync(path.join(ldRoot, ".trellis/graph.json"), "utf8"));
+  ldGraphEdited.nodes[0].goal = "a materially different goal";
+  write(ldRoot, ".trellis/graph.json", JSON.stringify(ldGraphEdited, null, 2));
+  g(ldRoot, "add", "-A"); g(ldRoot, "commit", "-qm", "edit landed node's contract");
+
+  const ldRun = spawnSync("node", [CLI, "run", "--resume"], { cwd: ldRoot, encoding: "utf8" });
+  check("ADVERSARIAL run --resume refuses to silently rebuild a landed node whose contract changed", () => {
+    assert.notStrictEqual(ldRun.status, 0,
+      `run --resume must halt rather than rebuild a landed node in place\nstdout: ${ldRun.stdout}\nstderr: ${ldRun.stderr}`);
+    assert.ok(/landed/.test(ldRun.stdout + ldRun.stderr), `the halt message did not name the affected node: ${ldRun.stdout}${ldRun.stderr}`);
+    assert.ok(/revert/i.test(ldRun.stdout + ldRun.stderr),
+      `expected the same "revert that merge" guidance trellis reject gives: ${ldRun.stdout}${ldRun.stderr}`);
+    const after = st.loadState(ldRoot, ldCfg);
+    assert.strictEqual(after.nodes.landed.status, "merged", "the landed node's status must not have been touched");
+  });
+  fs.rmSync(ldRoot, { recursive: true, force: true });
+
   // ---- report ----
   let failed = 0;
   for (const [status, name, msg] of results) {

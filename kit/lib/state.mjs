@@ -135,6 +135,16 @@ export function nodeHash(node, { root } = {}) {
  * A node is rebuilt if its own contract changed, or if anything it depends on
  * did. The second half matters: a node built against an old version of its
  * dependency was proven against something that no longer exists.
+ *
+ * A dirty node that had already LANDED is reported separately, in
+ * `landedDirty`, and is NEVER included in `dirty` or silently dropped from
+ * `keep`. `dirty` used to include it: the caller reset it to PENDING and
+ * rebuilt it from a base branch that STILL CONTAINS its old merge commit —
+ * automatically doing exactly what `cmdReject` refuses to do on purpose
+ * ("its code is on main — revert that merge first, Trellis will not rewrite
+ * your history"). Editing a contract and then `--resume`, the sequence the
+ * old all-or-nothing rule was fixed to survive, is also the sequence that
+ * reaches this exact case for a single landed node.
  */
 export function resumePlan(state, graph, { root } = {}) {
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
@@ -153,9 +163,12 @@ export function resumePlan(state, graph, { root } = {}) {
     }
   }
 
+  const landedDirty = [...dirty].filter((id) => LANDED.has(state.nodes?.[id]?.status));
+  for (const id of landedDirty) dirty.delete(id);
+
   const gone = Object.keys(state.nodes ?? {}).filter((id) => !byId.has(id));
   const keep = graph.nodes.map((n) => n.id).filter((id) => !dirty.has(id));
-  return { dirty: [...dirty], keep, gone };
+  return { dirty: [...dirty], keep, gone, landedDirty };
 }
 
 export function rollup(state) {
