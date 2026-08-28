@@ -448,6 +448,31 @@ async function cmdRun() {
  * node as still `review`, its dependants never become ready, and the run quietly
  * does nothing.
  */
+/**
+ * `accept`'s restriction (review|weak-tests|audit only) is invariant 1: a node
+ * that never passed a gate must not be acceptable. But refusing with just
+ * "not awaiting review" is a dead end — it names the wall without naming the
+ * door. Each other status has a real next command.
+ */
+function acceptVerbFor(status, id) {
+  if (status === st.STATUS.EXHAUSTED) {
+    return `Nothing to accept — it never passed a gate. Use \`trellis reject ${id}\` to rebuild it, ` +
+      `or \`trellis run --resume --retry-failed\` to retry in place.`;
+  }
+  if (status === st.STATUS.CONFLICT) {
+    return `Its merge conflicted and nothing landed. Resolve the conflict manually, or ` +
+      `\`trellis reject ${id}\` to rebuild it from a clean tree.`;
+  }
+  if (status === st.STATUS.BUDGET) {
+    return `The run's budget stopped before this node was attempted. ` +
+      `\`trellis run --resume\` picks it up once the ceiling is raised or the run allows it.`;
+  }
+  if (st.LANDED.has(status)) {
+    return `It is already merged into the base branch. Nothing to accept — there is no review pending.`;
+  }
+  return `\`trellis status\` shows what is pending.`;
+}
+
 function cmdAccept() {
   const { root, cfg } = ctx();
 
@@ -479,7 +504,7 @@ function cmdAccept() {
     const s = state.nodes[id];
     if (!s) die(`No node "${id}" in the current run.`);
     if (![st.STATUS.REVIEW, st.STATUS.WEAK_TESTS, st.STATUS.AUDIT].includes(s.status)) {
-      die(`Node "${id}" is ${s.status}, not awaiting review. Nothing to accept.`);
+      die(`"${id}" is ${s.status}, not awaiting review. ` + acceptVerbFor(s.status, id));
     }
     const branch = s.branch || `trellis/${id}`;
 
@@ -524,9 +549,16 @@ function cmdReject() {
     const s = state.nodes[id];
     if (!s) die(`No node "${id}" in the current run.`);
     const branch = s.branch || `trellis/${id}`;
-    const isMerged = git(root, ["merge-base", "--is-ancestor", branch, cfg.baseBranch]).ok;
-    if (isMerged) {
-      die(`Branch ${branch} is already merged into ${cfg.baseBranch}. ` +
+    // The status, not git ancestry, decides whether this branch was actually
+    // merged. commitWorktree only runs on a passing gate (worker.mjs), so an
+    // EXHAUSTED node's branch never diverged from the base tip — it is
+    // trivially an "ancestor" of main with zero commits on it, and the old
+    // `git merge-base --is-ancestor` check refused to reject it with
+    // "already merged, revert that merge first" for a node that had nothing
+    // to revert. st.LANDED is exactly "merged/audit/weak-tests", the
+    // statuses where the node's code is genuinely on the base branch.
+    if (st.LANDED.has(s.status)) {
+      die(`"${id}" is ${s.status} — its code is on ${cfg.baseBranch}. ` +
           `Revert that merge first — Trellis will not rewrite your history.`);
     }
     s.status = st.STATUS.PENDING;
@@ -543,6 +575,118 @@ function cmdReject() {
   log.info(log.dim("If you changed its contract, run validate first, then run --resume."));
   log.info(log.dim("A resume keeps every node the change did not invalidate, and rebuilds only"));
   log.info(log.dim("the ones whose contract moved plus anything downstream of them."));
+}
+
+// -------------------------------------------------------------- apply-triage
+
+const REJECT_VERDICTS = new Set(["reject", "re-decompose", "rewrite-contract"]);
+const RECORD_ONLY_VERDICTS = new Set(["cut", "defer"]);
+
+/**
+ * Mechanises the reversible half of triage.json's decisions, instead of the
+ * orchestrator running accept/reject one CLI call at a time for every node.
+ *
+ * This never merges anything a human has not already looked at — MISSION.md's
+ * one-way-door non-goal is not a suggestion here, it is the whole reason the
+ * table below has a "never applied" row instead of an "apply anyway" one.
+ *
+ *   verdict is reject-like, node not LANDED  -> reset to pending (cmdReject's logic)
+ *   verdict is reject-like, node LANDED      -> refuse; list for a human, nothing reverted
+ *   verdict is accept,      node LANDED      -> bookkeeping only: mark merged, land nothing new
+ *   verdict is accept,      node held/review -> NEVER applied; appended to checkpoint.json
+ *   anything else (cut, defer, blocked, ...) -> recorded, no state change
+ *
+ * `--dry-run` is the default. `--apply` is required to write anything.
+ */
+function cmdApplyTriage() {
+  const { root, cfg } = ctx();
+  const state = st.loadState(root, cfg);
+  if (!state) die("No run to apply triage against.");
+
+  const triagePath = path.resolve(root, ".trellis/triage.json");
+  if (!fs.existsSync(triagePath)) die(".trellis/triage.json does not exist — nothing to apply.");
+  let triage;
+  try { triage = JSON.parse(fs.readFileSync(triagePath, "utf8")); } catch { die(".trellis/triage.json is not valid JSON."); }
+  const decisions = Array.isArray(triage.decisions) ? triage.decisions : [];
+  if (!decisions.length) die(".trellis/triage.json has no decisions.");
+
+  const apply = flags.has("--apply");
+  const rows = { reset: [], refused: [], accepted: [], checkpoint: [], recorded: [], unknown: [] };
+
+  for (const d of decisions) {
+    const id = d?.node;
+    const verdict = String(d?.verdict || "");
+    const s = id ? state.nodes[id] : null;
+    if (!id || !s) { rows.unknown.push(d); continue; }
+
+    if (REJECT_VERDICTS.has(verdict)) {
+      if (st.LANDED.has(s.status)) { rows.refused.push({ id, status: s.status, reason: d.reason }); continue; }
+      rows.reset.push(id);
+      continue;
+    }
+
+    if (verdict === "accept") {
+      if (st.LANDED.has(s.status)) { rows.accepted.push(id); continue; }
+      if (s.status === st.STATUS.REVIEW) { rows.checkpoint.push({ id, reason: d.reason, code: d.code }); continue; }
+      rows.recorded.push({ id, verdict, why: `status is ${s.status}, not review or landed — nothing to accept` });
+      continue;
+    }
+
+    rows.recorded.push({ id, verdict, why: RECORD_ONLY_VERDICTS.has(verdict) ? "recorded only" : "no mechanised action for this verdict" });
+  }
+
+  log.info(log.bold(`triage decisions: ${decisions.length}`));
+  if (rows.reset.length) log.ok(`${rows.reset.length} rejected node(s) to reset: ${rows.reset.join(", ")}`);
+  if (rows.accepted.length) log.ok(`${rows.accepted.length} landed node(s) to mark accepted (bookkeeping only): ${rows.accepted.join(", ")}`);
+  if (rows.refused.length) {
+    log.warn(`${rows.refused.length} rejected but already landed — a merge revert is a human decision, not applying:`);
+    for (const r of rows.refused) log.info(`  ${r.id} (${r.status})${r.reason ? `: ${r.reason}` : ""}`);
+  }
+  if (rows.checkpoint.length) {
+    log.warn(`${rows.checkpoint.length} accepted but held for review — never auto-applied, written to checkpoint:`);
+    for (const c of rows.checkpoint) log.info(`  ${c.id}${c.reason ? `: ${c.reason}` : ""}`);
+  }
+  if (rows.recorded.length) log.info(log.dim(`${rows.recorded.length} decision(s) recorded, no action: ${rows.recorded.map((r) => r.id).join(", ")}`));
+  if (rows.unknown.length) log.warn(`${rows.unknown.length} decision(s) named a node not in this run's state — skipped.`);
+
+  if (!apply) {
+    log.info("");
+    log.info(log.dim("Dry run. Nothing was changed. Re-run with --apply to write these."));
+    return;
+  }
+
+  for (const id of rows.reset) {
+    const s = state.nodes[id];
+    const branch = s.branch || `trellis/${id}`;
+    s.status = st.STATUS.PENDING;
+    s.attempts = [];
+    s.tier = null;
+    s.reason = null;
+    s.survivingMutations = [];
+    removeWorktree(root, cfg, id, { quiet: true });
+    git(root, ["branch", "-D", branch]);
+  }
+  for (const id of rows.accepted) {
+    const s = state.nodes[id];
+    s.status = st.STATUS.MERGED;
+    s.reason = "accepted via apply-triage (was already landed)";
+    s.acceptedAt = new Date().toISOString();
+  }
+
+  st.saveState(root, cfg, state);
+
+  const checkpointPath = path.resolve(root, ".trellis/checkpoint.json");
+  if (rows.checkpoint.length) {
+    fs.writeFileSync(checkpointPath, JSON.stringify({ at: new Date().toISOString(), nodes: rows.checkpoint }, null, 2) + "\n");
+  }
+
+  log.info("");
+  log.ok(`applied: ${rows.reset.length} reset, ${rows.accepted.length} bookkept, ${rows.checkpoint.length} sent to checkpoint`);
+  if (rows.checkpoint.length) {
+    log.info(log.dim(`See .trellis/checkpoint.json. Review those branches, then:`));
+    log.info(log.dim(`  node kit/bin/cli.mjs accept ${rows.checkpoint.map((c) => c.id).join(" ")} --merge`));
+  }
+  if (rows.reset.length) log.info(log.dim("Next: node kit/bin/cli.mjs run --resume"));
 }
 
 // ------------------------------------------------------------------ status
@@ -1444,6 +1588,8 @@ trellis — Claude Code orchestrates, open-source models do the work.
     --concurrency 4             Override parallelism
   trellis accept <id> [--merge]  Mark a reviewed node accepted so dependants unblock
   trellis reject <id>         Reset a reviewed node to pending for a rebuild
+  trellis apply-triage        Mechanise the reversible verdicts in triage.json
+    --apply                      Write changes (default is a dry run)
   trellis status              Per-node status of the last run
   trellis clean [--branches]  Remove worktrees (and optionally trellis/* branches)
 
@@ -1495,6 +1641,7 @@ const table = {
   run: cmdRun,
   accept: cmdAccept,
   reject: cmdReject,
+  "apply-triage": cmdApplyTriage,
   status: cmdStatus,
   clean: cmdClean,
   cycle: cmdCycle,

@@ -733,6 +733,105 @@ assert.strictEqual(b(), 1);
   await rMock.close();
   fs.rmSync(rRoot, { recursive: true, force: true });
 
+  // ---- reject / apply-triage: the false-positive fix and the mechanised half
+  //
+  // Real triage on a real run produced 14 rejects; `reject` refused all 14,
+  // because an EXHAUSTED node's branch never diverged from the base tip —
+  // commitWorktree only runs on a passing gate — so `git merge-base
+  // --is-ancestor` trivially returned true for a node with zero commits, and
+  // reject died with "already merged, revert that merge first". These prove
+  // the status-based fix, and that apply-triage never merges a held node.
+  const rjRoot = makeRepo();
+  write(rjRoot, "trellis.config.json", JSON.stringify({
+    project: "reject", baseBranch: "main",
+    paths: { state: ".trellis", worktrees: ".worktrees", graph: ".trellis/graph.json" },
+    tiers: [{ name: "cheap", baseUrl: "http://127.0.0.1:1", model: "m", apiKeyEnv: null, maxAttempts: 1, maxTokens: 100 }],
+  }));
+  write(rjRoot, ".trellis/graph.json", JSON.stringify({
+    version: 1, project: "reject",
+    nodes: [
+      { id: "exh", title: "exh", goal: "g", write: ["src/exh.mjs"], tests: [], gate: "true" },
+      { id: "merged1", title: "merged1", goal: "g", write: ["src/m1.mjs"], tests: [], gate: "true" },
+      { id: "weak1", title: "weak1", goal: "g", write: ["src/w1.mjs"], tests: [], gate: "true" },
+      { id: "held1", title: "held1", goal: "g", write: ["src/h1.mjs"], tests: [], gate: "true" },
+    ],
+  }, null, 2));
+  g(rjRoot, "add", "-A"); g(rjRoot, "commit", "-qm", "fixture");
+
+  const rjCfg = loadConfig(rjRoot);
+  const rjGraph = loadGraph(rjRoot, rjCfg.paths.graph);
+  const rjState = st.initState(rjRoot, rjCfg, rjGraph, { runId: "r1" });
+  // Hand-set post-run statuses, since none of these need a real gate to pass.
+  rjState.nodes.exh.status = "exhausted";
+  rjState.nodes.merged1.status = "merged"; rjState.nodes.merged1.branch = "trellis/merged1";
+  rjState.nodes.weak1.status = "weak-tests"; rjState.nodes.weak1.branch = "trellis/weak1";
+  rjState.nodes.held1.status = "review"; rjState.nodes.held1.branch = "trellis/held1";
+  st.saveState(rjRoot, rjCfg, rjState);
+
+  check("ADVERSARIAL reject succeeds on an exhausted node with zero commits", () => {
+    const r = spawnSync("node", [CLI, "reject", "exh"], { cwd: rjRoot, encoding: "utf8" });
+    assert.strictEqual(r.status, 0, `reject refused an exhausted node: ${r.stdout}${r.stderr}`);
+    const after = st.loadState(rjRoot, rjCfg);
+    assert.strictEqual(after.nodes.exh.status, "pending", `expected pending, got ${after.nodes.exh.status}`);
+  });
+  check("reject still refuses a genuinely landed node", () => {
+    const r = spawnSync("node", [CLI, "reject", "merged1"], { cwd: rjRoot, encoding: "utf8" });
+    assert.notStrictEqual(r.status, 0, "reject was allowed to reset a merged node");
+    assert.ok(/revert that merge/i.test(r.stdout + r.stderr), `wrong refusal reason: ${r.stdout}${r.stderr}`);
+    const after = st.loadState(rjRoot, rjCfg);
+    assert.strictEqual(after.nodes.merged1.status, "merged", "a landed node's status changed on a refused reject");
+  });
+
+  // Restore exh to exhausted for the apply-triage checks below (reject above consumed it).
+  const rjState2 = st.loadState(rjRoot, rjCfg);
+  rjState2.nodes.exh.status = "exhausted";
+  st.saveState(rjRoot, rjCfg, rjState2);
+
+  write(rjRoot, ".trellis/triage.json", JSON.stringify({
+    decisions: [
+      { node: "exh", verdict: "reject", code: "test-too-weak", reason: "contract underspecified" },
+      { node: "merged1", verdict: "reject", code: "test-too-weak", reason: "should have been caught earlier" },
+      { node: "weak1", verdict: "accept", reason: "mutation survivor reviewed, acceptable" },
+      { node: "held1", verdict: "accept", reason: "looks fine, merge it" },
+    ],
+  }, null, 2));
+
+  check("apply-triage --dry-run changes nothing", () => {
+    const before = st.loadState(rjRoot, rjCfg);
+    const r = spawnSync("node", [CLI, "apply-triage"], { cwd: rjRoot, encoding: "utf8" });
+    assert.strictEqual(r.status, 0, r.stdout + r.stderr);
+    assert.ok(/Dry run/.test(r.stdout), "did not announce itself as a dry run");
+    const after = st.loadState(rjRoot, rjCfg);
+    assert.deepStrictEqual(after.nodes.exh.status, before.nodes.exh.status, "dry run mutated state");
+    assert.ok(!fs.existsSync(path.join(rjRoot, ".trellis/checkpoint.json")), "dry run wrote checkpoint.json");
+  });
+
+  const rjApplyResult = spawnSync("node", [CLI, "apply-triage", "--apply"], { cwd: rjRoot, encoding: "utf8" });
+  const rjAfter = st.loadState(rjRoot, rjCfg);
+
+  check("apply-triage resets a rejected non-landed node", () => {
+    assert.strictEqual(rjApplyResult.status, 0, rjApplyResult.stdout + rjApplyResult.stderr);
+    assert.strictEqual(rjAfter.nodes.exh.status, "pending", `expected pending, got ${rjAfter.nodes.exh.status}`);
+  });
+  check("ADVERSARIAL apply-triage refuses to revert a landed node's reject, does not touch it", () => {
+    assert.strictEqual(rjAfter.nodes.merged1.status, "merged",
+      "apply-triage reverted a merge — reverting a merge is a one-way door");
+    assert.ok(/revert that merge|human decision|already landed/i.test(rjApplyResult.stdout),
+      `no explanation printed for the refused node: ${rjApplyResult.stdout}`);
+  });
+  check("apply-triage bookkeeps an accept on an already-landed node without re-merging", () => {
+    assert.strictEqual(rjAfter.nodes.weak1.status, "merged", `expected merged, got ${rjAfter.nodes.weak1.status}`);
+    assert.ok(rjAfter.nodes.weak1.acceptedAt, "acceptedAt was not stamped");
+  });
+  check("ADVERSARIAL apply-triage NEVER merges a held review node — checkpoint only", () => {
+    assert.strictEqual(rjAfter.nodes.held1.status, "review",
+      "apply-triage merged a high-risk held node without a human — this is the one-way door MISSION.md protects");
+    const cp = JSON.parse(fs.readFileSync(path.join(rjRoot, ".trellis/checkpoint.json"), "utf8"));
+    assert.ok(cp.nodes.some((n) => n.id === "held1"), "held node was not written to checkpoint.json");
+    assert.ok(!fs.existsSync(path.join(rjRoot, "src/h1.mjs")), "held node's branch was merged onto main");
+  });
+  fs.rmSync(rjRoot, { recursive: true, force: true });
+
   // ---- report ----
   let failed = 0;
   for (const [status, name, msg] of results) {
