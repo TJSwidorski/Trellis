@@ -19,7 +19,7 @@ import {
 import { validateGraph } from "../lib/graph.mjs";
 import { gateEnv } from "../lib/gate.mjs";
 import { classify, writeProposal, PROTECTED, actionable, unknownCodes, autoAppliable, rejectionCounts as rejectionCountsFn, triagePath } from "../lib/evolve.mjs";
-import { isRetryable, STAGES, DEFAULT_CHAIN, EVOLVE_TOP } from "../lib/driver.mjs";
+import { isRetryable, STAGES, DEFAULT_CHAIN, EVOLVE_TOP, runSession } from "../lib/driver.mjs";
 import { resolveActive, blockedByAudit, neverActivated, materialise, activationPath } from "../lib/skills.mjs";
 import { loadCodes, normaliseCode, allCodes, groupSimilar, CODES_DOC } from "../lib/codes.mjs";
 import { KINDS, FLAG_TO_KIND } from "../lib/kinds.mjs";
@@ -3061,6 +3061,62 @@ check("ADVERSARIAL accept refuses when TRELLIS_STAGE is set", () => {
   assert(!/No run to accept against/.test(r.stdout),
     "accept reached past the TRELLIS_STAGE check and failed for an unrelated reason instead");
 });
+
+// ----------------------------------------------- runSession's Windows shim fix
+
+// A globally-installed npm CLI's bare name (the shape `driver.command` is
+// always in — "claude", not "claude.cmd") resolves on Windows to a .cmd
+// shim. Node's CVE-2024-27980 fix refuses to exec a .cmd/.bat with
+// shell:false (throws EINVAL, synchronously); shell:true fixes the launch
+// but, on Windows, joins the args ARRAY with plain spaces and does not
+// escape them — a multi-word stage.prompt would arrive at the child torn
+// into several argv entries instead of one, unless each element is quoted.
+// This is the suite's first platform-conditional check: .cmd semantics do
+// not exist off Windows, so it is skipped elsewhere rather than faked.
+if (process.platform === "win32") {
+  checkAsync("ADVERSARIAL runSession quotes args so a Windows .cmd shim sees one argv entry per element, not split on spaces", async () => {
+    // Nested under a directory with a SPACE in its name on purpose — a real
+    // "C:\Program Files\..." install path or a Windows username with a space
+    // in it. spawn(command, args, {shell:true}) concatenates `command` and
+    // `args` into one command line the same unescaped way, so the command
+    // itself needs quoting too, not just the args array — a fix that quoted
+    // only args would still fail to launch a shim living under such a path.
+    const parent = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-winshim-"));
+    const dir = path.join(parent, "dir with space");
+    fs.mkdirSync(dir, { recursive: true });
+    const outPath = path.join(dir, "argv.json");
+    const helperPath = path.join(dir, "helper.mjs");
+    // Dumps exactly what argv the .cmd shim was actually invoked with.
+    fs.writeFileSync(helperPath,
+      `import fs from "node:fs";\n` +
+      `fs.writeFileSync(${JSON.stringify(outPath)}, JSON.stringify(process.argv.slice(2)));\n` +
+      `console.log(JSON.stringify({ total_cost_usd: 0 }));\n`
+    );
+    const cmdPath = path.join(dir, "fake-driver.cmd");
+    fs.writeFileSync(cmdPath, `@echo off\r\nnode "${helperPath}" %*\r\n`);
+
+    const stage = { id: "02_slice", prompt: "Read sessions/02_slice/CONTEXT.md and do exactly what it says. Nothing else." };
+    const cfg = { driver: { command: cmdPath, maxTurns: 5, sessionTimeoutMs: 10000 } };
+
+    const result = await runSession(dir, stage, cfg);
+    assert(!result.spawnFailed, `spawn failed: ${result.stderr}`);
+    assert(result.exitCode === 0, `fake driver exited ${result.exitCode}: ${result.stderr}`);
+
+    assert(fs.existsSync(outPath), "the .cmd shim never ran — spawn silently did not launch it");
+    const argv = JSON.parse(fs.readFileSync(outPath, "utf8"));
+    // The bug this guards: with shell:true and unquoted args, this multi-word
+    // prompt would show up as several separate argv entries ("Read",
+    // "sessions/02_slice/CONTEXT.md", "and", ...) instead of one.
+    assert(argv.includes(stage.prompt),
+      `the prompt did not arrive as one argv entry — got: ${JSON.stringify(argv)}`);
+    assert(argv.includes("--output-format") && argv.includes("json"),
+      `other flags were not preserved correctly — got: ${JSON.stringify(argv)}`);
+
+    fs.rmSync(parent, { recursive: true, force: true });
+  });
+} else {
+  console.log("  (skipping the Windows .cmd-shim spawn check — not applicable on this platform)");
+}
 
 // -------------------------------------------------------------------- report
 
