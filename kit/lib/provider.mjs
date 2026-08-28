@@ -2,6 +2,41 @@ import { tierKey } from "./config.mjs";
 
 const TRANSIENT = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
 
+// Same convention as worktree.mjs's git() maxBuffer and gate.mjs's exec()
+// output cap: a hard ceiling on how much of a single response this process
+// will hold in memory, independent of any timeout.
+const MAX_RESPONSE_BYTES = 32 * 1024 * 1024;
+
+/**
+ * Read a Response body with a hard byte ceiling, so a provider that starts
+ * streaming and never stops cannot grow this process's memory without bound.
+ * Falls back to `res.text()` when the runtime does not expose a streaming
+ * body (some test doubles don't) — that path has no cap of its own, but it
+ * is not the shape a real, malicious-or-broken HTTP server can produce.
+ */
+export async function readCapped(res, maxBytes) {
+  if (!res.body?.getReader) return res.text();
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let out = "";
+  let bytes = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > maxBytes) {
+        throw new ProviderError(`response body exceeded ${maxBytes} bytes without completing`, { transient: false });
+      }
+      out += decoder.decode(value, { stream: true });
+    }
+    out += decoder.decode();
+    return out;
+  } finally {
+    try { reader.releaseLock(); } catch { /* already released or errored */ }
+  }
+}
+
 export class ProviderError extends Error {
   constructor(message, { status, transient = false, truncated = false } = {}) {
     super(message);
@@ -60,9 +95,29 @@ export async function chat(cfg, tier, messages, { signal, maxTokens } = {}) {
       { transient: true }
     );
   }
+
+  // `clearTimeout` used to fire here, right after the response HEADERS
+  // arrived — so `requestTimeoutMs` only ever bounded getting a 200, and a
+  // provider that returned headers and then stalled (or streamed forever)
+  // had no timeout and no size cap anywhere in the system. The abort
+  // controller stays live through the body read below, and the timer is
+  // only cleared once that read has actually finished.
+  let raw;
+  try {
+    raw = await readCapped(res, MAX_RESPONSE_BYTES);
+  } catch (e) {
+    clearTimeout(timer);
+    if (e instanceof ProviderError && !e.transient) throw e; // the size-cap case: not a flaky endpoint, don't retry blind
+    const timedOut = ac.signal.aborted;
+    throw new ProviderError(
+      timedOut
+        ? `Request to ${tier.name} timed out after ${cfg.worker.requestTimeoutMs}ms while reading the response body.`
+        : `Network error reading ${tier.name}'s response: ${e.message}`,
+      { transient: true }
+    );
+  }
   clearTimeout(timer);
 
-  const raw = await res.text();
   if (!res.ok) {
     let detail = raw.slice(0, 600);
     try { detail = JSON.stringify(JSON.parse(raw).error ?? JSON.parse(raw)).slice(0, 600); } catch { /* raw */ }

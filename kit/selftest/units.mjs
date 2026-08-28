@@ -10,11 +10,14 @@ import { planTiers } from "../lib/routing.mjs";
 import { tierStats, recordsFor, summarise } from "../lib/ledger.mjs";
 import { scopeBullets } from "../lib/spec.mjs";
 import { detectEnvFailure } from "../lib/envfail.mjs";
+import { chat, readCapped } from "../lib/provider.mjs";
+import http from "node:http";
 import { meterSession, summariseArm, compare } from "../bench/meter.mjs";
 import * as ledger from "../lib/ledger.mjs";
 import * as st from "../lib/state.mjs";
 
 const R=[]; const check=(n,f)=>{try{f();R.push(["pass",n])}catch(e){R.push(["FAIL",n,e.message])}};
+const pending=[]; const checkAsync=(n,f)=>{pending.push(Promise.resolve().then(f).then(()=>R.push(["pass",n])).catch((e)=>R.push(["FAIL",n,e.message])));};
 const g=(cwd,...a)=>spawnSync("git",a,{cwd,encoding:"utf8"});
 const FILE=(p,b)=>`### FILE: ${p}\n\`\`\`js\n${b}\n\`\`\`\n`;
 const W=(root,rel,c)=>{const p=path.join(root,rel);fs.mkdirSync(path.dirname(p),{recursive:true});fs.writeFileSync(p,c);};
@@ -393,6 +396,57 @@ check("ADVERSARIAL levels terminates and covers every node on a cyclic graph", (
   assert.strictEqual(typeof depth.get("a"), "number");
   assert.strictEqual(typeof depth.get("b"), "number");
 });
+
+// ---------- unit: provider.mjs times out and caps a stalled/oversized body ----------
+//
+// clearTimeout used to fire the instant response HEADERS arrived, so
+// worker.requestTimeoutMs only ever bounded getting a 200 -- a provider that
+// answered promptly and then stalled mid-body, or streamed without end, had
+// no timeout and no size limit anywhere in the system.
+checkAsync("ADVERSARIAL chat() times out a provider that answers with headers and then stalls the body", async () => {
+  const server = http.createServer((req, res) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.write('{"id":"x","choices":[{"index":0,"message":{"role":"assistant","content":"'); // never finishes, never calls res.end()
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const { port } = server.address();
+  const cfg = { headers: {}, worker: { requestTimeoutMs: 150 } };
+  const tier = { name: "stall", baseUrl: `http://127.0.0.1:${port}/v1`, model: "mock", temperature: 0.1, maxTokens: 100 };
+  try {
+    const started = Date.now();
+    await assert.rejects(
+      () => chat(cfg, tier, [{ role: "user", content: "hi" }]),
+      (e) => /timed out/.test(e.message),
+      "expected a timeout ProviderError, not a hang or a different error"
+    );
+    const elapsed = Date.now() - started;
+    assert.ok(elapsed < 5000, `chat() took ${elapsed}ms to time out a 150ms-budget stall -- clearTimeout is not bounding the body read`);
+  } finally {
+    await new Promise((r) => server.close(r));
+  }
+});
+checkAsync("readCapped stops reading and throws once a response exceeds the byte ceiling, without buffering past it", async () => {
+  // A minimal ReadableStream standing in for a Response body: yields 10-byte
+  // chunks forever. If readCapped buffered the whole thing before checking
+  // the limit, this test would hang; if it checks per-chunk, it must throw
+  // almost immediately, well under the cap's own byte count.
+  let chunksSent = 0;
+  const body = new ReadableStream({
+    pull(controller) {
+      chunksSent++;
+      controller.enqueue(new TextEncoder().encode("0123456789"));
+    },
+  });
+  const res = { body };
+  await assert.rejects(
+    () => readCapped(res, 100),
+    (e) => /exceeded 100 bytes/.test(e.message),
+    "expected the size-cap ProviderError"
+  );
+  assert.ok(chunksSent < 1000, `expected readCapped to stop within a few chunks of the 100-byte cap, sent ${chunksSent}`);
+});
+
+await Promise.all(pending);
 
 for (const [s,n,m] of R) console.log(s==="pass"?`  \u001b[32m✓\u001b[0m ${n}`:`  \u001b[31m✗ ${n}\u001b[0m\n      ${m}`);
 console.log(`\n${R.filter(r=>r[0]==="pass").length}/${R.length} unit checks passed`);
