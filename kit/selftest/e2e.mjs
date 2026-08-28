@@ -543,6 +543,19 @@ console.log(thing);
   // config belongs, so cfg.tiers was undefined and the stage threw. `auto` is off
   // by default, so nothing ever exercised this branch.
   const aRoot = makeRepo();
+  // The REAL shipped .gitignore, not a hand-picked subset — a partial one
+  // here previously let this fixture pass while missing state.json/
+  // REPORT.md/run.jsonl/ledger.jsonl/sessions.jsonl/trellis.code-workspace,
+  // every one of which auto's commit step then reports as "unexpected".
+  // Copying the actual file is what keeps this fixture from drifting from
+  // reality the same way QUICKSTART.md once did.
+  write(aRoot, ".gitignore", fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../.gitignore"), "utf8"));
+  // `auto` refuses to start at all without a Bash-matched PreToolUse hook
+  // registered — see requireBashGuard in cli.mjs. Real operators configure
+  // this once at install time; this fixture stands in for that.
+  write(aRoot, ".claude/settings.json", JSON.stringify({
+    hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "node .claude/hooks/guard-bash.mjs" }] }] },
+  }));
   write(aRoot, "tests/auto.test.mjs", `
 import assert from "node:assert";
 import { auto } from "../src/auto.mjs";
@@ -598,6 +611,77 @@ assert.strictEqual(auto(), "ok");
   });
   fs.rmSync(aRoot, { recursive: true, force: true });
 
+  // ---- auto halts on a modification it did not declare, rather than sweeping
+  // it into a commit. This is the check that would have caught this exact
+  // mistake earlier in the design: a partial .gitignore in an earlier version
+  // of THIS fixture made state.json/REPORT.md/run.jsonl/ledger.jsonl/
+  // sessions.jsonl/trellis.code-workspace all look "unexpected" and halted
+  // every run — the fix belonged in .gitignore, not in loosening this check.
+  const hRoot = makeRepo();
+  write(hRoot, ".gitignore", fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../.gitignore"), "utf8"));
+  write(hRoot, ".claude/settings.json", JSON.stringify({
+    hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "node .claude/hooks/guard-bash.mjs" }] }] },
+  }));
+  write(hRoot, "tests/halt.test.mjs", `
+import assert from "node:assert";
+import { halt } from "../src/halt.mjs";
+assert.strictEqual(halt(), "ok");
+`.trim());
+  write(hRoot, ".trellis/graph.json", JSON.stringify({
+    version: 1, project: "halt",
+    nodes: [{ id: "halt", title: "halt", goal: "export halt()", write: ["src/halt.mjs"],
+      tests: ["tests/halt.test.mjs"], gate: "node tests/halt.test.mjs" }],
+  }, null, 2));
+  write(hRoot, "trellis.config.json", JSON.stringify({
+    project: "halt", baseBranch: "main", concurrency: 1,
+    driver: { enabled: true, command: "claude", maxTurns: 10, maxAttempts: 1 },
+    tiers: [{ name: "cheap", baseUrl: "http://127.0.0.1:1", model: "mock/cheap", maxAttempts: 1 }],
+    gate: { timeoutMs: 30000 }, routing: { enabled: false }, verify: { mutationsOnPass: false },
+    budget: { maxTotalAttempts: null, maxWorkerTokens: null, maxWallClockMs: null, maxCostUsd: null },
+    boundaries: { denyWrite: [".git/**", ".trellis/**", "trellis.config.json"] },
+  }, null, 2));
+  g(hRoot, "add", "-A"); g(hRoot, "commit", "-qm", "fixture");
+  // The file auto did not declare and cannot know about — simulates a stray
+  // edit left in the working tree by anything other than this stage.
+  write(hRoot, "NOTES.md", "an operator's scratch note, sitting in the tree\n");
+
+  const halted = spawnSync("node", [CLI, "auto", "--stage", "05_build"], { cwd: hRoot, encoding: "utf8" });
+  check("ADVERSARIAL an undeclared file in the tree is never swept into a commit", () => {
+    // For 05_build specifically, the RUNNER's own pre-existing dirty-tree
+    // check (kit/lib/runner.mjs) fires before commitStageOutput's newer,
+    // narrower check ever gets a chance to — the runner refuses to start at
+    // all on any dirty tree, which is a stricter, earlier gate for this one
+    // stage. What matters here is the outcome both mechanisms exist to
+    // guarantee: auto must never exit 0 with a stray file quietly committed.
+    assert.notStrictEqual(halted.status, 0, "auto exited 0 despite an undeclared file in the tree");
+    const stillDirty = g(hRoot, "status", "--porcelain").stdout;
+    assert.ok(/NOTES\.md/.test(stillDirty), "NOTES.md should still be sitting there, untouched, not swept into a commit");
+    const log = g(hRoot, "log", "--oneline").stdout;
+    assert.ok(!/NOTES/.test(log), "NOTES.md ended up committed somewhere");
+  });
+  fs.rmSync(hRoot, { recursive: true, force: true });
+
+  // ---- --dry-run runs nothing
+  const dRoot = makeRepo();
+  write(dRoot, "trellis.config.json", JSON.stringify({
+    project: "dry", baseBranch: "main",
+    driver: { enabled: true, command: "does-not-exist" },
+    paths: { state: ".trellis", worktrees: ".worktrees", graph: ".trellis/graph.json" },
+    tiers: [{ name: "cheap", baseUrl: "http://127.0.0.1:1", model: "m", apiKeyEnv: null, maxAttempts: 1, maxTokens: 100 }],
+  }));
+  write(dRoot, ".claude/settings.json", JSON.stringify({
+    hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "node .claude/hooks/guard-bash.mjs" }] }] },
+  }));
+  g(dRoot, "add", "-A"); g(dRoot, "commit", "-qm", "fixture");
+  const dry = spawnSync("node", [CLI, "auto", "--dry-run"], { cwd: dRoot, encoding: "utf8" });
+  check("auto --dry-run prints the plan and runs nothing", () => {
+    assert.strictEqual(dry.status, 0, dry.stdout + dry.stderr);
+    assert.ok(/Stage plan/.test(dry.stdout), dry.stdout);
+    assert.ok(!fs.existsSync(path.join(dRoot, ".trellis/cycle.json")), "--dry-run began a cycle");
+    assert.ok(!fs.existsSync(path.join(dRoot, ".trellis/sessions.jsonl")), "--dry-run recorded a session");
+  });
+  fs.rmSync(dRoot, { recursive: true, force: true });
+
   // `trellis verify-tests` used to always exit 0 unless a HARD finding forced
   // `die()` — so a run where every node was soft-skipped (a language it does
   // not check) printed "Nothing here is proven" and still exited 0. Since
@@ -645,6 +729,10 @@ assert.strictEqual(auto(), "ok");
   // stayed RUNNING forever after: invisible to readySet, invisible to
   // markBlocked, and the run reported "finished" with it silently unbuilt.
   const rRoot = makeRepo();
+  // See the aRoot fixture above: resumeOrInit's lazy cycle-1 begin writes
+  // .trellis/cycle.json as an untracked file, and the runner refuses to
+  // start on a tree it just made dirty itself without this.
+  write(rRoot, ".gitignore", ".trellis/cycle.json\n.trellis/checkpoint.json\n");
   write(rRoot, "tests/a.test.mjs", `
 import assert from "node:assert";
 import { a } from "../src/a.mjs";
@@ -716,6 +804,128 @@ assert.strictEqual(b(), 1);
   });
   await rMock.close();
   fs.rmSync(rRoot, { recursive: true, force: true });
+
+  // ---- reject / apply-triage: the false-positive fix and the mechanised half
+  //
+  // Real triage on a real run produced 14 rejects; `reject` refused all 14,
+  // because an EXHAUSTED node's branch never diverged from the base tip —
+  // commitWorktree only runs on a passing gate — so `git merge-base
+  // --is-ancestor` trivially returned true for a node with zero commits, and
+  // reject died with "already merged, revert that merge first". These prove
+  // the status-based fix, and that apply-triage never merges a held node.
+  const rjRoot = makeRepo();
+  write(rjRoot, "trellis.config.json", JSON.stringify({
+    project: "reject", baseBranch: "main",
+    paths: { state: ".trellis", worktrees: ".worktrees", graph: ".trellis/graph.json" },
+    tiers: [{ name: "cheap", baseUrl: "http://127.0.0.1:1", model: "m", apiKeyEnv: null, maxAttempts: 1, maxTokens: 100 }],
+  }));
+  write(rjRoot, ".trellis/graph.json", JSON.stringify({
+    version: 1, project: "reject",
+    nodes: [
+      { id: "exh", title: "exh", goal: "g", write: ["src/exh.mjs"], tests: [], gate: "true" },
+      { id: "merged1", title: "merged1", goal: "g", write: ["src/m1.mjs"], tests: [], gate: "true" },
+      { id: "weak1", title: "weak1", goal: "g", write: ["src/w1.mjs"], tests: [], gate: "true" },
+      { id: "held1", title: "held1", goal: "g", write: ["src/h1.mjs"], tests: [], gate: "true" },
+    ],
+  }, null, 2));
+  g(rjRoot, "add", "-A"); g(rjRoot, "commit", "-qm", "fixture");
+
+  const rjCfg = loadConfig(rjRoot);
+  const rjGraph = loadGraph(rjRoot, rjCfg.paths.graph);
+  const rjState = st.initState(rjRoot, rjCfg, rjGraph, { runId: "r1" });
+  // Hand-set post-run statuses, since none of these need a real gate to pass.
+  rjState.nodes.exh.status = "exhausted";
+  rjState.nodes.merged1.status = "merged"; rjState.nodes.merged1.branch = "trellis/merged1";
+  rjState.nodes.weak1.status = "weak-tests"; rjState.nodes.weak1.branch = "trellis/weak1";
+  rjState.nodes.held1.status = "review"; rjState.nodes.held1.branch = "trellis/held1";
+  st.saveState(rjRoot, rjCfg, rjState);
+
+  check("ADVERSARIAL reject succeeds on an exhausted node with zero commits", () => {
+    const r = spawnSync("node", [CLI, "reject", "exh"], { cwd: rjRoot, encoding: "utf8" });
+    assert.strictEqual(r.status, 0, `reject refused an exhausted node: ${r.stdout}${r.stderr}`);
+    const after = st.loadState(rjRoot, rjCfg);
+    assert.strictEqual(after.nodes.exh.status, "pending", `expected pending, got ${after.nodes.exh.status}`);
+  });
+  check("reject still refuses a genuinely landed node", () => {
+    const r = spawnSync("node", [CLI, "reject", "merged1"], { cwd: rjRoot, encoding: "utf8" });
+    assert.notStrictEqual(r.status, 0, "reject was allowed to reset a merged node");
+    assert.ok(/revert that merge/i.test(r.stdout + r.stderr), `wrong refusal reason: ${r.stdout}${r.stderr}`);
+    const after = st.loadState(rjRoot, rjCfg);
+    assert.strictEqual(after.nodes.merged1.status, "merged", "a landed node's status changed on a refused reject");
+  });
+
+  // Restore exh to exhausted for the apply-triage checks below (reject above consumed it).
+  const rjState2 = st.loadState(rjRoot, rjCfg);
+  rjState2.nodes.exh.status = "exhausted";
+  st.saveState(rjRoot, rjCfg, rjState2);
+
+  write(rjRoot, ".trellis/triage.json", JSON.stringify({
+    decisions: [
+      { node: "exh", verdict: "reject", code: "test-too-weak", reason: "contract underspecified" },
+      { node: "merged1", verdict: "reject", code: "test-too-weak", reason: "should have been caught earlier" },
+      { node: "weak1", verdict: "accept", reason: "mutation survivor reviewed, acceptable" },
+      { node: "held1", verdict: "accept", reason: "looks fine, merge it" },
+    ],
+  }, null, 2));
+
+  check("apply-triage --dry-run changes nothing", () => {
+    const before = st.loadState(rjRoot, rjCfg);
+    const r = spawnSync("node", [CLI, "apply-triage"], { cwd: rjRoot, encoding: "utf8" });
+    assert.strictEqual(r.status, 0, r.stdout + r.stderr);
+    assert.ok(/Dry run/.test(r.stdout), "did not announce itself as a dry run");
+    const after = st.loadState(rjRoot, rjCfg);
+    assert.deepStrictEqual(after.nodes.exh.status, before.nodes.exh.status, "dry run mutated state");
+    assert.ok(!fs.existsSync(path.join(rjRoot, ".trellis/checkpoint.json")), "dry run wrote checkpoint.json");
+  });
+
+  const rjApplyResult = spawnSync("node", [CLI, "apply-triage", "--apply"], { cwd: rjRoot, encoding: "utf8" });
+  const rjAfter = st.loadState(rjRoot, rjCfg);
+
+  check("apply-triage resets a rejected non-landed node", () => {
+    assert.strictEqual(rjApplyResult.status, 0, rjApplyResult.stdout + rjApplyResult.stderr);
+    assert.strictEqual(rjAfter.nodes.exh.status, "pending", `expected pending, got ${rjAfter.nodes.exh.status}`);
+  });
+  check("ADVERSARIAL apply-triage refuses to revert a landed node's reject, does not touch it", () => {
+    assert.strictEqual(rjAfter.nodes.merged1.status, "merged",
+      "apply-triage reverted a merge — reverting a merge is a one-way door");
+    assert.ok(/revert that merge|human decision|already landed/i.test(rjApplyResult.stdout),
+      `no explanation printed for the refused node: ${rjApplyResult.stdout}`);
+  });
+  check("apply-triage bookkeeps an accept on an already-landed node without re-merging", () => {
+    assert.strictEqual(rjAfter.nodes.weak1.status, "merged", `expected merged, got ${rjAfter.nodes.weak1.status}`);
+    assert.ok(rjAfter.nodes.weak1.acceptedAt, "acceptedAt was not stamped");
+  });
+  check("ADVERSARIAL apply-triage NEVER merges a held review node — checkpoint only", () => {
+    assert.strictEqual(rjAfter.nodes.held1.status, "review",
+      "apply-triage merged a high-risk held node without a human — this is the one-way door MISSION.md protects");
+    const cp = JSON.parse(fs.readFileSync(path.join(rjRoot, ".trellis/checkpoint.json"), "utf8"));
+    assert.ok(cp.nodes.some((n) => n.id === "held1"), "held node was not written to checkpoint.json");
+    assert.ok(!fs.existsSync(path.join(rjRoot, "src/h1.mjs")), "held node's branch was merged onto main");
+  });
+
+  // ---- Phase-4 blocker 5: checkpoint.json is never cleared ----
+  //
+  // A human reviews held1 and merges it by hand (simulated here — accept
+  // --merge is the one-way door a real operator would run). A LATER
+  // apply-triage call, on a run with nothing held, must show an EMPTY
+  // checkpoint, not the stale entry from before. Writing checkpoint.json
+  // only when rows.checkpoint was non-empty left the PRIOR checkpoint on
+  // disk forever once its node was finally accepted, and `trellis auto`
+  // reads this file unconditionally on every cycle.
+  const rjState3 = st.loadState(rjRoot, rjCfg);
+  rjState3.nodes.held1.status = "merged";
+  rjState3.nodes.held1.acceptedAt = new Date().toISOString();
+  st.saveState(rjRoot, rjCfg, rjState3);
+  write(rjRoot, ".trellis/triage.json", JSON.stringify({
+    decisions: [{ node: "held1", verdict: "accept", reason: "merged after human review" }],
+  }, null, 2));
+  const rjApplyResult2 = spawnSync("node", [CLI, "apply-triage", "--apply"], { cwd: rjRoot, encoding: "utf8" });
+  check("ADVERSARIAL a stale checkpoint is cleared once nothing is held any more", () => {
+    assert.strictEqual(rjApplyResult2.status, 0, rjApplyResult2.stdout + rjApplyResult2.stderr);
+    const cp = JSON.parse(fs.readFileSync(path.join(rjRoot, ".trellis/checkpoint.json"), "utf8"));
+    assert.deepStrictEqual(cp.nodes, [], `expected an empty checkpoint, still shows: ${JSON.stringify(cp.nodes)}`);
+  });
+  fs.rmSync(rjRoot, { recursive: true, force: true });
 
   // ---- report ----
   let failed = 0;

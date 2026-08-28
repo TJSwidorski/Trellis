@@ -48,6 +48,7 @@ export const PAYLOAD = [
   "package.json",
   "README.md",
   "QUICKSTART.md",
+  "OPERATING.md",
   "UPGRADING.md",
   "CHANGELOG.md",
 ];
@@ -78,6 +79,7 @@ const RUNTIME_PATHS = [
   // The cross-run evidence files. Written by triage and by `trellis friction`
   // as runs happen; absent on a fresh install, and that is correct.
   "triage.jsonl", "friction.jsonl", "skills.jsonl", "ledger.jsonl", "evolve.json",
+  "cycle.json", "cases.json", "checkpoint.json",
 ];
 
 /**
@@ -264,9 +266,9 @@ be told to open files that are not there.`));
   console.log(`  ${g("+")} install verified ${d("(every path CLAUDE.md and CONTEXT.md reference exists)")}\n`);
 
   // SKILLS/skills is the single source of truth; .claude/skills is a materialised
-  // view of it. Seed that view with the kit's own skills so the manual workflow
-  // (/trellis-plan in an interactive session) works straight after install. The
-  // driver narrows this per stage once a run starts.
+  // view of it. Seed that view with the kit's own skills so a first stage session
+  // (e.g. "Read sessions/02_slice/CONTEXT.md and do exactly what it says") works
+  // straight after install. The driver narrows this per stage once a run starts.
   const seeded = bootstrapSkills(dest);
   if (seeded.length) {
     console.log(`  ${g("+")} .claude/skills seeded with ${seeded.length} kit skill(s) ${d("(the driver narrows this per stage)")}\n`);
@@ -288,7 +290,7 @@ Next:
   node kit/bin/cli.mjs doctor
   code trellis.code-workspace
   copy examples\\SPEC.template.md SPEC.md   (then fill it in)
-  /trellis-plan SPEC.md                     (in Claude Code, Opus selected)
+  See QUICKSTART.md — cut a slice by hand first, or OPERATING.md once you trust the loop.
 `));
 }
 

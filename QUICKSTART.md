@@ -19,10 +19,10 @@ Get-ChildItem -Recurse -Filter package.json | Select-Object -First 1 FullName
 npm test
 ```
 
-You should see three suites pass: `21/21 unit checks`, `126 regression checks`, and
-`31/31` end-to-end. (An *installed* copy reports 126 minus 3: the checks that
-verify the installer itself need `setup.mjs`, which the installer does not
-install.) They spin up a fake model server and throwaway git repos and
+You should see three suites pass: `28/28 unit checks`, `188 regression checks`, and
+`43/43` end-to-end. (An *installed* copy reports slightly fewer regression checks:
+the ones that verify the installer itself need `setup.mjs`, which the installer
+does not install.) They spin up a fake model server and throwaway git repos and
 run the whole scheduler offline — parallel nodes, retries, tier escalation,
 test-tamper rejection, exhaustion, blocking, the review hold, environment-failure
 detection, and the skill audit gate. No API key needed.
@@ -140,37 +140,54 @@ planner's output against.
 
 ---
 
-## 6. Plan, review, then write tests
+## 6. Cut a slice, then plan and test it
 
-Three steps in Claude Code, each pinned to the right model by its skill frontmatter.
+This section is the "by hand, one stage at a time" path — the right one until you
+trust the loop. Once you do, `OPERATING.md` covers driving all of this with one
+command (`trellis auto --cycles N`) instead. Same pipeline either way; this is just
+watching it happen a stage at a time first.
+
+You don't need a product graph of your own yet — `SPEC.md` from step 5 stands in
+for one on your first run. Cut the first batch:
+
+```powershell
+node kit/bin/cli.mjs cycle
+node kit/bin/cli.mjs slice --max 25
+```
+
+`trellis cycle` declares this a fresh pass (you can skip it — `trellis run` begins
+cycle 1 for you lazily — but running it explicitly is clearer for a first pass).
+`trellis slice` cuts the next buildable batch into `.trellis/plan.json` — mechanical,
+no judgement, no model call.
+
+Then, in Claude Code:
 
 ```
-/trellis-plan SPEC.md
+Read sessions/02_slice/CONTEXT.md and do exactly what it says. Nothing else.
 ```
 
-Opus produces `.trellis/graph.json` — contracts, `tags`, `covers`, and `mutations` —
-then validates and stops. No tests, no implementation. This is the small, expensive,
-judgement-heavy artifact.
+Opus turns the plan into `.trellis/graph.json` — write scopes, gate commands,
+mutations, any shared interface file two nodes would otherwise agree on by
+coincidence. This is the small, expensive, judgement-heavy artifact.
 
 **Read the graph.** Not the tests — the graph. It is about a hundred lines and it is
 where the errors that matter live. Check every constant and unit against reality: a
 contract can be internally consistent and still absurd.
 
 ```
-/trellis-review
+Read sessions/03_cases/CONTEXT.md and do exactly what it says. Nothing else.
 ```
 
-A second Opus pass in a forked context, reading the graph against the spec with no
-memory of having written it. Its whole value is that it did not author what it is
-reading. Fix anything it flags as blocking, then:
+Adversarial case enumeration, per node — what could be true that the acceptance
+bullets did not say. Then:
 
 ```
-/trellis-tests
+Read sessions/04_tests/CONTEXT.md and do exactly what it says. Nothing else.
 ```
 
-Sonnet writes the frozen test files from the contracts, in an isolated context, and
-runs `verify-tests` until every gate rejects a null stub. This is the step that used
-to consume most of your Opus window.
+Sonnet writes the frozen test files from the cases, one test per case id, and runs
+`verify-tests` until every gate rejects a null stub. This is the step that used to
+consume most of your Opus window.
 
 ```powershell
 node kit/bin/cli.mjs verify-tests
@@ -217,26 +234,36 @@ the runner stops launching, lets in-flight nodes finish, and marks the rest
 Back in Claude Code:
 
 ```
-/trellis-report
+Read sessions/06_triage/CONTEXT.md and do exactly what it says. Nothing else.
 ```
 
 Opus reads `.trellis/REPORT.md` — one compact artifact, not a stream of worker
 chatter — and for each stuck node picks one of: re-decompose, rewrite the contract,
 take it itself, or cut it. High-risk nodes that passed are held unmerged; Opus reads
-those diffs and merges them.
+those diffs and records a decision for each — accept or reject — in `triage.json`.
 
-High-risk nodes need an explicit hand-off back to Trellis after you review them:
+Apply the reversible ones mechanically rather than running `accept`/`reject` by
+hand for each node:
 
 ```powershell
-node kit/bin/cli.mjs accept merge --merge     # review passed: merge and unblock
-node kit/bin/cli.mjs reject merge             # review failed: rebuild it
+node kit/bin/cli.mjs apply-triage --apply
+```
+
+This resets every rejected node that never landed, bookkeeps every accept that was
+already merged, and — the one thing it will never do — never merges a held
+high-risk node itself. Those land in `.trellis/checkpoint.json` instead:
+
+```powershell
+node kit/bin/cli.mjs accept <id> [<id> ...] --merge     # after you've read the diff
 ```
 
 Merging the branch in git alone does not do it. Trellis tracks the node as `review`
 until `accept` says otherwise, so `--resume` would finish instantly having run
 nothing.
 
-Then re-run with `--resume`. Repeat until green.
+Then re-run with `--resume`. Repeat until green — or, once you trust the loop, let
+`trellis auto --cycles N` do steps 6 through 8 for you, stopping automatically at
+exactly the point this section describes. See `OPERATING.md`.
 
 ---
 
@@ -267,6 +294,10 @@ kind you cannot diagnose from a chat transcript.
 | `verify-tests` says `vacuous` | That gate passes against a null stub. The node would go green without working — strengthen the test before running. |
 | Node merges as `weak-tests` | A declared mutant survived. The code may be fine; the test cannot tell. Strengthen it and re-run. |
 | Run stops with `budget-stopped` nodes | A ceiling in `config.budget` was hit. Raise it and `--resume`. |
+| `reject <id>` says "already merged" | It genuinely is — `st.LANDED` covers merged/audit/weak-tests. Revert the merge first; Trellis will not rewrite history. |
+| `accept <id>` says "not awaiting review" | It's telling you the verb that actually applies for that status — read the rest of the message. |
+| `trellis auto` refuses to start, names `.claude/settings.json` | No `Bash`-matched hook registered — see `.claude/hooks/guard-bash.mjs`. Required before `auto` will run at all. |
+| `trellis auto --cycles N` halts, names a file in the tree | It found a modification no stage declared. Either the session should have committed it itself (check the stage's contract) or it's yours — commit or revert it, then re-run. |
 
 ---
 
@@ -283,3 +314,13 @@ After the run, fill in `examples/EVALUATION.md`. It exists to separate three fai
 sources that look identical from the outside — a bad plan, a weak model, and a broken
 kit. Without that split, the reflex after a bad run is "use a better model," and that
 is usually the wrong fix.
+
+---
+
+## Next: `OPERATING.md`
+
+Everything above is the by-hand path — the right one until you trust the loop.
+`OPERATING.md` covers the same six stages driven by one command
+(`trellis auto --cycles N`), what it commits and when, and exactly where and why it
+stops for you. Read it once you've watched a slice go through by hand and want the
+loop to run itself.

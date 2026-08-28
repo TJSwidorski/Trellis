@@ -35,9 +35,9 @@ export function statePath(root, cfg) {
   return path.join(root, cfg.paths.state, "state.json");
 }
 
-export function initState(root, cfg, graph) {
+export function initState(root, cfg, graph, { runId } = {}) {
   const s = {
-    runId: crypto.randomUUID(),
+    runId: runId ?? crypto.randomUUID(),
     startedAt: new Date().toISOString(),
     finishedAt: null,
     graphHash: graph.__hash,
@@ -50,8 +50,9 @@ export function initState(root, cfg, graph) {
       status: STATUS.PENDING, attempts: [], tier: null, branch: null, reason: null,
       survivingMutations: [], routing: null,
       // What this node's contract said when it was built, so a later resume can
-      // tell which nodes actually changed instead of discarding the whole run.
-      hash: nodeHash(n),
+      // tell which nodes actually changed instead of discarding the whole run
+      // — including a test file whose CONTENT changed with its path unchanged.
+      hash: nodeHash(n, { root }),
     };
   }
   return s;
@@ -76,18 +77,48 @@ export function resumable(state, graph) {
 }
 
 /**
+ * Digest of what a node's frozen tests actually SAY, not just which files they
+ * are. REPORT.md's own advice for a weak-tests node is "strengthen `<tests>`
+ * until each mutant fails, then re-run" — an instruction the hash could not
+ * see before this, because it hashed the test PATHS. A --resume kept the node
+ * proven against the old, weaker test forever; the system printed an
+ * instruction and then ignored the exact thing that instruction asked for.
+ *
+ * Sorted so file order in `node.tests` cannot change the digest independent
+ * of content. A missing file gets a literal marker rather than being
+ * skipped — a test that used to exist and now does not is itself a change
+ * worth rebuilding over, not a silent no-op in the digest.
+ */
+export function testsDigest(root, node) {
+  const paths = [...(node.tests ?? [])].sort();
+  const parts = paths.map((rel) => {
+    try {
+      return `${rel}:${fs.readFileSync(path.join(root, rel), "utf8")}`;
+    } catch {
+      return `${rel}:__missing__`;
+    }
+  });
+  return crypto.createHash("sha256").update(parts.join(" ")).digest("hex").slice(0, 16);
+}
+
+/**
  * A hash of the fields that determine what a worker is asked to do.
  *
  * Deliberately not the whole node: `title` and `tags` change nothing about the
  * work, and a run should not be discarded because someone fixed a typo in a
  * title. Everything a worker sees or is graded against is included.
+ *
+ * `root` is optional and changes nothing when absent — kit/regression/run.mjs
+ * (PROTECTED) calls `nodeHash(base)` with no root at all, so that shape must
+ * keep meaning exactly what it always has.
  */
-export function nodeHash(node) {
+export function nodeHash(node, { root } = {}) {
   const material = JSON.stringify([
     node.goal ?? null, node.acceptance ?? null, node.notes ?? null, node.role ?? null,
     [...(node.write ?? [])].sort(), [...(node.read ?? [])].sort(),
     [...(node.tests ?? [])].sort(), node.gate ?? null,
     [...(node.deps ?? [])].sort(), [...(node.mutations ?? [])].sort(),
+    root ? testsDigest(root, node) : null,
   ]);
   return crypto.createHash("sha256").update(material).digest("hex").slice(0, 16);
 }
@@ -105,13 +136,13 @@ export function nodeHash(node) {
  * did. The second half matters: a node built against an old version of its
  * dependency was proven against something that no longer exists.
  */
-export function resumePlan(state, graph) {
+export function resumePlan(state, graph, { root } = {}) {
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   const dirty = new Set();
 
   for (const n of graph.nodes) {
     const prior = state.nodes?.[n.id];
-    if (!prior || prior.hash !== nodeHash(n)) dirty.add(n.id);
+    if (!prior || prior.hash !== nodeHash(n, { root })) dirty.add(n.id);
   }
   // Propagate to dependants until it settles.
   for (let changed = true; changed; ) {

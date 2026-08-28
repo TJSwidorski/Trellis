@@ -19,11 +19,13 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import * as friction from "./friction.mjs";
 import * as evolve from "./evolve.mjs";
 import * as ledger from "./ledger.mjs";
+import { currentCycle } from "./cycle.mjs";
 
 // --------------------------------------------------------------- stage table
 
@@ -33,33 +35,55 @@ export const STAGES = [
   {
     id: "01_ingest",
     prompt: "Read sessions/01_ingest/CONTEXT.md and do exactly what it says. Nothing else.",
-    verify: (root) => artifactExists(root, ".trellis/ingest.json", (j) => j.errors?.length === 0),
+    verify: (root) => ingestCurrentForSpec(root),
+    // Nothing to commit: ingest.json / product-graph.derived.json are working
+    // state, not a deliverable — no docs anywhere ask the operator to commit
+    // them by hand either.
+    commits: () => [],
   },
   {
     id: "02_slice",
     prompt: "Read sessions/02_slice/CONTEXT.md and do exactly what it says. Nothing else.",
-    verify: (root) => sliceAssembledTaskGraph(root),
+    verify: (root, cfg) => sliceAssembledTaskGraph(root, cfg),
+    // Only the two JSON files this stage's own verify inspects. The contract
+    // ALSO tells the session to commit any interface file it writes — on
+    // purpose left off this list. If one is left uncommitted, auto halting
+    // on "unexpected" modifications is the correct behaviour: it means the
+    // session did not do what its contract said, and that is worth a human
+    // looking rather than auto silently sweeping it in.
+    commits: () => [".trellis/plan.json", ".trellis/graph.json"],
   },
   {
     id: "03_cases",
     prompt: "Read sessions/03_cases/CONTEXT.md and do exactly what it says. Nothing else.",
-    verify: (root) => casesCoverPlan(root),
+    verify: (root, cfg) => casesCoverPlan(root, cfg),
+    commits: () => [".trellis/cases.json"],
   },
   {
     id: "04_tests",
     prompt: "Read sessions/04_tests/CONTEXT.md and do exactly what it says. Nothing else.",
     verify: (root, cfg) => testsExistAndAreNonVacuous(root, cfg),
+    // The declared test paths are the whole point of this stage, and they are
+    // the only thing known ahead of time — read from THIS cycle's graph.json.
+    commits: (root) => {
+      const graph = readJson(root, ".trellis/graph.json");
+      return (graph?.nodes ?? []).flatMap((n) => n.tests ?? []);
+    },
   },
   {
     id: "05_build",
     prompt: null, // no model: the deterministic runner owns this stage
     run: "runner",
-    verify: (root) => artifactExists(root, ".trellis/REPORT.md"),
+    verify: (root, cfg) => buildFinishedThisCycle(root, cfg),
+    // The runner commits each node's work itself as it merges (commitWorktree,
+    // one commit per landed node) — there is nothing left for auto to batch.
+    commits: () => [],
   },
   {
     id: "06_triage",
     prompt: "Read sessions/06_triage/CONTEXT.md and do exactly what it says. Nothing else.",
     verify: (root, cfg) => triageRecordedEvidence(root, cfg),
+    commits: () => [".trellis/triage.json", ".trellis/triage.jsonl", ".trellis/friction.jsonl", ".trellis/built.json"],
   },
   {
     id: "07_evolve",
@@ -69,6 +93,10 @@ export const STAGES = [
     periodic: true,
     prompt: "Read sessions/07_evolve/CONTEXT.md and do exactly what it says. Nothing else.",
     verify: (root, cfg) => evolveConsideredEverything(root, cfg),
+    commits: (root) => {
+      const j = readJson(root, ".trellis/evolve.json");
+      return [".trellis/evolve.json", ...(j?.proposals ?? [])];
+    },
   },
 ];
 
@@ -108,9 +136,64 @@ function artifactExists(root, rel, check) {
  * plan.json must appear in graph.json. A node dropped between the two files is
  * silently descoped work.
  */
-function sliceAssembledTaskGraph(root) {
+/**
+ * Re-ingesting a product graph that has not changed is pure waste, so this
+ * checks a hash of the SOURCE file (stamped by `cmdIngest` itself, not by a
+ * session) rather than just "does ingest.json exist and say zero errors".
+ * Missing `specHash` — an ingest.json from before this field existed — is
+ * treated as stale rather than crashing, so an old artifact does not wedge
+ * the stage; it just re-runs once.
+ */
+function ingestCurrentForSpec(root) {
+  const base = artifactExists(root, ".trellis/ingest.json", (j) => j.errors?.length === 0);
+  if (!base.ok) return base;
+  const j = readJson(root, ".trellis/ingest.json");
+  const specPath = path.resolve(root, j.source ?? "");
+  if (!j.source || !fs.existsSync(specPath)) {
+    return { ok: false, detail: `ingest.json names a spec that no longer exists: ${j.source}` };
+  }
+  const actual = crypto.createHash("sha256").update(fs.readFileSync(specPath)).digest("hex").slice(0, 16);
+  if (j.specHash !== actual) {
+    return { ok: false, detail: `${j.source} changed since it was last ingested — re-run \`trellis ingest\`` };
+  }
+  return { ok: true, detail: `${j.source} unchanged since last ingest (${actual})` };
+}
+
+/**
+ * The runner is code, not a session — REPORT.md existing at all used to be
+ * the whole check, which a stale report from a PREVIOUS cycle satisfies just
+ * as well as a fresh one. state.json.runId is the cycle id (see cycle.mjs),
+ * so comparing it is the same run-stamp discipline 06/07 already use.
+ */
+function buildFinishedThisCycle(root, cfg) {
+  const base = artifactExists(root, ".trellis/REPORT.md");
+  if (!base.ok) return base;
+  const cyc = currentCycle(root, cfg);
+  const state = readJson(root, ".trellis/state.json");
+  if (!cyc) return { ok: false, detail: "no .trellis/cycle.json — run `trellis cycle` first" };
+  if (!state) return { ok: false, detail: "state.json missing — the runner has not produced one yet" };
+  if (state.runId !== cyc.id) {
+    return { ok: false, detail: `REPORT.md is from a different cycle than the current one (${cyc.cycle}) — run \`trellis run\` again` };
+  }
+  if (!state.finishedAt) return { ok: false, detail: "the run has not finished yet" };
+  return { ok: true, detail: `run finished ${state.finishedAt} (cycle ${cyc.cycle})` };
+}
+
+function sliceAssembledTaskGraph(root, cfg) {
   const base = artifactExists(root, ".trellis/plan.json", (j) => Array.isArray(j.nodes) && j.nodes.length > 0);
   if (!base.ok) return base;
+
+  // The plan is cut mechanically by `trellis slice`, which stamps `cycle`
+  // itself — no session involved, so this is checked before anything else.
+  // Without it, a stage that was satisfied by a PREVIOUS pass's plan.json
+  // stayed "satisfied" forever, and a second `trellis auto` printed six
+  // "already satisfied, skipping" lines and did nothing.
+  const cyc = currentCycle(root, cfg);
+  const plan0 = readJson(root, ".trellis/plan.json");
+  if (!cyc) return { ok: false, detail: "no .trellis/cycle.json — run `trellis cycle` first" };
+  if (plan0?.cycle !== cyc.id) {
+    return { ok: false, detail: `plan.json belongs to a different cycle than the current one (${cyc.cycle}) — re-run \`trellis slice\`` };
+  }
 
   const graph = readJson(root, ".trellis/graph.json");
   if (graph === null) {
@@ -123,6 +206,11 @@ function sliceAssembledTaskGraph(root) {
   }
   if (!Array.isArray(graph.nodes) || !graph.nodes.length) {
     return { ok: false, detail: ".trellis/graph.json declares no nodes" };
+  }
+  // graph.json IS the session's work, so its cycle stamp has to come from the
+  // session actually writing one — sessions/02_slice/CONTEXT.md instructs it.
+  if (graph.cycle !== cyc.id) {
+    return { ok: false, detail: `graph.json is not stamped with the current cycle (${cyc.cycle}) — the session must write "cycle": "${cyc.id}" into it` };
   }
 
   const plan = readJson(root, ".trellis/plan.json");
@@ -154,11 +242,16 @@ function sliceAssembledTaskGraph(root) {
 // The cases file must have an entry for every node in the plan. A session that
 // died halfway leaves a well-formed file covering the first eight nodes; this is
 // the check that catches it.
-function casesCoverPlan(root) {
+function casesCoverPlan(root, cfg) {
   const plan = readJson(root, ".trellis/plan.json");
   const cases = readJson(root, ".trellis/cases.json");
   if (!plan) return { ok: false, detail: "plan.json missing" };
   if (!cases) return { ok: false, detail: "cases.json missing or unparseable" };
+  const cyc = currentCycle(root, cfg);
+  if (!cyc) return { ok: false, detail: "no .trellis/cycle.json — run `trellis cycle` first" };
+  if (cases.cycle !== cyc.id) {
+    return { ok: false, detail: `cases.json is not stamped with the current cycle (${cyc.cycle}) — the session must write "cycle": "${cyc.id}" into it` };
+  }
   const want = new Set(plan.nodes.map((n) => n.id ?? n));
   const have = new Set(Object.keys(cases.nodes ?? {}));
   const missing = [...want].filter((id) => !have.has(id));

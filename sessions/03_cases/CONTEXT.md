@@ -24,13 +24,17 @@ security surface does not need the security chief in context.
 
 ## Outputs
 
-- `.trellis/cases.json` — `{ nodes: { <node-id>: { cases: [{ id, behaviour, why, mutation? }] } } }`
+- `.trellis/cases.json` — `{ cycle, nodes: { <node-id>: { cases: [{ id, behaviour, why, mutation? }] } } }`
+  — `cycle` is `.trellis/cycle.json`'s `id`, copied verbatim. Without it this
+  stage's proof of completion cannot tell a cases file you wrote this pass from
+  one left over from an earlier one.
 
 ## Verify
 
-Every node in `plan.json` has a non-empty case list. The driver checks this
-mechanically; a well-formed file covering the first eight of twenty nodes is
-exactly what a budget-exhausted session leaves behind.
+Every node in `plan.json` has a non-empty case list, and `cases.json`'s `cycle`
+matches the current one. The driver checks both mechanically; a well-formed file
+covering the first eight of twenty nodes is exactly what a budget-exhausted
+session leaves behind.
 
 Cross-stage check: every acceptance bullet in `plan.json` maps to at least one
 case id. An unclaimed bullet means an acceptance criterion nobody will test.

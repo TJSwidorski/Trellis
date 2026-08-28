@@ -27,11 +27,11 @@ sort them yourself, badly.
 
 | Stage | Job | Proof it finished |
 | --- | --- | --- |
-| `01_ingest` | Validate the handed-in product graph | `.trellis/ingest.json` with zero errors |
-| `02_slice` | Cut the next buildable slice | `.trellis/plan.json` |
-| `03_cases` | Enumerate edge cases per node | `.trellis/cases.json` covering every planned node |
+| `01_ingest` | Validate the handed-in product graph | `.trellis/ingest.json` with zero errors, scoped to the spec |
+| `02_slice` | Cut the next buildable slice | `.trellis/plan.json` + `.trellis/graph.json`, both stamped with the current cycle |
+| `03_cases` | Enumerate edge cases per node | `.trellis/cases.json`, cycle-stamped, covering every planned node |
 | `04_tests` | Write the frozen tests | Every declared test file exists and is non-vacuous |
-| `05_build` | Deterministic runner; no model | `.trellis/REPORT.md` |
+| `05_build` | Deterministic runner; no model | `.trellis/REPORT.md`, from a run stamped with the current cycle |
 | `06_triage` | Accept, reject, or re-spec | `.trellis/triage.json`, plus a `triage.jsonl` and a friction record for this run |
 | `07_evolve` | **Periodic.** Turn recurring patterns into proposals | `.trellis/evolve.json` accounting for every shortlisted pattern |
 
@@ -42,6 +42,18 @@ Never rely on something you remember from earlier in the conversation.
 `07_evolve` is not in the default `trellis auto` chain. Evolution reads evidence
 that only moves across many runs, and every pass costs an expensive session, so it
 is reached deliberately with `trellis auto --stage 07_evolve`.
+
+## Cycles
+
+Each pass through 01–06 is a **cycle**, declared with `trellis cycle` — or begun for
+you, lazily, the first time you `trellis run` with none declared yet. A stage's
+proof of completion is scoped to the current cycle's id (see `.trellis/cycle.json`),
+which is what lets a second `trellis auto` tell "I already did this pass" from
+"time to do the next one" — without it, every stage looked satisfied forever after
+the first pass, and self-improvement's "distinct runs" counted a second pass as the
+same run as the first. If you assemble `graph.json` or `cases.json`, stamp `cycle`
+into it from `.trellis/cycle.json`'s `id` — that field is what makes the distinction
+real.
 
 ## What is not yours
 

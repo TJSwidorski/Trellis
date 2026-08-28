@@ -31,6 +31,10 @@ Note disagreements; do not edit.
 
 Zero errors in `ingest.json`. Anything else and the pipeline stops here by design.
 
+This stage is scoped to the spec, not to the cycle — `trellis ingest` stamps a hash
+of the product graph file itself, so a later `trellis auto` skips re-ingesting an
+unchanged spec across every pass. Nothing here needs to change if the spec did not.
+
 ## Do not
 
 - Do not author, extend, or correct the product graph.

@@ -59,10 +59,12 @@ export const LOAD_BEARING = [
   "SKILLS/",
 ];
 
-// Proposable and auto-applied when the regression suite is green. Prose only.
+// Proposable, prose only. Not applied by anything in this kit — see
+// autoAppliable's docblock below for what "advisory" actually means today.
 export const ADVISORY = [
   "README.md",
   "QUICKSTART.md",
+  "OPERATING.md",
   "CLAUDE.md",
   "CONTEXT.md",
   "references/",
@@ -486,15 +488,23 @@ export function shortlist(root, cfg, { minRuns = 3, scope = "costly", top = 5, c
 export const PROPOSAL_KINDS = Object.freeze(new Set(["mechanism", "tooling", "retirement"]));
 
 /**
- * Advisory paths that still wait for a human.
+ * Advisory paths flagged for extra caution if apply is ever implemented.
  *
- * `references/CODES.md` is prose, so it classifies advisory and would auto-apply
- * once regression is green. But it is the definition of what counts as evidence,
- * and a loop that can widen its own vocabulary without review can manufacture a
- * threshold. Narrow carve-out rather than reclassifying all of `references/`,
- * which would put README typos in front of a human and train them to skim.
+ * Nothing in this kit auto-applies anything today — `autoAppliable` below has
+ * zero callers outside the regression suite. This list exists so that if
+ * apply is ever built, `references/CODES.md` and `OPERATING.md` are excluded
+ * from day one rather than discovered the hard way.
+ *
+ * `references/CODES.md` is prose, so it would otherwise classify advisory —
+ * but it is the definition of what counts as evidence, and a loop that can
+ * widen its own vocabulary without review can manufacture a threshold.
+ * `OPERATING.md` documents the checkpoint — the one place `auto` stops for a
+ * human — so an auto-applied edit to it would be the loop quietly relaxing
+ * its own leash. Narrow carve-outs rather than reclassifying all of
+ * `references/`, which would put README typos in front of a human and train
+ * them to skim.
  */
-export const NO_AUTO_APPLY = ["references/CODES.md"];
+export const NO_AUTO_APPLY = ["references/CODES.md", "OPERATING.md"];
 
 /** Is this target on the held list, whatever spelling it arrived in? */
 function isHeld(relPath) {

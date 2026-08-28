@@ -27,6 +27,7 @@ import * as friction from "../lib/friction.mjs";
 import * as triage from "../lib/triage.mjs";
 import { kindActionable, kindCounts, shortlist } from "../lib/evolve.mjs";
 import os from "node:os";
+import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { changedPaths, ignoredPaths, revertPaths } from "../lib/worktree.mjs";
 import { runGate } from "../lib/gate.mjs";
@@ -36,6 +37,8 @@ import { writeReport, untrustedBlock } from "../lib/report.mjs";
 import { matchAny, matchDeny, matchAllow, FS_CASE_INSENSITIVE } from "../lib/paths.mjs";
 import { recordsFor, ledgerPath } from "../lib/ledger.mjs";
 import { initState, resumePlan, nodeHash } from "../lib/state.mjs";
+import { currentCycle, beginCycle, cycleIdFor } from "../lib/cycle.mjs";
+import { builtNodes, writeBuilt } from "../lib/built.mjs";
 import { isCheckable, SOFT_FINDINGS, copyRepo } from "../lib/verify.mjs";
 import { buildPrompt, runNode } from "../lib/worker.mjs";
 import { chat, chatWithBackoff, ProviderError } from "../lib/provider.mjs";
@@ -1476,6 +1479,25 @@ check("ADVERSARIAL a proposal touching the vocabulary never auto-applies", () =>
   assert(r.held === true, "the proposal did not record that it is held");
 });
 
+check("ADVERSARIAL a proposal touching OPERATING.md never auto-applies either", () => {
+  // OPERATING.md documents the checkpoint -- the one place `auto` stops for a
+  // human. Auto-applying an edit to the document describing when the loop is
+  // allowed to stop unattended would be the loop quietly relaxing its own leash.
+  assert(classify("OPERATING.md") === "advisory", "precondition: OPERATING.md is advisory prose");
+  for (const spelling of ["OPERATING.md", "./OPERATING.md", "OPERATING.MD", ".\\OPERATING.md"]) {
+    assert(!autoAppliable(spelling, { evolve: { autoApplyAdvisory: true } }),
+      `"${spelling}" auto-applies — the loop could relax its own checkpoint documentation`);
+  }
+  const root = proposalRoot();
+  const r = writeProposal(root, {
+    title: "reword the checkpoint section", targets: ["OPERATING.md"], evidence: "e", rationale: "r", change: "c",
+  });
+  const text = fs.readFileSync(path.join(root, r.file), "utf8");
+  assert(/\*\*Applies:\*\* only when a human merges it/.test(text),
+    "an OPERATING.md proposal was marked auto-applying");
+  assert(r.held === true, "the proposal did not record that it is held");
+});
+
 check("ADVERSARIAL anything written by the evolve stage waits for a human", () => {
   // Otherwise the system writes prose about how it should behave and that prose
   // applies with nobody in the path.
@@ -2399,9 +2421,17 @@ check("ADVERSARIAL verify-tests does not copy secrets into the system temp dir",
 
 const rnode = (id, over = {}) => ({ id, title: id, goal: "g", write: [`src/${id}.mjs`], tests: [`tests/${id}.test.mjs`], gate: "true", deps: [], ...over });
 
+// A fixed placeholder root, deliberately with no files under it: every
+// node's testsDigest resolves to the same "__missing__" marker, so root is
+// inert for these checks — but it must be the SAME root on both sides
+// (initState here, resumePlan below), because nodeHash's material array only
+// has a matching shape when both calls agree on whether root was supplied at
+// all.
+const RNODE_ROOT = path.join(os.tmpdir(), "trellis-rnode-placeholder");
+
 function stateFor(nodes) {
   const g = { __hash: "h0", project: "p", nodes };
-  const s = initState("/tmp/x", { paths: { state: ".trellis" }, project: "p", baseBranch: "main" }, g);
+  const s = initState(RNODE_ROOT, { paths: { state: ".trellis" }, project: "p", baseBranch: "main" }, g);
   for (const id of Object.keys(s.nodes)) s.nodes[id].status = "merged";
   return s;
 }
@@ -2412,7 +2442,7 @@ check("a resume after an unrelated edit keeps the nodes that did not change", ()
   const before = [rnode("a"), rnode("b"), rnode("c")];
   const state = stateFor(before);
   const after = { __hash: "h1", nodes: [rnode("a"), rnode("b", { goal: "changed" }), rnode("c")] };
-  const { dirty, keep } = resumePlan(state, after);
+  const { dirty, keep } = resumePlan(state, after, { root: RNODE_ROOT });
   assert(keep.includes("a") && keep.includes("c"), `unrelated nodes were discarded: keep=${keep}`);
   assert(dirty.length === 1 && dirty[0] === "b", `expected only b to be rebuilt, got ${dirty}`);
 });
@@ -2423,7 +2453,7 @@ check("ADVERSARIAL a node built against a changed dependency is rebuilt", () => 
   const before = [rnode("a"), rnode("b", { deps: ["a"] }), rnode("c", { deps: ["b"] })];
   const state = stateFor(before);
   const after = { __hash: "h1", nodes: [rnode("a", { goal: "changed" }), rnode("b", { deps: ["a"] }), rnode("c", { deps: ["b"] })] };
-  const { dirty, keep } = resumePlan(state, after);
+  const { dirty, keep } = resumePlan(state, after, { root: RNODE_ROOT });
   assert(dirty.includes("a") && dirty.includes("b") && dirty.includes("c"),
     `the change did not propagate downstream: dirty=${dirty}`);
   assert(keep.length === 0, `something downstream of a changed node was kept: ${keep}`);
@@ -2435,7 +2465,7 @@ check("cosmetic edits do not rebuild anything", () => {
   const before = [rnode("a"), rnode("b")];
   const state = stateFor(before);
   const after = { __hash: "h1", nodes: [rnode("a", { title: "nicer name" }), rnode("b", { tags: ["api"] })] };
-  const { dirty } = resumePlan(state, after);
+  const { dirty } = resumePlan(state, after, { root: RNODE_ROOT });
   assert(dirty.length === 0, `a cosmetic edit forced a rebuild: ${dirty}`);
 });
 
@@ -2451,16 +2481,108 @@ check("ADVERSARIAL every field a worker sees or is graded against moves the hash
   }
 });
 
+// ------------------------------- nodeHash sees test CONTENTS, not just paths
+
+check("ADVERSARIAL nodeHash(node) with no root behaves exactly as before", () => {
+  // kit/regression/run.mjs itself calls nodeHash(base) with no root — this
+  // suite is PROTECTED, so that call site cannot change. root must stay
+  // fully optional and inert when omitted: no root, however implemented,
+  // must never fall back to reading files from process.cwd() (a plausible
+  // sloppy default — `testsDigest(root || ".", node)` — that would make a
+  // caller with no root silently start seeing filesystem state anyway).
+  const base = rnode("a");
+  const h1 = nodeHash(base);
+  const h2 = nodeHash(base);
+  assert(h1 === h2, "nodeHash(node) with no root is not even stable across calls");
+
+  const cwdBefore = process.cwd();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-noroot-cwd-"));
+  fs.mkdirSync(path.join(dir, "tests"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "tests", "a.test.mjs"), "assert.strictEqual(1, 1);\n");
+  try {
+    process.chdir(dir);
+    const beforeEdit = nodeHash(base);
+    fs.writeFileSync(path.join(dir, "tests", "a.test.mjs"), "assert.strictEqual(1, 1); assert.strictEqual(2, 2);\n");
+    const afterEdit = nodeHash(base);
+    assert(beforeEdit === afterEdit,
+      "nodeHash(node) with no root changed when a matching test file's content changed under process.cwd() — " +
+      "it must be blind to the filesystem entirely when no root is supplied, not silently default root to cwd");
+  } finally {
+    process.chdir(cwdBefore);
+  }
+});
+
+check("ADVERSARIAL editing a test file's contents, path unchanged, moves the hash only when root is given", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-testdigest-"));
+  fs.mkdirSync(path.join(dir, "tests"), { recursive: true });
+  const testPath = path.join(dir, "tests", "a.test.mjs");
+  fs.writeFileSync(testPath, "assert.strictEqual(1, 1);\n");
+  const node = rnode("a");
+
+  const beforeNoRoot = nodeHash(node);
+  const beforeWithRoot = nodeHash(node, { root: dir });
+
+  fs.writeFileSync(testPath, "assert.strictEqual(1, 1); assert.strictEqual(2, 2);\n");
+
+  const afterNoRoot = nodeHash(node);
+  const afterWithRoot = nodeHash(node, { root: dir });
+
+  assert(afterNoRoot === beforeNoRoot,
+    "nodeHash with no root moved when a test file's content changed — it must only ever see paths");
+  assert(afterWithRoot !== beforeWithRoot,
+    "nodeHash({root}) did not move when the test file's CONTENT changed, path unchanged — this is the exact bug: " +
+    "report.mjs tells the operator to strengthen the test and re-run, and a resume must see that edit");
+});
+
+check("ADVERSARIAL resumePlan({root}) rebuilds a node whose test content changed, even with the same path", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-resumedigest-"));
+  fs.mkdirSync(path.join(dir, "tests"), { recursive: true });
+  const testPath = path.join(dir, "tests", "a.test.mjs");
+  fs.writeFileSync(testPath, "assert.strictEqual(1, 1);\n");
+
+  const before = [rnode("a")];
+  const g0 = { __hash: "h0", project: "p", nodes: before };
+  const state = initState(dir, { paths: { state: ".trellis" }, project: "p", baseBranch: "main" }, g0, { runId: "r0" });
+  state.nodes.a.status = "weak-tests";
+
+  const after = { __hash: "h0", nodes: [rnode("a")] };
+
+  // Immediately after init, with nothing edited, resumePlan given the SAME
+  // root must see the node as clean — the sanity baseline this check builds on.
+  const { dirty: dirtyBefore } = resumePlan(state, after, { root: dir });
+  assert(dirtyBefore.length === 0,
+    `sanity check failed: nothing changed yet, but resumePlan already reported dirty=${dirtyBefore}`);
+
+  // This is report.mjs's own instruction for a weak-tests node: strengthen
+  // the test until each mutant fails. Path unchanged, content changed.
+  fs.writeFileSync(testPath, "assert.strictEqual(1, 1); assert.strictEqual(2, 2);\n");
+
+  const { dirty: dirtyWithRoot } = resumePlan(state, after, { root: dir });
+  assert(dirtyWithRoot.includes("a"),
+    "a strengthened test file did not mark its node dirty even though resumePlan was given the root to see it");
+});
+
 // ------------------------------------- stage 02 must assemble the task graph
 
 const sliceVerify = STAGES.find((s) => s.id === "02_slice").verify;
 
-/** A root with whatever plan.json / graph.json pair you pass. */
-function sliceRoot(plan, graph) {
+/**
+ * A root with a current cycle plus whatever plan.json / graph.json pair you
+ * pass. Both are stamped with that cycle's id unless the caller already gave
+ * them a `cycle` field — most checks here are about the OTHER cross-stage
+ * rules, not about cycle-scoping, so the default is "current" everywhere
+ * except the checks specifically targeting staleness.
+ */
+function sliceRoot(plan, graph, { cycleId = "c1" } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-02-"));
   fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
-  if (plan !== undefined) fs.writeFileSync(path.join(dir, ".trellis", "plan.json"), JSON.stringify(plan));
-  if (graph !== undefined) fs.writeFileSync(path.join(dir, ".trellis", "graph.json"), JSON.stringify(graph));
+  fs.writeFileSync(path.join(dir, ".trellis", "cycle.json"), JSON.stringify({ cycle: 1, id: cycleId }));
+  if (plan !== undefined) {
+    fs.writeFileSync(path.join(dir, ".trellis", "plan.json"), JSON.stringify({ cycle: cycleId, ...plan }));
+  }
+  if (graph !== undefined) {
+    fs.writeFileSync(path.join(dir, ".trellis", "graph.json"), JSON.stringify({ cycle: cycleId, ...graph }));
+  }
   return dir;
 }
 
@@ -2498,6 +2620,40 @@ check("ADVERSARIAL a node with no write scope or no gate cannot pass 02", () => 
     assert(!r.ok, `a node with ${broken.write.length ? "no gate" : "no write scope"} passed`);
     assert(/b/.test(r.detail), `detail should name the node, got: ${r.detail}`);
   }
+});
+
+check("ADVERSARIAL a graph.json left over from a previous cycle does not satisfy this one", () => {
+  // A second `trellis auto` used to print six "already satisfied, skipping"
+  // lines and do nothing, because nothing distinguished a pass-1 artifact from
+  // a pass-2 one. This is the check that pins the fix.
+  const dir = sliceRoot({ nodes: [{ id: "a" }] }, { nodes: [taskNode("a")] }, { cycleId: "c1" });
+  fs.writeFileSync(path.join(dir, ".trellis", "cycle.json"), JSON.stringify({ cycle: 2, id: "c2" }));
+  const r = sliceVerify(dir, CFG);
+  assert(!r.ok, "a stale graph.json from cycle 1 satisfied cycle 2's verify");
+  assert(/cycle/i.test(r.detail), `detail should mention the cycle mismatch, got: ${r.detail}`);
+});
+
+check("ADVERSARIAL graph.json's own cycle stamp is checked, isolated from plan.json's", () => {
+  // plan.json is current-cycle (the CLI always stamps it correctly); only
+  // graph.json — the session's own work — is stale. A fixture where BOTH are
+  // stale would let a check on either field alone look sufficient when it is
+  // not; this isolates the one a session can actually get wrong.
+  const dir = sliceRoot(undefined, undefined, { cycleId: "c1" });
+  fs.writeFileSync(path.join(dir, ".trellis", "plan.json"), JSON.stringify({ cycle: "c1", nodes: [{ id: "a" }] }));
+  fs.writeFileSync(path.join(dir, ".trellis", "graph.json"), JSON.stringify({ cycle: "stale-cycle", nodes: [taskNode("a")] }));
+  const r = sliceVerify(dir, CFG);
+  assert(!r.ok, "graph.json alone being stale, with a current plan.json, still satisfied the stage");
+  assert(/graph\.json/.test(r.detail) && /cycle/i.test(r.detail),
+    `detail should name graph.json specifically, got: ${r.detail}`);
+});
+
+check("ADVERSARIAL no cycle declared at all refuses rather than silently passing", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-02nc-"));
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  fs.writeFileSync(path.join(dir, ".trellis", "plan.json"), JSON.stringify({ nodes: [{ id: "a" }] }));
+  fs.writeFileSync(path.join(dir, ".trellis", "graph.json"), JSON.stringify({ nodes: [taskNode("a")] }));
+  const r = sliceVerify(dir, CFG);
+  assert(!r.ok, "02_slice passed with no cycle.json anywhere");
 });
 
 // ---------------------------------- the report has to say what actually failed
@@ -2574,6 +2730,195 @@ check("ADVERSARIAL a worker's embedded backticks in gate output do not escape th
   assert(/````/.test(md), "the report's real writeReport path used a fixed triple-backtick fence, not a widened one");
 });
 
+// ----------------------------------------------------------- cycles roll runId
+//
+// The headline claim: a second pass at the graph must be a DISTINCT run, or
+// every "N distinct runs" threshold in evolve.mjs and friction.mjs is
+// corrupted — cycle 2 and cycle 3 would count as the same observation as
+// cycle 1 forever, because runId never moved.
+
+check("beginCycle mints a new id each time, and cycleIdFor is stable within one", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-cyc-"));
+  const c1 = beginCycle(dir, CFG, { version: "v1" });
+  assert(c1.cycle === 1, `expected cycle 1, got ${c1.cycle}`);
+  assert(cycleIdFor(dir, CFG) === c1.id, "cycleIdFor drifted from the cycle it should be reading");
+  assert(cycleIdFor(dir, CFG) === c1.id, "cycleIdFor minted a new id on a second call within the same cycle");
+
+  const c2 = beginCycle(dir, CFG, { version: "v1" });
+  assert(c2.cycle === 2, `expected cycle 2, got ${c2.cycle}`);
+  assert(c2.id !== c1.id, "a second beginCycle reused the first cycle's id");
+  assert(cycleIdFor(dir, CFG) === c2.id, "cycleIdFor did not pick up the new cycle");
+});
+
+check("cycleIdFor lazily begins cycle 1 so plain `trellis run` needs no extra step", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-cyc2-"));
+  assert(currentCycle(dir, CFG) === null, "precondition: no cycle declared yet");
+  const id = cycleIdFor(dir, CFG);
+  const c = currentCycle(dir, CFG);
+  assert(c && c.cycle === 1 && c.id === id, "cycleIdFor did not lazily create cycle 1");
+});
+
+check("ADVERSARIAL initState honours an explicit runId instead of always minting one", () => {
+  const g = { __hash: "h", project: "p", nodes: [{ id: "a", write: ["src/a.mjs"], tests: [] }] };
+  const s = initState("/tmp/x", { paths: { state: ".trellis" }, project: "p", baseBranch: "main" }, g, { runId: "fixed-id" });
+  assert(s.runId === "fixed-id", `expected the supplied runId, got ${s.runId}`);
+  // And the existing no-argument shape — used throughout this suite and by
+  // kit/selftest — must still mint one, unchanged.
+  const s2 = initState("/tmp/x", { paths: { state: ".trellis" }, project: "p", baseBranch: "main" }, g);
+  assert(typeof s2.runId === "string" && s2.runId.length > 10, "the no-argument call stopped minting a runId");
+});
+
+// ----------------------------------------------------------- 01 / 05 staleness
+
+const ingestVerify = STAGES.find((s) => s.id === "01_ingest").verify;
+const buildVerify = STAGES.find((s) => s.id === "05_build").verify;
+
+function ingestRoot(specText, ingestOverrides) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-01-"));
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "product-graph.json"), specText);
+  const hash = crypto.createHash("sha256").update(specText).digest("hex").slice(0, 16);
+  fs.writeFileSync(path.join(dir, ".trellis/ingest.json"), JSON.stringify({
+    source: "product-graph.json", errors: [], specHash: hash, ...ingestOverrides,
+  }));
+  return dir;
+}
+
+check("01_ingest passes when the spec hash matches the file on disk", () => {
+  const dir = ingestRoot('{"a":1}');
+  const r = ingestVerify(dir, CFG);
+  assert(r.ok, `expected pass, got: ${r.detail}`);
+});
+
+check("ADVERSARIAL 01_ingest re-runs when the spec changed since it was ingested", () => {
+  const dir = ingestRoot('{"a":1}');
+  fs.writeFileSync(path.join(dir, "product-graph.json"), '{"a":2}'); // edited after ingest
+  const r = ingestVerify(dir, CFG);
+  assert(!r.ok, "a changed spec still satisfied the stage");
+});
+
+check("an ingest.json from before specHash existed is treated as stale, not a crash", () => {
+  const dir = ingestRoot('{"a":1}', { specHash: undefined });
+  const r = ingestVerify(dir, CFG);
+  assert(!r.ok, "an old-shaped ingest.json without specHash was accepted");
+});
+
+function buildRoot({ withCycle = true, cycleId = "b1", stateRunId = "b1", finished = true } = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-05-"));
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  fs.writeFileSync(path.join(dir, ".trellis/REPORT.md"), "# report\n");
+  if (withCycle) fs.writeFileSync(path.join(dir, ".trellis/cycle.json"), JSON.stringify({ cycle: 1, id: cycleId }));
+  fs.writeFileSync(path.join(dir, ".trellis/state.json"), JSON.stringify({
+    runId: stateRunId, finishedAt: finished ? new Date().toISOString() : null,
+  }));
+  return dir;
+}
+
+check("05_build passes when the run finished under the current cycle", () => {
+  const r = buildVerify(buildRoot({}), CFG);
+  assert(r.ok, `expected pass, got: ${r.detail}`);
+});
+
+check("ADVERSARIAL 05_build does not accept a REPORT.md from a previous cycle", () => {
+  const r = buildVerify(buildRoot({ cycleId: "b2", stateRunId: "b1" }), CFG);
+  assert(!r.ok, "a stale REPORT.md from a different cycle's runId satisfied this cycle");
+  assert(/cycle/i.test(r.detail), `detail should mention the mismatch, got: ${r.detail}`);
+});
+
+check("ADVERSARIAL 05_build does not accept an unfinished run", () => {
+  const r = buildVerify(buildRoot({ finished: false }), CFG);
+  assert(!r.ok, "a run with no finishedAt satisfied the stage");
+});
+
+// ------------------------------------------------- built.json is derived now
+
+function builtFixtureRoot({ ledgerRows = [], stateNodes = {}, manual = null } = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-built-"));
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  if (ledgerRows.length) {
+    fs.writeFileSync(path.join(dir, ".trellis/ledger.jsonl"), ledgerRows.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  }
+  if (Object.keys(stateNodes).length) {
+    fs.writeFileSync(path.join(dir, ".trellis/state.json"), JSON.stringify({ runId: "r1", nodes: stateNodes }));
+  }
+  if (manual) fs.writeFileSync(path.join(dir, ".trellis/built.manual.json"), JSON.stringify(manual));
+  return dir;
+}
+
+check("a node landed in the ledger counts as built, even with no state.json", () => {
+  const dir = builtFixtureRoot({ ledgerRows: [{ nodeId: "a", status: "merged" }] });
+  const nodes = builtNodes(dir, CFG);
+  assert(nodes.includes("a"), `expected "a" built from the ledger alone, got ${JSON.stringify(nodes)}`);
+});
+
+check("a node landed in state.json but not yet in the ledger still counts as built", () => {
+  // The ledger append happens at triage, not at merge -- a node that landed
+  // mid-run must not look "not built" until the NEXT triage catches up.
+  const dir = builtFixtureRoot({ stateNodes: { a: { status: "merged" } } });
+  const nodes = builtNodes(dir, CFG);
+  assert(nodes.includes("a"), `expected "a" built from state.json alone, got ${JSON.stringify(nodes)}`);
+});
+
+check("ADVERSARIAL a node that only ever attempted, never landed, does not count as built", () => {
+  const dir = builtFixtureRoot({
+    ledgerRows: [{ nodeId: "a", status: "exhausted" }],
+    stateNodes: { b: { status: "blocked" } },
+  });
+  const nodes = builtNodes(dir, CFG);
+  assert(nodes.length === 0, `an unlanded node was counted as built: ${JSON.stringify(nodes)}`);
+});
+
+check("built.manual.json is additive only, and a malformed one adds nothing rather than crashing", () => {
+  const dir = builtFixtureRoot({ ledgerRows: [{ nodeId: "a", status: "merged" }], manual: { nodes: ["b"] } });
+  const nodes = builtNodes(dir, CFG);
+  assert(nodes.includes("a") && nodes.includes("b"), `expected both a and b, got ${JSON.stringify(nodes)}`);
+
+  const dir2 = builtFixtureRoot({ ledgerRows: [{ nodeId: "a", status: "merged" }] });
+  fs.writeFileSync(path.join(dir2, ".trellis/built.manual.json"), "{ not json");
+  const nodes2 = builtNodes(dir2, CFG);
+  assert(nodes2.length === 1 && nodes2[0] === "a", `a malformed manual file should add nothing, got ${JSON.stringify(nodes2)}`);
+});
+
+check("writeBuilt reports what was added and removed since last write", () => {
+  const dir = builtFixtureRoot({ ledgerRows: [{ nodeId: "a", status: "merged" }] });
+  const first = writeBuilt(dir, CFG);
+  assert(first.added.length === 1 && first.added[0] === "a", `expected a to be reported added, got ${JSON.stringify(first)}`);
+
+  fs.writeFileSync(path.join(dir, ".trellis/ledger.jsonl"),
+    [{ nodeId: "a", status: "merged" }, { nodeId: "b", status: "merged" }].map((r) => JSON.stringify(r)).join("\n") + "\n");
+  const second = writeBuilt(dir, CFG);
+  assert(second.added.length === 1 && second.added[0] === "b", `expected only b newly added, got ${JSON.stringify(second)}`);
+  assert(second.removed.length === 0, `nothing should have been removed, got ${JSON.stringify(second.removed)}`);
+});
+
+check("ADVERSARIAL slice uses the derived built set, not a hand-authored file", () => {
+  // Even if a stale built.json sits on disk (left over from before this
+  // command existed, or hand-edited), cmdSlice must not read it directly.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-builtslice-"));
+  const g = (...a) => spawnSync("git", a, { cwd: dir, encoding: "utf8" });
+  g("init", "-q", "-b", "main"); g("config", "user.email", "a@b.c"); g("config", "user.name", "t");
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  // A hand-authored built.json claims "a" is built -- if cmdSlice reads this
+  // file directly rather than deriving, "a" would be skipped even though
+  // nothing in the ledger or state.json says it landed.
+  fs.writeFileSync(path.join(dir, ".trellis/built.json"), JSON.stringify({ nodes: ["a"] }));
+  fs.writeFileSync(path.join(dir, ".trellis/product-graph.json"), JSON.stringify({
+    schema: "trellis.product-graph/1", product: "p",
+    versions: { v1: { definition: "d", scale_target: "1" }, v2: { definition: "d2", scale_target: "1" } },
+    nodes: [{ id: "a", title: "a", version: "v1", kind: "backend", acceptance: ["x"],
+      reversibility: "two-way", scale_tier: "1", deps: [], surfaces: ["none"] }],
+  }));
+  fs.writeFileSync(path.join(dir, "trellis.config.json"), JSON.stringify({
+    project: "p", baseBranch: "main",
+    paths: { state: ".trellis", worktrees: ".worktrees", graph: ".trellis/graph.json" },
+    tiers: [{ name: "cheap", baseUrl: "http://127.0.0.1:1", model: "m", apiKeyEnv: null, maxAttempts: 1, maxTokens: 100 }],
+  }));
+  g("add", "-A"); g("commit", "-qm", "init");
+  const cli = path.resolve(kitRoot, "kit/bin/cli.mjs");
+  const r = spawnSync(process.execPath, [cli, "slice", "--max", "25"], { cwd: dir, encoding: "utf8" });
+  assert(/Slice of 1 node/.test(r.stdout), `"a" was skipped by a stale hand-authored built.json: ${r.stdout}${r.stderr}`);
+});
+
 const fixDir = path.join(here, "fixtures");
 if (fs.existsSync(fixDir)) {
   for (const f of fs.readdirSync(fixDir).filter((x) => x.endsWith(".json"))) {
@@ -2592,6 +2937,130 @@ if (fs.existsSync(fixDir)) {
     });
   }
 }
+
+// -------------------------------------------- the Bash guard's own bypasses
+//
+// guard-bash.mjs's string matching found real bypasses on first read: the
+// "trellis" bin alias (package.json declares one) contains no "cli.mjs", so
+// `trellis accept x --merge` was invisible to a check written only against
+// `cli.mjs accept`; `git -C . merge` broke `\bgit\s+merge\b` outright since
+// flags between the subcommand name and "git" were never accounted for; and
+// `git pull` — a merge by another name — was absent from the deny list
+// entirely. None of this is exercised by the porting commit's own tests,
+// which never tried these specific strings.
+
+function runBashGuard(cmd, { stage = "06_triage" } = {}) {
+  const r = spawnSync(process.execPath, [path.resolve(here, "../../.claude/hooks/guard-bash.mjs")], {
+    input: JSON.stringify({ tool_input: { command: cmd } }),
+    encoding: "utf8",
+    env: { ...process.env, TRELLIS_STAGE: stage },
+  });
+  return { code: r.status, stderr: r.stderr || "" };
+}
+
+check("ADVERSARIAL the guard blocks the 'trellis' bin alias, not just 'cli.mjs accept'", () => {
+  const { code } = runBashGuard("trellis accept n01 --merge");
+  assert(code === 2, `the bin-alias form of accept was not blocked (exit ${code})`);
+});
+
+check("ADVERSARIAL the guard blocks a git merge with flags between git and the subcommand", () => {
+  for (const cmd of ["git -C . merge some-branch", "git -c user.name=x merge some-branch"]) {
+    const { code } = runBashGuard(cmd);
+    assert(code === 2, `"${cmd}" was not blocked (exit ${code})`);
+  }
+});
+
+check("ADVERSARIAL the guard blocks git pull, a merge by another name", () => {
+  const { code } = runBashGuard("git pull origin main");
+  assert(code === 2, `git pull was not blocked (exit ${code})`);
+});
+
+check("the guard does not block an ordinary command, or accept with no TRELLIS_STAGE", () => {
+  const { code: ordinary } = runBashGuard("npm test");
+  assert(ordinary === 0, `an ordinary command was blocked (exit ${ordinary})`);
+
+  const { TRELLIS_STAGE: _drop, ...envNoStage } = process.env;
+  const r = spawnSync(process.execPath, [path.resolve(here, "../../.claude/hooks/guard-bash.mjs")], {
+    input: JSON.stringify({ tool_input: { command: "node kit/bin/cli.mjs accept n01 --merge" } }),
+    encoding: "utf8",
+    env: envNoStage,
+  });
+  assert(r.status === 0, `accept was blocked with no TRELLIS_STAGE set (exit ${r.status})`);
+});
+
+// ---------------------------------------------- the Bash guard's preflight
+//
+// guard-bash.mjs itself cannot be unit-tested from in here — it is invoked by
+// the harness, not by anything in this process. What CAN be tested is that
+// `auto` refuses to start at all when the guard is not wired up, which is the
+// thing that stops a headless session's Bash tool from being unrestricted in
+// the first place.
+
+const CLI = path.resolve(here, "../bin/cli.mjs");
+
+function autoPreflightRoot({ guarded }) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-guard-"));
+  const g = (...a) => spawnSync("git", a, { cwd: dir, encoding: "utf8" });
+  g("init", "-q", "-b", "main");
+  g("config", "user.email", "a@b.c"); g("config", "user.name", "t");
+  fs.writeFileSync(path.join(dir, "README.md"), "x\n");
+  fs.mkdirSync(path.join(dir, ".claude"), { recursive: true });
+  const settings = guarded
+    ? { hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "node .claude/hooks/guard-bash.mjs" }] }] } }
+    : { hooks: { PreToolUse: [{ matcher: "Edit|Write", hooks: [{ type: "command", command: "node .claude/hooks/protect-runner.mjs" }] }] } };
+  fs.writeFileSync(path.join(dir, ".claude", "settings.json"), JSON.stringify(settings));
+  fs.writeFileSync(path.join(dir, "trellis.config.json"), JSON.stringify({
+    project: "p", baseBranch: "main",
+    driver: { enabled: true, command: "does-not-exist-on-purpose" },
+    paths: { state: ".trellis", worktrees: ".worktrees", graph: ".trellis/graph.json" },
+    tiers: [{ name: "cheap", baseUrl: "http://127.0.0.1:1", model: "m", apiKeyEnv: null, maxAttempts: 1, maxTokens: 100 }],
+  }));
+  g("add", "-A"); g("commit", "-qm", "init");
+  return dir;
+}
+
+check("ADVERSARIAL auto refuses to start with no Bash matcher configured", () => {
+  const dir = autoPreflightRoot({ guarded: false });
+  const r = spawnSync(process.execPath, [CLI, "auto"], { cwd: dir, encoding: "utf8" });
+  assert(r.status !== 0, "auto started with no Bash guard configured");
+  assert(/Bash/.test(r.stdout) && /guard/i.test(r.stdout),
+    `refusal did not name the missing guard: ${r.stdout}${r.stderr}`);
+});
+
+check("auto's preflight passes once the Bash matcher is registered", () => {
+  // It may still die later (driver.command is deliberately nonexistent) —
+  // what matters is that it gets PAST the guard check specifically.
+  const dir = autoPreflightRoot({ guarded: true });
+  const r = spawnSync(process.execPath, [CLI, "auto"], { cwd: dir, encoding: "utf8" });
+  assert(!/No PreToolUse hook matches Bash/.test(r.stdout),
+    `the preflight rejected a properly configured guard: ${r.stdout}${r.stderr}`);
+});
+
+check("ADVERSARIAL accept refuses when TRELLIS_STAGE is set", () => {
+  // Defence in depth, not the real enforcement — bypassable with env -u, which
+  // is exactly why guard-bash.mjs is the layer that actually matters. This
+  // just proves the fallback fires when it is reached at all.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-acc-"));
+  const g = (...a) => spawnSync("git", a, { cwd: dir, encoding: "utf8" });
+  g("init", "-q", "-b", "main"); g("config", "user.email", "a@b.c"); g("config", "user.name", "t");
+  fs.writeFileSync(path.join(dir, "README.md"), "x\n"); g("add", "-A"); g("commit", "-qm", "init");
+  fs.writeFileSync(path.join(dir, "trellis.config.json"), JSON.stringify({
+    project: "p", baseBranch: "main",
+    paths: { state: ".trellis", worktrees: ".worktrees", graph: ".trellis/graph.json" },
+    tiers: [{ name: "cheap", baseUrl: "http://127.0.0.1:1", model: "m", apiKeyEnv: null, maxAttempts: 1, maxTokens: 100 }],
+  }));
+  const r = spawnSync(process.execPath, [CLI, "accept", "n01"], {
+    cwd: dir, encoding: "utf8", env: { ...process.env, TRELLIS_STAGE: "06_triage" },
+  });
+  assert(r.status !== 0, "accept ran to completion inside a stage session");
+  // Specifically the TRELLIS_STAGE die(), not the separate non-TTY warning —
+  // that warning ALSO contains the words "human decision", so asserting on
+  // that phrase alone would pass even with this exact check deleted. Assert
+  // on text unique to the die() message instead.
+  assert(/apply-triage/.test(r.stdout), `the TRELLIS_STAGE refusal did not fire: ${r.stdout}${r.stderr}`);
+  assert(!/No run to accept against/.test(r.stdout),
+    "accept reached past the TRELLIS_STAGE check and failed for an unrelated reason instead");
+});
 
 // -------------------------------------------------------------------- report
 
