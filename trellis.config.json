@@ -108,7 +108,7 @@
 
   "boundaries": {
     "$comment": "Paths no worker may ever write, regardless of what the graph node allows. Matched case-insensitively, because .GIT/config and KIT/lib/gate.mjs open the real files on Windows and macOS.",
-    "$gate-config": "The second half of this list is the file a gate command reads. A worker that can write package.json decides what `npm test` runs; conftest.py executes before every pytest; a Makefile target is whatever it says. Denied at every depth, not just the root, because a monorepo package carries its own. If a node genuinely must change one, that is a human's edit, not a worker's.",
+    "$gate-config": "The second half of this list is the file a gate command reads. A worker that can write package.json decides what `npm test` runs; conftest.py executes before every pytest; a Makefile target is whatever it says. Denied at every depth, not just the root, because a monorepo package carries its own. If a node genuinely must change one, that is a human's edit, not a worker's. This list is enumerated per-ecosystem rather than closed-form on purpose -- a config-shaped file this list omits is a route around the frozen-test guarantee, so widen it as fast as new test runners get adopted, not only when one is caught being exploited.",
     "denyWrite": [
       ".git/**",
       ".env",
@@ -125,6 +125,9 @@
       "kit/**",
       "trellis.config.json",
       "**/node_modules/**",
+      ".gitignore",
+      "**/.gitignore",
+      ".github/workflows/**",
 
       "package.json",
       "**/package.json",
@@ -134,18 +137,29 @@
       "**/yarn.lock",
       "**/jest.config.*",
       "**/vitest.config.*",
-      "**/.mocharc.*",
+      "**/vite.config.*",
+      "**/playwright.config.*",
       "**/karma.conf.*",
+      "**/.mocharc.*",
+      "**/babel.config.*",
+      "**/.babelrc*",
+      "**/swc.config*",
+      "**/tsconfig*.json",
       "**/conftest.py",
       "**/pytest.ini",
       "**/tox.ini",
       "**/pyproject.toml",
       "**/setup.cfg",
+      "**/requirements.txt",
       "**/Makefile",
       "**/makefile",
       "**/justfile",
       "**/go.mod",
-      "**/Cargo.toml"
+      "**/Cargo.toml",
+      "**/composer.json",
+      "**/pom.xml",
+      "**/build.gradle*",
+      "**/Rakefile"
     ]
   },
 

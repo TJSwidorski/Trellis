@@ -1883,6 +1883,38 @@ check("ADVERSARIAL driver.mjs's own artifact checks and session ledger honour cf
   assert(check.ok, `05_build's verify should pass reading only from the configured dir: ${JSON.stringify(check)}`);
 });
 
+check("ADVERSARIAL the shipped denyWrite list covers the gate-config files today's runners actually read", () => {
+  // trellis.config.json's own $gate-config comment names the principle: "a
+  // worker that can write package.json decides what npm test runs". The
+  // list enumerated Jest/Mocha/Karma/pytest/tox/Make/Cargo/Go but not
+  // Vite's own config (which vitest reads when no vitest.config.* exists),
+  // TypeScript path-mapping, Playwright, Babel, PHP/Java/Ruby build files,
+  // or CI workflow definitions -- any of which lets a worker redirect what
+  // the gate actually executes without ever touching the frozen test file
+  // itself, so the tamper checks never fire.
+  const cfg = loadConfig(kitRoot);
+  const deny = cfg.boundaries.denyWrite;
+  const mustDeny = [
+    "vite.config.ts", "app/vite.config.js",
+    "tsconfig.json", "packages/api/tsconfig.build.json",
+    "playwright.config.ts",
+    "babel.config.js", ".babelrc",
+    "requirements.txt", "services/api/requirements.txt",
+    "composer.json", "pom.xml", "build.gradle.kts", "Rakefile",
+    ".gitignore", "nested/.gitignore",
+    ".github/workflows/test.yml",
+  ];
+  for (const p of mustDeny) {
+    assert(matchDeny(p, deny), `"${p}" should be denied by the shipped config's boundaries.denyWrite, but was not`);
+  }
+  // And the list must not be so broad it swallows ordinary source files —
+  // a denyWrite that matched everything would "pass" this test vacuously.
+  const mustAllow = ["src/index.ts", "lib/handler.py", "app/main.go"];
+  for (const p of mustAllow) {
+    assert(!matchDeny(p, deny), `"${p}" was wrongly denied by boundaries.denyWrite`);
+  }
+});
+
 check("ADVERSARIAL materialise only removes directories it wrote", () => {
   // Its docblock promises a hand-placed project skill is never destroyed by a
   // stage transition. Making it delete everything under .claude/skills/ left all
