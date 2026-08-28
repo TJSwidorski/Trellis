@@ -7,6 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { findCycle } from "./graphutil.mjs";
+import { levels } from "./graph.mjs";
 
 const TIERS = ["1", "10", "100", "1000", "10000", "100000"];
 const KINDS = ["frontend", "backend", "data", "infra", "interface", "ops"];
@@ -205,44 +206,70 @@ export function promotable(graph) {
 
 // --------------------------------------------------------------------- slice
 
-// Cut the next buildable slice: unbuilt nodes of the target version whose deps
-// are all already built, in dependency order, capped at maxNodes.
+// Cut the next buildable slice: unbuilt nodes of the target version, taken
+// in whole dependency LEVELS (longest-path depth among what is still
+// unbuilt — a dep that already landed, or belongs to the other version,
+// does not push its dependant's level up), capped at maxNodes.
 //
 // The cap exists because planning, case enumeration, and test writing for more
 // than roughly 25 nodes does not fit in one session window. That is an empirical
 // limit from real runs, not a theoretical one.
+//
+// Level-aware rather than a flat cutoff: a flat cutoff can stop mid-level,
+// handing a session five sibling nodes at depth 3 and leaving the other
+// five siblings at the SAME depth for next time, for no reason connected to
+// the graph's actual shape — the cap just happened to land there. Cutting
+// at level boundaries instead means every slice is either the WHOLE next
+// wave of work or stops before starting a wave it can't finish, which is
+// the thing "the next 25" was always supposed to mean.
+//
+// A level is atomic: if the very first level under consideration alone
+// exceeds maxNodes, it is taken WHOLE anyway (`overflowed: true`) rather
+// than split — a level cannot be half-planned, and every node in it is
+// equally ready. This can only happen on the first level of a call: once
+// anything has been chosen, a level that would push the total past the cap
+// is left for the NEXT call instead, where it becomes that call's own
+// first (and possibly still-oversized) level.
 export function nextSlice(graph, { version = "v1", built = [], maxNodes = 25 } = {}) {
-  const byId = index(graph);
   const done = new Set(built);
+  const candidates = graph.nodes.filter((n) => n.version === version && !done.has(n.id));
+
+  // levels() ignores any dep id not present in the node set it's given
+  // (graph.mjs:350) — exactly the semantics wanted here: an already-built
+  // node, or one of the other version, is "satisfied" and contributes
+  // nothing to its dependant's depth, so depth reflects only the shape of
+  // what is left to build, not the whole product graph's history.
+  const depthOf = levels({ nodes: candidates });
+  const byLevel = new Map();
+  for (const n of candidates) {
+    const d = depthOf.get(n.id) ?? 0;
+    if (!byLevel.has(d)) byLevel.set(d, []);
+    byLevel.get(d).push(n);
+  }
+  const orderedDepths = [...byLevel.keys()].sort((a, b) => a - b);
+
   const chosen = [];
-  const inSlice = new Set();
-
-  const ready = (n) =>
-    (n.deps ?? []).every((d) => done.has(d) || inSlice.has(d));
-
-  let progress = true;
-  while (progress && chosen.length < maxNodes) {
-    progress = false;
-    for (const n of graph.nodes) {
-      if (chosen.length >= maxNodes) break;
-      if (n.version !== version) continue;
-      if (done.has(n.id) || inSlice.has(n.id)) continue;
-      if (!ready(n)) continue;
-      chosen.push(n);
-      inSlice.add(n.id);
-      progress = true;
-    }
+  const levelPlan = []; // { depth, count } for every level actually taken
+  let overflowed = false;
+  for (const d of orderedDepths) {
+    const lvl = byLevel.get(d);
+    if (chosen.length > 0 && chosen.length + lvl.length > maxNodes) break;
+    chosen.push(...lvl);
+    levelPlan.push({ depth: d, count: lvl.length });
+    if (chosen.length > maxNodes) overflowed = true;
   }
 
-  const remaining = graph.nodes.filter(
-    (n) => n.version === version && !done.has(n.id) && !inSlice.has(n.id)
-  );
+  const takenIds = new Set(chosen.map((n) => n.id));
+  const remaining = candidates.filter((n) => !takenIds.has(n.id));
 
   return {
     version,
     nodes: chosen,
     remaining: remaining.map((n) => n.id),
     high_risk: chosen.filter((n) => n.high_risk).map((n) => n.id),
+    levels: levelPlan,
+    overflowed,
+    maxNodes,
   };
 }
 

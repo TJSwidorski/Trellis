@@ -168,6 +168,65 @@ check("slice honours already-built nodes", () => {
   assert(s.nodes.length === 1 && s.nodes[0].id === "b", "built node was re-sliced");
 });
 
+// Item 2 / discriminating slice fixture. The a-b-c chain above is one node
+// per level, so a flat cutoff and a level-aware one produce the identical
+// result -- it passes under EITHER algorithm and proves nothing about which
+// one actually runs. This graph has a WIDE level (5 siblings at depth 1)
+// that overflows a small cap, which the two algorithms treat differently:
+// a flat cutoff takes however many of the 5 siblings fit and leaves the
+// rest at the same depth for no reason connected to the graph's shape; a
+// level-aware cutoff takes the whole depth-0 level (1 node) and stops
+// there, refusing to start a wave of siblings it can't finish.
+function wideLevelGraph() {
+  const root = node("root");
+  const siblings = ["s1", "s2", "s3", "s4", "s5"].map((id) => node(id, { deps: ["root"] }));
+  const leaf = node("leaf", { deps: ["s1"] });
+  return graph([root, ...siblings, leaf]);
+}
+
+check("ADVERSARIAL slice cuts at level boundaries instead of splitting a wide level", () => {
+  const { graph: g } = validateProductGraph(wideLevelGraph());
+  // Cap 3: depth 0 is {root} (1 node, fits); depth 1 is {s1..s5} (5 nodes --
+  // 1 + 5 = 6 > 3, so the level-aware algorithm must stop BEFORE it, not
+  // take 2 of the 5 siblings to fill out the cap.
+  const s = nextSlice(g, { maxNodes: 3 });
+  assert(s.nodes.length === 1 && s.nodes[0].id === "root",
+    `expected only the depth-0 level (root), got: ${JSON.stringify(s.nodes.map((n) => n.id))}`);
+  assert(!s.overflowed, `a level that fits under the cap must not be reported as overflowed: ${JSON.stringify(s)}`);
+  for (const sib of ["s1", "s2", "s3", "s4", "s5"]) {
+    assert(s.remaining.includes(sib), `${sib} should still be pending, not split into this slice`);
+  }
+});
+
+check("ADVERSARIAL an oversized single level is taken whole rather than split, and reported as overflowed", () => {
+  const { graph: g } = validateProductGraph(wideLevelGraph());
+  // Cap 3, but built already covers root -- so depth 0 of what's LEFT is the
+  // 5-wide sibling level itself, which alone exceeds the cap. A level is
+  // atomic: it must be taken whole (all 5), not silently truncated to 3.
+  const s = nextSlice(g, { maxNodes: 3, built: ["root"] });
+  const ids = s.nodes.map((n) => n.id).sort();
+  assert(JSON.stringify(ids) === JSON.stringify(["s1", "s2", "s3", "s4", "s5"]),
+    `expected the whole oversized level taken atomically, got: ${JSON.stringify(ids)}`);
+  assert(s.overflowed === true, "an oversized first level must be reported as overflowed");
+  assert(s.remaining.includes("leaf"),
+    "leaf depends on s1, which is IN this slice but not yet built -- it must still be remaining");
+});
+
+check("ADVERSARIAL slice reports which levels it took, without persisting level onto any node", () => {
+  const { graph: g } = validateProductGraph(wideLevelGraph());
+  const s = nextSlice(g, { maxNodes: 10 });
+  // root (depth 0) + all 5 siblings (depth 1) = 6 <= 10, so both levels fit;
+  // leaf (depth 2) would make it 7 <= 10 too, so all 7 nodes should land.
+  assert(s.nodes.length === 7, `expected all 7 nodes across 3 levels, got ${s.nodes.length}`);
+  const expectedLevels = [{ depth: 0, count: 1 }, { depth: 1, count: 5 }, { depth: 2, count: 1 }];
+  assert(JSON.stringify(s.levels) === JSON.stringify(expectedLevels),
+    `expected a level-by-level breakdown, got: ${JSON.stringify(s.levels)}`);
+  // The whole point of item 2's "do not persist level" instruction: this is
+  // metadata about the CUT, not a property of the node, so no node in the
+  // slice should carry a `level` field of its own.
+  assert(s.nodes.every((n) => !("level" in n)), "a node must not carry a persisted level field");
+});
+
 check("promote finds only fully unblocked v2 nodes", () => {
   const { graph: g } = validateProductGraph(
     graph([
@@ -3435,6 +3494,37 @@ check("ADVERSARIAL slice uses the derived built set, not a hand-authored file", 
   const cli = path.resolve(kitRoot, "kit/bin/cli.mjs");
   const r = spawnSync(process.execPath, [cli, "slice", "--max", "25"], { cwd: dir, encoding: "utf8" });
   assert(/Slice of 1 node/.test(r.stdout), `"a" was skipped by a stale hand-authored built.json: ${r.stdout}${r.stderr}`);
+});
+
+check("ADVERSARIAL slice --max reports an oversized level loudly instead of silently truncating it", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-sliceoverflow-"));
+  const g = (...a) => spawnSync("git", a, { cwd: dir, encoding: "utf8" });
+  g("init", "-q", "-b", "main"); g("config", "user.email", "a@b.c"); g("config", "user.name", "t");
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  const pgNode = (id) => ({ id, title: id, version: "v1", kind: "backend", acceptance: ["x"],
+    reversibility: "two-way", scale_tier: "1", deps: [], surfaces: ["none"] });
+  fs.writeFileSync(path.join(dir, ".trellis/product-graph.json"), JSON.stringify({
+    schema: "trellis.product-graph/1", product: "p",
+    versions: { v1: { definition: "d", scale_target: "1" }, v2: { definition: "d2", scale_target: "1" } },
+    // Five independent root nodes (all depth 0) with a cap of 3 -- the whole
+    // level must be taken atomically rather than truncated to 3.
+    nodes: ["a", "b", "c", "d", "e"].map(pgNode),
+  }));
+  fs.writeFileSync(path.join(dir, "trellis.config.json"), JSON.stringify({
+    project: "p", baseBranch: "main",
+    paths: { state: ".trellis", worktrees: ".worktrees", graph: ".trellis/graph.json" },
+    tiers: [{ name: "cheap", baseUrl: "http://127.0.0.1:1", model: "m", apiKeyEnv: null, maxAttempts: 1, maxTokens: 100 }],
+  }));
+  g("add", "-A"); g("commit", "-qm", "init");
+  const cli = path.resolve(kitRoot, "kit/bin/cli.mjs");
+  const r = spawnSync(process.execPath, [cli, "slice", "--max", "3"], { cwd: dir, encoding: "utf8" });
+  assert(/Slice of 5 node/.test(r.stdout), `expected all 5 nodes taken atomically, got: ${r.stdout}${r.stderr}`);
+  assert(/over the cap of 3/.test(r.stdout), `expected a loud overflow warning naming the cap, got: ${r.stdout}${r.stderr}`);
+  const plan = JSON.parse(fs.readFileSync(path.join(dir, ".trellis/plan.json"), "utf8"));
+  assert(plan.overflowed === true, `expected plan.json to record overflowed:true, got: ${JSON.stringify(plan.overflowed)}`);
+  assert(Array.isArray(plan.levels) && plan.levels.length === 1 && plan.levels[0].count === 5,
+    `expected plan.json's levels to name the one oversized level, got: ${JSON.stringify(plan.levels)}`);
+  assert(plan.nodes.every((n) => !("level" in n)), "plan.json's node entries must not carry a persisted level field");
 });
 
 const fixDir = path.join(here, "fixtures");

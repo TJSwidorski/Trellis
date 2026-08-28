@@ -1021,12 +1021,25 @@ function cmdSlice() {
     remaining: slice.remaining,
     invariants: derived.invariants ?? [],
     non_goals: derived.non_goals ?? [],
+    // Metadata about the CUT, not a property of any node — level is
+    // computed fresh from what's left to build every time and has no
+    // business persisted on a node in the source graph (see nextSlice's
+    // own docblock in product.mjs). Lives here, in the derived plan.
+    levels: slice.levels,
+    overflowed: slice.overflowed,
   };
 
   fs.mkdirSync(path.resolve(root, ".trellis"), { recursive: true });
   fs.writeFileSync(path.resolve(root, ".trellis/plan.json"), JSON.stringify(plan, null, 2));
 
-  log.ok(`Slice of ${plan.nodes.length} node(s); ${slice.remaining.length} left in ${version}.`);
+  log.ok(`Slice of ${plan.nodes.length} node(s) across ${slice.levels.length} level(s); ${slice.remaining.length} left in ${version}.`);
+  if (slice.overflowed) {
+    const first = slice.levels[0];
+    log.warn(
+      `Level 0 of this cut has ${first.count} node(s) alone, over the cap of ${slice.maxNodes} — ` +
+      `taken whole rather than split. A level cannot be half-planned.`
+    );
+  }
   if (slice.high_risk.length) {
     log.warn(`High risk in this slice (Opus reviews these regardless of gates): ${slice.high_risk.join(", ")}`);
   }

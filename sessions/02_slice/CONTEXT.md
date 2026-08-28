@@ -9,8 +9,14 @@
 
 Run `node kit/bin/cli.mjs slice --max 25`.
 
-The cut is mechanical: unbuilt nodes of the target version whose dependencies are
-already built, in dependency order, capped. You do not choose the nodes.
+The cut is mechanical: unbuilt nodes of the target version, taken in whole
+dependency LEVELS — nodes whose deps are already built, then the nodes that
+unblocks, and so on — capped by node count. A level is never split: the slice
+stops before starting a level it can't finish, even if that level alone would
+have fit inside a few more nodes of headroom. The exception is a level that
+is oversized all by itself, which is taken whole anyway (`overflowed: true`
+in `plan.json`) — a level cannot be half-planned. You do not choose the
+nodes, and you do not choose which level a node lands in.
 
 What you do choose is what happens next. Read the resulting `plan.json` and, for
 each node, produce the *implementation* contract the runner needs — `write` paths,
@@ -52,5 +58,7 @@ that got dropped between the two files is silently descoped work.
 
 ## Do not
 
-- Do not exceed the cap because the remainder "is small".
+- Do not manually add nodes to a slice because the remainder "is small" — an
+  `overflowed: true` slice is the tool's own atomic-level decision, not
+  license for you to do the same thing by hand elsewhere.
 - Do not write tests here. That is stage 04, after cases are enumerated.
