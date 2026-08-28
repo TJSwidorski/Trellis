@@ -29,7 +29,7 @@ import { kindActionable, kindCounts, shortlist } from "../lib/evolve.mjs";
 import os from "node:os";
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { changedPaths, ignoredPaths, revertPaths } from "../lib/worktree.mjs";
+import { changedPaths, ignoredPaths, revertPaths, git, isClean } from "../lib/worktree.mjs";
 import { runGate } from "../lib/gate.mjs";
 import { checkMutations } from "../lib/mutate.mjs";
 import { Budget } from "../lib/budget.mjs";
@@ -1764,6 +1764,53 @@ check("changedPaths still sees untracked files and rename sources", () => {
   assert(got.includes("src/new.mjs"), `untracked file missed: ${JSON.stringify(got)}`);
   assert(got.includes("src/a.mjs") && got.includes("src/b.mjs"),
     `rename must report both sides so neither escapes scope checking: ${JSON.stringify(got)}`);
+});
+
+// git()'s own spawnFailed reporting, and the two shapes of "fail closed" it
+// enables: isClean() must never read a spawn failure as a clean tree
+// (runner.mjs's dirty-tree guard, and `trellis doctor`, both treat `false`
+// as the universally safe answer), and changedPaths() -- which has no safe
+// boolean default -- must throw rather than silently reporting "nothing
+// changed" to a caller that would read that as a no-op verdict on a
+// worker's real work. All three PATH mutations are synchronous,
+// try/finally-scoped, and restored before this function returns -- nothing
+// else in this suite runs while PATH is broken (spawnSync itself blocks the
+// event loop, and nothing here awaits mid-check).
+check("ADVERSARIAL git() reports a spawn failure instead of silently returning empty output", () => {
+  const savedPath = process.env.PATH;
+  try {
+    process.env.PATH = "";
+    const r = git(os.tmpdir(), ["--version"]);
+    assert(r.spawnFailed === true, `expected spawnFailed:true, got: ${JSON.stringify(r)}`);
+    assert(r.ok === false, "a spawn failure must never read as ok");
+    assert(r.err && r.err.length > 0, "expected a non-empty error message describing the spawn failure");
+  } finally {
+    process.env.PATH = savedPath;
+  }
+});
+check("ADVERSARIAL isClean fails closed on a broken git rather than reporting a clean tree", () => {
+  const dir = gitRepoWith({ "a.txt": "x\n" });
+  const savedPath = process.env.PATH;
+  try {
+    process.env.PATH = "";
+    assert(isClean(dir) === false, "a git spawn failure must never be reported as a clean tree");
+  } finally {
+    process.env.PATH = savedPath;
+  }
+});
+check("ADVERSARIAL changedPaths throws rather than reporting an empty diff on a broken git", () => {
+  const dir = gitRepoWith({ "a.txt": "x\n" });
+  const savedPath = process.env.PATH;
+  try {
+    process.env.PATH = "";
+    let threw = null;
+    try { changedPaths(dir); } catch (e) { threw = e; }
+    process.env.PATH = savedPath; // restore before any assert can throw and skip it
+    assert(threw && /git status failed/.test(threw.message),
+      `expected a "git status failed" throw, got: ${threw ? threw.message : "(no throw)"}`);
+  } finally {
+    process.env.PATH = savedPath;
+  }
 });
 
 // ------------------------------------------- things the last audit found bare

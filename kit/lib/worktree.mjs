@@ -22,11 +22,21 @@ export function git(cwd, args, opts = {}) {
     ...spawnOpts,
   });
   const stdout = r.stdout || "";
+  // `r.error` is spawnSync's own failure — git not on PATH (ENOENT), the
+  // process killed by a signal, or `maxBuffer` exceeded — as opposed to git
+  // running to completion and exiting non-zero. It used to be dropped
+  // entirely, so every one of those made `out` "" exactly like a genuinely
+  // empty, successful result: isClean() read a failed spawn as "the tree is
+  // clean" and changedPaths() read one as "nothing changed", both fail-OPEN
+  // in the direction that matters (merging into dirty work; telling a model
+  // its correct changes don't exist).
+  const spawnFailed = Boolean(r.error);
   return {
     code: r.status ?? -1,
     out: raw ? stdout : stdout.trim(),
-    err: (r.stderr || "").trim(),
-    ok: r.status === 0,
+    err: spawnFailed ? r.error.message : (r.stderr || "").trim(),
+    ok: r.status === 0 && !spawnFailed,
+    spawnFailed,
   };
 }
 
@@ -43,7 +53,13 @@ export function repoRoot(from = process.cwd()) {
 }
 
 export function isClean(root) {
-  return git(root, ["status", "--porcelain"]).out === "";
+  const r = git(root, ["status", "--porcelain"]);
+  // Fail closed: every caller of isClean() treats `false` as the safe
+  // answer (runner.mjs refuses to start; `trellis doctor` reports a
+  // problem), so a git status we could not even run must never read as
+  // "clean" by falling through to the empty-string default below.
+  if (r.spawnFailed) return false;
+  return r.out === "";
 }
 
 export function currentBranch(root) {
@@ -71,7 +87,15 @@ export function branchName(nodeId) {
  * untracked records ("??") have no leading space.
  */
 export function changedPaths(wt) {
-  const out = git(wt, ["status", "--porcelain=v1", "-z", "--untracked-files=all"], { raw: true }).out;
+  const r = git(wt, ["status", "--porcelain=v1", "-z", "--untracked-files=all"], { raw: true });
+  // Unlike isClean(), there is no single safe default here: an empty array
+  // reads as "no-op" to gate.mjs's caller, which is exactly backwards when
+  // the real answer is "unknown" -- a worker that just wrote a correct
+  // implementation would be told its changes don't exist. Throw instead, so
+  // a broken git status surfaces as a loud, attributable failure on the one
+  // node that hit it rather than a silent, indistinguishable no-op verdict.
+  if (r.spawnFailed) throw new Error(`git status failed in ${wt}: ${r.err}`);
+  const out = r.out;
   if (!out) return [];
   const parts = out.split("\0").filter(Boolean);
   const files = [];
@@ -106,13 +130,19 @@ export function changedPaths(wt) {
  * where, never to revert it — reverting node_modules would be its own outage.
  */
 export function ignoredPaths(wt) {
-  const out = git(
+  const r = git(
     wt,
     // --untracked-files must be on: ignored files ARE untracked, so `-uno`
     // suppresses the very entries this function exists to surface.
     ["status", "--porcelain=v1", "-z", "--ignored=traditional", "--untracked-files=normal"],
     { raw: true }
-  ).out;
+  );
+  // Same reasoning as changedPaths(): this function exists specifically to
+  // catch a write into a path the first layer of screening was talked into
+  // allowing, so a git failure silently read as "nothing ignored" would
+  // defeat exactly the case it is the second layer against.
+  if (r.spawnFailed) throw new Error(`git status --ignored failed in ${wt}: ${r.err}`);
+  const out = r.out;
   if (!out) return [];
   const files = [];
   for (const entry of out.split("\0").filter(Boolean)) {
