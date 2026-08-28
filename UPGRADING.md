@@ -1,3 +1,31 @@
+# Upgrading to 2.7.3: `trellis run` now requires verify-tests
+
+**Real behaviour break.** `verify.requirePrecondition` defaults to `true`. `trellis
+run` now refuses to start if any node with tests has never been proven non-vacuous
+by `trellis verify-tests`, or if its tests changed since the last time they were
+proven. Previously `verify-tests` was an optional command an operator had to
+remember to run — nothing stopped a node with vacuous or unchecked tests from
+running for real money.
+
+**What breaks:** any existing project's `trellis run` that has not first run
+`trellis verify-tests` (or ran it before this upgrade, before `.trellis/verified.json`
+existed) will die with a list of nodes needing verification.
+
+**Fix, in order of preference:**
+
+1. Run `node kit/bin/cli.mjs verify-tests` once — it writes `.trellis/verified.json`
+   and `run` proceeds normally from then on. Re-run it whenever a node's frozen
+   tests change; `run` will tell you exactly which node needs it.
+2. Pass `--skip-verify` to `trellis run` to bypass the check for a single invocation
+   without touching config.
+3. Set `verify.requirePrecondition: false` in `trellis.config.json` to restore the
+   old behaviour (verify-tests as a fully optional command) project-wide.
+
+`.trellis/verified.json` is new, generated state — safe to delete or `.gitignore`
+like the rest of `.trellis/*.json` besides `graph.json`.
+
+---
+
 # Upgrading from 1.1.2 to 2.0.0
 
 This is a major version because the workspace layout changed. Existing `.trellis/`

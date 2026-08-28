@@ -222,6 +222,11 @@ export function buildStub(names, { cjs = false } = {}) {
  */
 export async function verifyTests(cfg, graph, nodes, root, { log = () => {} } = {}) {
   const findings = [];
+  // Node ids that reached the genuine non-vacuous success path below, for
+  // callers that persist "this node's tests were proven, at this content"
+  // as a precondition for a later `trellis run` rather than treating
+  // verify-tests as advisory.
+  const proven = [];
 
   for (const node of nodes.values()) {
     const tests = node.tests || [];
@@ -349,6 +354,7 @@ export async function verifyTests(cfg, graph, nodes, root, { log = () => {} } = 
           });
         } else {
           log(node.id, "non-vacuous");
+          proven.push(node.id);
         }
       }
     } finally {
@@ -360,7 +366,7 @@ export async function verifyTests(cfg, graph, nodes, root, { log = () => {} } = 
   // language this cannot check has not been shown to be untrustworthy, only
   // unverified — the same standing as no-tests. Callers that need to know how
   // much was actually proven read SOFT_FINDINGS out of `findings`.
-  return { ok: findings.filter((f) => !SOFT_FINDINGS.has(f.kind)).length === 0, findings };
+  return { ok: findings.filter((f) => !SOFT_FINDINGS.has(f.kind)).length === 0, findings, proven };
 }
 
 /** Findings that report a limit of this check rather than a defect in a test. */

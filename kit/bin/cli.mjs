@@ -228,7 +228,7 @@ async function cmdVerifyTests() {
   log.info(log.dim("syntax, then: does the gate FAIL against a stub whose exports all return null?"));
   log.info("");
 
-  const { ok, findings } = await verifyTests(cfg, graph, nodes, root, {
+  const { ok, findings, proven: provenIds } = await verifyTests(cfg, graph, nodes, root, {
     log: (id, msg) => log.node(id, log.green(msg)),
   });
 
@@ -262,6 +262,23 @@ async function cmdVerifyTests() {
     log.ok("Every gate rejects a null stub. Tests are non-vacuous.");
   }
   log.info(log.dim("Mutation checks run automatically after each node passes during `run`."));
+
+  // Every genuinely-proven node's evidence, keyed by a digest of what its
+  // frozen tests actually SAY (state.mjs's own testsDigest — content, not
+  // just paths). `trellis run` reads this back and refuses to start if a
+  // node's tests changed since they were last proven non-vacuous here,
+  // which is the whole point of calling this a precondition rather than an
+  // optional command an operator has to remember to run.
+  const verifiedPath = path.join(root, cfg.paths.state, "verified.json");
+  const prior = readJsonOrNull(verifiedPath) ?? {};
+  const record = { ...prior };
+  for (const id of provenIds) {
+    const node = nodes.get(id);
+    record[id] = { hash: st.testsDigest(root, node), at: new Date().toISOString() };
+  }
+  fs.mkdirSync(path.dirname(verifiedPath), { recursive: true });
+  fs.writeFileSync(verifiedPath, JSON.stringify(record, null, 2) + "\n");
+
   return 0;
 }
 
@@ -405,6 +422,30 @@ function resumeOrInit(root, cfg, graph, { resume = false, retryFailed = false } 
   return st.initState(root, cfg, graph, { runId: cycleIdFor(root, cfg) });
 }
 
+/**
+ * `trellis run` used to let `verify-tests` be an optional command an
+ * operator had to remember to run separately — nothing stopped a node
+ * whose frozen tests were vacuous, or simply never checked, from running
+ * for real money. `verified.json` (written by `trellis verify-tests`, see
+ * cmdVerifyTests) records a content digest of each proven node's tests;
+ * this refuses to start if a node's CURRENT tests don't match what was
+ * last proven, which covers both "never verified" and "verified once,
+ * then quietly weakened" in the same check.
+ */
+function checkVerifiedPrecondition(root, cfg, graph) {
+  const verified = readJsonOrNull(path.join(root, cfg.paths.state, "verified.json")) ?? {};
+  const problems = [];
+  for (const n of graph.nodes) {
+    if (!(n.tests || []).length) continue; // no-tests is a separate, already-reported concern
+    const node = normalizeNode(n, cfg);
+    const current = st.testsDigest(root, node);
+    const record = verified[n.id];
+    if (!record) problems.push(`${n.id}: never verified — run \`trellis verify-tests\` first`);
+    else if (record.hash !== current) problems.push(`${n.id}: tests changed since last verified (${record.at})`);
+  }
+  return problems;
+}
+
 async function cmdRun() {
   const { root, cfg } = ctx();
   const graph = loadGraph(root, flagVal("graph") || cfg.paths.graph);
@@ -412,6 +453,18 @@ async function cmdRun() {
   if (errors.length) {
     for (const e of errors) log.fail(e);
     die("Graph is invalid. Nothing was run.");
+  }
+
+  if ((cfg.verify?.requirePrecondition ?? true) && !flags.has("--skip-verify")) {
+    const problems = checkVerifiedPrecondition(root, cfg, graph);
+    if (problems.length) {
+      die(
+        `${problems.length} node(s) are not proven non-vacuous against their current tests:\n` +
+        problems.map((p) => `  - ${p}`).join("\n") +
+        `\n\nRun \`node kit/bin/cli.mjs verify-tests\` first. To run once anyway, pass --skip-verify. ` +
+        `To turn this precondition off entirely, set verify.requirePrecondition: false in trellis.config.json.`
+      );
+    }
   }
 
   const conc = flagInt("concurrency");

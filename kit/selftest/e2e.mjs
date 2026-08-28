@@ -758,6 +758,76 @@ if (other !== 1) throw new Error("nope");
   });
   fs.rmSync(unverifRoot, { recursive: true, force: true });
 
+  // ---- ADVERSARIAL: `trellis run` refuses to start until tests are proven ----
+  //
+  // Finding 06 / item 6: verify-tests used to be an optional command an
+  // operator had to remember to run separately. `trellis run` now refuses
+  // to start at all if a node's frozen tests were never proven non-vacuous,
+  // or were proven and then changed -- both read the same way: the CURRENT
+  // tests do not match what verify-tests last certified.
+  const preRoot = makeRepo();
+  write(preRoot, ".gitignore", [".trellis/state.json", ".trellis/run.jsonl",
+    ".trellis/ledger.jsonl", ".trellis/REPORT.md", ".trellis/verified.json", ".trellis/cycle.json",
+    ".worktrees/"].join("\n") + "\n");
+  write(preRoot, "tests/pre.test.mjs",
+    "import assert from 'node:assert';\nimport { pre } from '../src/pre.mjs';\nassert.strictEqual(pre(), 1);\n");
+  write(preRoot, ".trellis/graph.json", JSON.stringify({
+    version: 1, project: "precondition",
+    nodes: [{ id: "pre", title: "pre", goal: "export pre()", write: ["src/pre.mjs"],
+      tests: ["tests/pre.test.mjs"], gate: "node tests/pre.test.mjs" }],
+  }, null, 2));
+  write(preRoot, "trellis.config.json", JSON.stringify({
+    project: "precondition", baseBranch: "main",
+    tiers: [{ name: "cheap", baseUrl: "http://127.0.0.1:1", model: "m", apiKeyEnv: null, maxAttempts: 1 }],
+    gate: { timeoutMs: 5000 },
+  }, null, 2));
+  g(preRoot, "add", "-A"); g(preRoot, "commit", "-qm", "fixture");
+
+  const preBefore = spawnSync("node", [CLI, "run"], { cwd: preRoot, encoding: "utf8" });
+  check("ADVERSARIAL run refuses to start before verify-tests has ever proven this node", () => {
+    assert.notStrictEqual(preBefore.status, 0, "run should have refused, not started");
+    assert.match(preBefore.stdout + preBefore.stderr, /never verified/);
+    assert.ok(!fs.existsSync(path.join(preRoot, ".trellis", "state.json")),
+      "no run should have started at all -- state.json must not exist");
+  });
+
+  const preVerify = spawnSync("node", [CLI, "verify-tests"], { cwd: preRoot, encoding: "utf8" });
+  check("ADVERSARIAL verify-tests writes a verified record run can check against", () => {
+    assert.strictEqual(preVerify.status, 0, `verify-tests should have passed: ${preVerify.stdout}${preVerify.stderr}`);
+    const verified = JSON.parse(fs.readFileSync(path.join(preRoot, ".trellis", "verified.json"), "utf8"));
+    assert.ok(verified.pre?.hash, `expected a hash recorded for "pre", got: ${JSON.stringify(verified)}`);
+  });
+
+  const preAfter = spawnSync("node", [CLI, "run"], { cwd: preRoot, encoding: "utf8" });
+  check("ADVERSARIAL run no longer refuses on the precondition once verify-tests has run", () => {
+    // The run may still fail for an unrelated reason (the tier points at a
+    // dead port on purpose, to keep this fixture self-contained) -- the only
+    // thing this proves is that the PRECONDITION specifically is satisfied.
+    assert.ok(!/never verified/.test(preAfter.stdout + preAfter.stderr),
+      `the precondition should be satisfied now: ${preAfter.stdout}${preAfter.stderr}`);
+    assert.ok(fs.existsSync(path.join(preRoot, ".trellis", "state.json")),
+      "a run should have actually started this time");
+  });
+
+  // Editing the test after verification must re-trip the precondition --
+  // "verified once" must not mean "verified forever".
+  write(preRoot, "tests/pre.test.mjs",
+    "import assert from 'node:assert';\nimport { pre } from '../src/pre.mjs';\nassert.strictEqual(pre(), 2);\n");
+  fs.rmSync(path.join(preRoot, ".trellis", "state.json"), { force: true });
+  g(preRoot, "add", "-A"); g(preRoot, "commit", "-qm", "edit verified test");
+  const preStale = spawnSync("node", [CLI, "run"], { cwd: preRoot, encoding: "utf8" });
+  check("ADVERSARIAL editing a verified test re-trips the precondition", () => {
+    assert.notStrictEqual(preStale.status, 0, "run should refuse once the verified test file changed");
+    assert.match(preStale.stdout + preStale.stderr, /tests changed since last verified/);
+  });
+
+  check("ADVERSARIAL --skip-verify bypasses the precondition for one run", () => {
+    const skip = spawnSync("node", [CLI, "run", "--skip-verify"], { cwd: preRoot, encoding: "utf8" });
+    assert.ok(!/tests changed since last verified/.test(skip.stdout + skip.stderr),
+      `--skip-verify should have bypassed the precondition: ${skip.stdout}${skip.stderr}`);
+  });
+  fs.rmSync(preRoot, { recursive: true, force: true });
+
   // ---- auto driver, build stage ----
   //
   // `trellis auto` chains sessions headless. Every stage but 05_build spawns a
@@ -986,7 +1056,9 @@ assert.strictEqual(b(), 1);
     tiers: [{ name: "cheap", baseUrl: rMock.url, model: "mock/cheap", maxAttempts: 1 }],
     gate: { timeoutMs: 20000 },
     routing: { enabled: false },
-    verify: { mutationsOnPass: false },
+    // This fixture tests resume/salvage behavior, not the verify-tests
+    // precondition -- opting out avoids coupling an unrelated test to it.
+    verify: { mutationsOnPass: false, requirePrecondition: false },
     budget: { maxTotalAttempts: null, maxWorkerTokens: null, maxWallClockMs: null, maxCostUsd: null },
     boundaries: { denyWrite: [".git/**", ".trellis/**", "trellis.config.json"] },
   }, null, 2));
@@ -1163,6 +1235,10 @@ assert.strictEqual(b(), 1);
     project: "landeddirty", baseBranch: "main",
     paths: { state: ".trellis", worktrees: ".worktrees", graph: ".trellis/graph.json" },
     tiers: [{ name: "cheap", baseUrl: "http://127.0.0.1:1", model: "m", apiKeyEnv: null, maxAttempts: 1, maxTokens: 100 }],
+    // This fixture tests the resumePlan landed-node guard, not the
+    // verify-tests precondition -- opting out avoids coupling an unrelated
+    // test to it.
+    verify: { requirePrecondition: false },
   }));
   write(ldRoot, "tests/landed.test.mjs", "assert.strictEqual(1, 1);\n");
   write(ldRoot, ".trellis/graph.json", JSON.stringify({

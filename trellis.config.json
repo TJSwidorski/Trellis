@@ -26,9 +26,10 @@
   },
 
   "verify": {
-    "$comment": "mutationsOnPass runs each node's declared mutations against the accepted code. onSurvivor: 'warn' merges and flags; 'hold' keeps it unmerged.",
+    "$comment": "mutationsOnPass runs each node's declared mutations against the accepted code. onSurvivor: 'warn' merges and flags; 'hold' keeps it unmerged. requirePrecondition makes `trellis run` refuse to start if any node's frozen tests changed since `trellis verify-tests` last proved them non-vacuous against a null stub — set false to restore the old behavior (verify-tests as an optional command), or pass --skip-verify to run once without changing the config.",
     "mutationsOnPass": true,
-    "onSurvivor": "warn"
+    "onSurvivor": "warn",
+    "requirePrecondition": true
   },
 
   "driver": {
