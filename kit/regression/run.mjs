@@ -2446,7 +2446,33 @@ checkAsync("ADVERSARIAL checkMutations reports its provider spend through onCall
   }
 });
 
-checkAsync("ADVERSARIAL Budget.record actually counts a mutation check's spend", async () => {
+check("Budget keeps worker attempts and oracle calls in separate counters", () => {
+  const cfg = { tiers: [{ name: "cheap", costPer1kInput: 1, costPer1kOutput: 1 }], budget: { maxTotalAttempts: 2 } };
+  const budget = new Budget(cfg);
+  budget.record({ tier: "cheap", usage: { prompt_tokens: 10, completion_tokens: 10 } });
+  budget.recordOracleCall({ tier: "cheap", usage: { prompt_tokens: 10, completion_tokens: 10 } });
+  budget.recordOracleCall({ tier: "cheap", usage: { prompt_tokens: 10, completion_tokens: 10 } });
+  assert(budget.attempts === 1, `expected 1 worker attempt, got ${budget.attempts}`);
+  assert(budget.oracleCalls === 2, `expected 2 oracle calls, got ${budget.oracleCalls}`);
+  // Two oracle calls alone must never trip a ceiling of 2 worker attempts.
+  assert(budget.check() === null, `oracle calls must not count toward maxTotalAttempts, got breach: ${budget.check()}`);
+  const snap = budget.snapshot();
+  assert(snap.attempts === 1 && snap.oracleCalls === 2, `snapshot must expose both counters separately: ${JSON.stringify(snap)}`);
+  // Cost/token totals ARE shared -- both kinds of call spend real money.
+  assert(snap.promptTokens === 30 && snap.completionTokens === 30,
+    `token totals must include both attempts and oracle calls: ${JSON.stringify(snap)}`);
+});
+
+checkAsync("ADVERSARIAL Budget.recordOracleCall counts a mutation check's spend without tripping the attempt ceiling", async () => {
+  // A mutation call spends real tokens (checkMutations calls the same
+  // provider a worker attempt does) but is not a worker retrying the node --
+  // it is the oracle grading a gate that already passed. It must still be
+  // counted for token/cost totals; it must NOT count against
+  // maxTotalAttempts, which budget.mjs's own docblock describes as the brake
+  // on a node retrying forever. Before this split, a graph of 25 nodes
+  // declaring 3 mutations each spent 75 of a 120-attempt ceiling on scoring
+  // work alone, tripping that brake on graphs that were never actually
+  // looping.
   const dir = gitRepoWith({ "src/clamp.mjs": "export const clamp = (n) => (n < 0 ? 0 : n > 10 ? 10 : n);\n" });
   const mock = await startMockServer({
     mutants: {
@@ -2465,8 +2491,9 @@ checkAsync("ADVERSARIAL Budget.record actually counts a mutation check's spend",
     mutations: ["upper bound is exclusive"] };
   const budget = new Budget(cfg);
   try {
-    await checkMutations(cfg, node, dir, dir, { onCall: (a) => budget.record(a) });
-    assert(budget.attempts === 1, `expected the mutation call counted toward the attempt ceiling, got ${budget.attempts}`);
+    await checkMutations(cfg, node, dir, dir, { onCall: (a) => budget.recordOracleCall(a) });
+    assert(budget.attempts === 0, `a mutation call must not count toward the worker attempt ceiling, got ${budget.attempts}`);
+    assert(budget.oracleCalls === 1, `expected the mutation call counted as an oracle call, got ${budget.oracleCalls}`);
     assert(budget.costUsd > 0, `expected the mutation call's cost to be recorded, got ${budget.costUsd}`);
   } finally {
     await mock.close();

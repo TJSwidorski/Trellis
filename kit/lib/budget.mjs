@@ -26,6 +26,16 @@ export class Budget {
 
     this.startedAt = Date.now();
     this.attempts = 0;
+    // Mutation-check calls (kit/lib/mutate.mjs) spend real tokens and money
+    // through this exact same accounting, but they are not a worker retrying
+    // a node -- they are the oracle grading an already-passed gate. Counted
+    // here, separately, so they show up in a snapshot without silently
+    // tripping `maxTotalAttempts`, which this class's own docblock describes
+    // as the brake on a node retrying forever. Before this split, a graph of
+    // 25 nodes declaring 3 mutations each spent 75 of a 120-attempt ceiling
+    // on scoring work, tripping the "runs forever" brake roughly a third
+    // early on graphs that were never actually looping.
+    this.oracleCalls = 0;
     this.promptTokens = 0;
     this.completionTokens = 0;
     this.costUsd = 0;
@@ -35,11 +45,23 @@ export class Budget {
 
   record(attempt) {
     this.attempts++;
-    const p = attempt.usage?.prompt_tokens || 0;
-    const c = attempt.usage?.completion_tokens || 0;
+    this._accrue(attempt);
+  }
+
+  /** Same token/cost accounting as record(), without counting against the
+   * worker-retry attempt ceiling. See the constructor's comment on
+   * `oracleCalls` for why these are kept separate. */
+  recordOracleCall(call) {
+    this.oracleCalls++;
+    this._accrue(call);
+  }
+
+  _accrue({ tier, usage }) {
+    const p = usage?.prompt_tokens || 0;
+    const c = usage?.completion_tokens || 0;
     this.promptTokens += p;
     this.completionTokens += c;
-    const rate = this.costByTier.get(attempt.tier);
+    const rate = this.costByTier.get(tier);
     if (rate) {
       this.costUsd += (p / 1000) * (rate.in ?? 0) + (c / 1000) * (rate.out ?? 0);
     }
@@ -64,6 +86,7 @@ export class Budget {
   snapshot() {
     return {
       attempts: this.attempts,
+      oracleCalls: this.oracleCalls,
       promptTokens: this.promptTokens,
       completionTokens: this.completionTokens,
       costUsd: this.costKnown ? Number(this.costUsd.toFixed(6)) : null,

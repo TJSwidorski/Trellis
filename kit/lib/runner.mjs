@@ -141,7 +141,9 @@ export async function run(cfg, graph, state, { dryRun = false, only = null, hist
             log.node(id, survived
               ? log.red(`mutant SURVIVED: ${mutation.slice(0, 70)}`)
               : log.dim(`mutant killed: ${mutation.slice(0, 60)}`)),
-          onCall: (a) => budget.record(a),
+          // Mutation calls spend real tokens but are not a worker retrying
+          // the node — see budget.mjs's constructor comment on oracleCalls.
+          onCall: (a) => budget.recordOracleCall(a),
         });
         state.nodes[id].survivingMutations = mut.survivors;
         state.nodes[id].mutationsChecked = mut.checked;
