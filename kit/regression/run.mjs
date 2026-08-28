@@ -3161,8 +3161,47 @@ if (process.platform === "win32") {
 
     fs.rmSync(parent, { recursive: true, force: true });
   });
+
+  checkAsync("ADVERSARIAL runSession's timeout kills the whole session tree, not just the .cmd shim wrapping it", async () => {
+    // The identical bug gate.mjs's exec() had (see units.mjs's tree-kill
+    // test): shell:true on Windows makes `child` the cmd.exe wrapping the
+    // real session, so a plain kill only ever reaches that wrapper. A
+    // grandchild the session itself spawned -- inheriting cmd.exe's stdio
+    // pipes -- would otherwise survive indefinitely, exactly as a wedged
+    // real Claude Code session's own subprocess would.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-driver-treekill-"));
+    const helperPath = path.join(dir, "wedged-session.mjs");
+    fs.writeFileSync(helperPath, `
+import { spawn } from "node:child_process";
+// Inherits this process's stdio -- the pipes runSession reads via
+// child.stdout/child.stderr -- and never exits on its own.
+const child = spawn(process.execPath, ["-e", "setInterval(()=>{},1000)"], { stdio: "inherit" });
+child.unref();
+setInterval(() => {}, 1000);
+`.trim() + "\n");
+    const cmdPath = path.join(dir, "wedged-driver.cmd");
+    fs.writeFileSync(cmdPath, `@echo off\r\nnode "${helperPath}"\r\n`);
+
+    const stage = { id: "02_slice", prompt: "irrelevant — this fake driver never reads its argv" };
+    const cfg = { driver: { command: cmdPath, maxTurns: 5, sessionTimeoutMs: 500 } };
+
+    const guard = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("runSession did not settle within 8s of a 500ms sessionTimeoutMs")), 8000)
+    );
+    const result = await Promise.race([runSession(dir, stage, cfg), guard]);
+    assert(result.timedOut === true, `expected timedOut:true, got: ${JSON.stringify(result)}`);
+
+    let lastErr = null;
+    for (let i = 0; i < 10; i++) {
+      try { fs.rmSync(dir, { recursive: true, force: true }); lastErr = null; break; }
+      catch (e) { lastErr = e; await new Promise((r) => setTimeout(r, 300)); }
+    }
+    assert(lastErr === null,
+      `the session directory could not be removed after ~3s of retries -- a descendant of the ` +
+      `"killed" session is still alive and holding it open: ${lastErr?.message}`);
+  });
 } else {
-  console.log("  (skipping the Windows .cmd-shim spawn check — not applicable on this platform)");
+  console.log("  (skipping the Windows .cmd-shim spawn checks — not applicable on this platform)");
 }
 
 // -------------------------------------------------------------------- report

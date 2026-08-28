@@ -26,6 +26,7 @@ import * as friction from "./friction.mjs";
 import * as evolve from "./evolve.mjs";
 import * as ledger from "./ledger.mjs";
 import { currentCycle } from "./cycle.mjs";
+import { killTree, DETACH_FOR_TREE_KILL } from "./proc.mjs";
 
 // --------------------------------------------------------------- stage table
 
@@ -595,6 +596,16 @@ export function runSession(root, stage, cfg) {
         env: { ...process.env, TRELLIS_STAGE: stage.id },
         stdio: ["ignore", "pipe", "pipe"],
         shell: IS_WINDOWS,
+        // See killTree's docblock in proc.mjs: on Windows, `shell:true` above
+        // makes `child` the cmd.exe wrapping the actual session, and a plain
+        // kill of just that process orphans the session underneath it,
+        // holding these very stdio pipes open forever. `detached` is a
+        // POSIX-only flag (a harmless no-op key on Windows) that lets
+        // killTree signal the whole process group there instead of just one
+        // process — on POSIX there's no shell in the way today, so this is
+        // pure hardening against a claude-code invocation that spawns its
+        // own children, not a currently-confirmed live bug on that platform.
+        detached: DETACH_FOR_TREE_KILL,
       });
     } catch (e) {
       // A synchronous throw (the pre-shell:true EINVAL case, and anything
@@ -611,7 +622,16 @@ export function runSession(root, stage, cfg) {
     child.stdout.on("data", (d) => (out += d));
     child.stderr.on("data", (d) => (err += d));
 
-    const killer = setTimeout(() => child.kill("SIGTERM"), cfg.driver.sessionTimeoutMs);
+    // A plain SIGTERM used to be the whole timeout mechanism: on Windows this
+    // signals only the cmd.exe wrapper (see the spawn options above), and even
+    // where it does reach the real process directly (POSIX today), SIGTERM is
+    // a request the target can ignore — exactly the wedged-session case this
+    // timeout exists to end. killTree() forces the issue: SIGKILL on the whole
+    // process group on POSIX, `taskkill /T /F` walking the real process tree
+    // on Windows. gate.mjs's exec() reaches the identical conclusion for the
+    // identical reason.
+    let timedOut = false;
+    const killer = setTimeout(() => { timedOut = true; killTree(child); }, cfg.driver.sessionTimeoutMs);
 
     child.on("error", (e) =>
       resolve({ exitCode: -1, costUsd: 0, raw: "", stderr: String(e.message), spawnFailed: true })
@@ -623,6 +643,7 @@ export function runSession(root, stage, cfg) {
       try { parsed = JSON.parse(out); } catch { /* text before json, or truncated */ }
       resolve({
         exitCode: code,
+        timedOut,
         costUsd: parsed?.total_cost_usd ?? parsed?.cost?.total_cost ?? 0,
         sessionId: parsed?.session_id ?? null,
         durationMs: parsed?.duration_ms ?? null,

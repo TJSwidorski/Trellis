@@ -1098,6 +1098,7 @@ async function runStageChain(root, cfg, stages) {
         cycle: currentCycle(root, cfg)?.cycle ?? null,
         attempt,
         exitCode: result.exitCode,
+        timedOut: result.timedOut ?? false,
         costUsd: result.costUsd,
         sessionId: result.sessionId ?? null,
         durationMs: result.durationMs ?? null,

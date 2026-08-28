@@ -11,7 +11,9 @@ import { tierStats, recordsFor, summarise } from "../lib/ledger.mjs";
 import { scopeBullets } from "../lib/spec.mjs";
 import { detectEnvFailure } from "../lib/envfail.mjs";
 import { chat, readCapped } from "../lib/provider.mjs";
+import { exec } from "../lib/gate.mjs";
 import http from "node:http";
+import { pathToFileURL } from "node:url";
 import { meterSession, summariseArm, compare } from "../bench/meter.mjs";
 import * as ledger from "../lib/ledger.mjs";
 import * as st from "../lib/state.mjs";
@@ -444,6 +446,67 @@ checkAsync("readCapped stops reading and throws once a response exceeds the byte
     "expected the size-cap ProviderError"
   );
   assert.ok(chunksSent < 1000, `expected readCapped to stop within a few chunks of the 100-byte cap, sent ${chunksSent}`);
+});
+
+// ---------- unit: gate.mjs's exec() kills the whole process tree, not just the shell ----------
+//
+// exec() spawns with shell:true, so the process it gets a handle to is the
+// SHELL wrapping the gate command, not the command itself. A command that
+// spawns its own subprocess (npm -> node, a test runner -> a worker
+// process) leaves a grandchild that a plain child.kill() cannot reach --
+// and since that grandchild inherits the shell's stdio pipes, Node's
+// 'close' event (which waits for the process to exit AND its stdio streams
+// to close) never fires while it survives. Guarded with an external timeout
+// so a regression here fails fast instead of hanging the whole suite.
+checkAsync("ADVERSARIAL exec() reaps a grandchild the gate command spawned, not just its own top-level process", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-treekill-"));
+  const scriptPath = path.join(dir, "spawn-grandchild.mjs");
+  fs.writeFileSync(scriptPath, `
+import { spawn } from "node:child_process";
+// No cwd override: this inherits the outer script's own working directory,
+// which is exec()'s worktree -- so a surviving grandchild keeps that exact
+// directory in use for as long as it lives. It also inherits THIS
+// process's stdio, the very pipes exec() reads via child.stdout/stderr; as
+// long as it survives, killing only the process it descends from cannot
+// make 'close' fire.
+const child = spawn(process.execPath, ["-e", "setInterval(()=>{},1000)"], { stdio: "inherit" });
+child.unref();
+setInterval(() => {}, 1000);
+`.trim() + "\n");
+  const scriptUrl = pathToFileURL(scriptPath).href;
+
+  // Confirmed by hand against the pre-fix exec(): on this platform the
+  // manifestation ranged from exec()'s own promise hanging past 30s to
+  // settling promptly while the grandchild kept running regardless --
+  // either way, a real orphan process outlives the "killed" gate command.
+  // Guard against the hang directly, and prove the orphan's absence the
+  // way the OS itself will: a directory a live process still has as its
+  // cwd cannot be deleted, on Windows or POSIX.
+  const guard = new Promise((_, reject) =>
+    setTimeout(
+      () => reject(new Error("exec() did not settle within 8s of a 500ms timeout -- an orphaned grandchild is holding a stdio pipe open")),
+      8000
+    )
+  );
+  const result = await Promise.race([
+    exec(
+      `node -e "import(process.env.TRELLIS_TEST_SCRIPT)"`,
+      dir,
+      500,
+      { ...process.env, TRELLIS_TEST_SCRIPT: scriptUrl }
+    ),
+    guard,
+  ]);
+  assert.strictEqual(result.timedOut, true, `expected exec() to report a timeout, got: ${JSON.stringify(result)}`);
+
+  let lastErr = null;
+  for (let i = 0; i < 10; i++) {
+    try { fs.rmSync(dir, { recursive: true, force: true }); lastErr = null; break; }
+    catch (e) { lastErr = e; await new Promise((r) => setTimeout(r, 300)); }
+  }
+  assert.strictEqual(lastErr, null,
+    `the worktree could not be removed after ~3s of retries -- a descendant of the "killed" gate ` +
+    `command is still alive and holding it open: ${lastErr?.message}`);
 });
 
 await Promise.all(pending);
