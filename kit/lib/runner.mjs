@@ -9,6 +9,7 @@ import * as ledger from "./ledger.mjs";
 import * as st from "./state.mjs";
 import * as log from "./log.mjs";
 import { writeReport } from "./report.mjs";
+import { writeProposal } from "./evolve.mjs";
 
 /**
  * The whole point of Trellis: this loop is deterministic code, not a model's
@@ -154,6 +155,39 @@ export async function run(cfg, graph, state, { dryRun = false, only = null, hist
         if (mut.survivors.length) {
           weak = true;
           log.node(id, log.yellow(`${mut.survivors.length} mutant(s) survived — tests are weak here`));
+
+          // Close the loop: a surviving mutant is evidence the node's frozen
+          // tests are weak, and evidence should not just sit in state.json
+          // for someone to notice by hand. This is a PROPOSAL, never an
+          // auto-committed test — the tests are the specification, and only
+          // a human decides to strengthen one. writeProposal enforces that
+          // itself (targets classify as "unclassified" for an arbitrary
+          // project, forcing tier "load-bearing", which never auto-applies).
+          if (cfg.verify?.proposeOnSurvivor ?? true) {
+            try {
+              const evidence = mut.survivors
+                .map((s) => `- **${s.mutation}**\n  ${s.reason}`)
+                .join("\n");
+              const proposal = writeProposal(root, {
+                kind: "mechanism",
+                title: `Node "${id}": ${mut.survivors.length} surviving mutant(s) mean its tests are weak`,
+                targets: [...(node.tests || []), ...(node.write || [])],
+                rationale:
+                  `The gate passed, which only proves the tests accept THIS implementation — not that ` +
+                  `they would reject a plausible wrong one. Each mutant below is a defect that this ` +
+                  `node's own tests failed to notice.`,
+                evidence,
+                change:
+                  `Strengthen \`${(node.tests || []).join(", ") || "this node's tests"}\` so each defect ` +
+                  `above would make the gate fail. Do not weaken the mutation instead — a mutant that ` +
+                  `survives real, correct code is what this check is FOR.`,
+              });
+              log.event("node.proposal", { id, file: proposal.file });
+            } catch (e) {
+              // Never let evidence-recording break a run that otherwise succeeded.
+              log.node(id, log.dim(`(could not write a proposal for the surviving mutant(s): ${e.message})`));
+            }
+          }
         }
       }
 

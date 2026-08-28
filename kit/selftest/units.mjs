@@ -13,6 +13,7 @@ import { detectEnvFailure } from "../lib/envfail.mjs";
 import { chat, readCapped } from "../lib/provider.mjs";
 import { exec } from "../lib/gate.mjs";
 import { sandboxSupported, wrapForSandbox } from "../lib/sandbox.mjs";
+import { structurallyMutable, generateStructuralMutants } from "../lib/structuralMutants.mjs";
 import http from "node:http";
 import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
@@ -672,6 +673,63 @@ checkAsync("ADVERSARIAL a real ulimit -f gate sandbox kills an oversized write, 
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+check("structurallyMutable is true for JS/TS extensions and false otherwise", () => {
+  assert.strictEqual(structurallyMutable("src/a.mjs"), true);
+  assert.strictEqual(structurallyMutable("src/a.ts"), true);
+  assert.strictEqual(structurallyMutable("src/a.py"), false);
+  assert.strictEqual(structurallyMutable("README.md"), false);
+});
+
+check("generateStructuralMutants flips one occurrence per mutant, leaving the rest of the source untouched", () => {
+  const source = "export const clamp = (n) => (n < 0 ? 0 : n > 10 ? 10 : n);";
+  const mutants = generateStructuralMutants(source);
+  assert.ok(mutants.length >= 2, `expected at least the < and > flips, got ${mutants.length}`);
+  for (const m of mutants) {
+    const mutated = m.mutate();
+    assert.notStrictEqual(mutated, source, `"${m.description}" produced no change`);
+    // Exactly one substitution: the common prefix and common suffix (found
+    // independently, from each end) must together account for everything
+    // except a short replaced span — a length-changing swap like "<" -> "<="
+    // shifts every character after it, so a naive lockstep char comparison
+    // would wrongly call the entire remainder "changed".
+    let prefix = 0;
+    while (prefix < mutated.length && prefix < source.length && mutated[prefix] === source[prefix]) prefix++;
+    let suffix = 0;
+    while (
+      suffix < mutated.length - prefix && suffix < source.length - prefix &&
+      mutated[mutated.length - 1 - suffix] === source[source.length - 1 - suffix]
+    ) suffix++;
+    const removedSpan = source.length - prefix - suffix;
+    const addedSpan = mutated.length - prefix - suffix;
+    assert.ok(removedSpan <= 3 && addedSpan <= 3,
+      `"${m.description}" changed more than one token: removed ${JSON.stringify(source.slice(prefix, source.length - suffix))}, ` +
+      `added ${JSON.stringify(mutated.slice(prefix, mutated.length - suffix))}`);
+  }
+});
+
+check("generateStructuralMutants does not let === get partially matched by the == flip, or !== by !=", () => {
+  const source = "if (a === b || a !== c) {}";
+  const mutants = generateStructuralMutants(source);
+  const descriptions = mutants.map((m) => m.description);
+  assert.ok(descriptions.some((d) => d.startsWith("=== flipped")), "expected a full === flip");
+  assert.ok(descriptions.some((d) => d.startsWith("!== flipped")), "expected a full !== flip");
+  assert.ok(!descriptions.some((d) => d.startsWith("== flipped") || d.startsWith("!= flipped")),
+    `=== / !== leaked a spurious == / != match: ${JSON.stringify(descriptions)}`);
+  // Every mutant must still be syntactically sane in the one respect this
+  // matters for: === must become exactly !== (three characters), not != or ===!.
+  const eqq = mutants.find((m) => m.description.startsWith("=== flipped"));
+  assert.ok(eqq.mutate().includes("a !== b"), `expected "a !== b", got: ${eqq.mutate()}`);
+});
+
+check("generateStructuralMutants respects the limit and returns nothing over a source with no mutable operators", () => {
+  const source = "export const id = (x) => x;";
+  assert.deepStrictEqual(generateStructuralMutants(source), []);
+
+  const busy = "if (a < b && b < c && c < d) {}";
+  const capped = generateStructuralMutants(busy, { limit: 2 });
+  assert.strictEqual(capped.length, 2);
 });
 
 await Promise.all(pending);

@@ -26,10 +26,13 @@
   },
 
   "verify": {
-    "$comment": "mutationsOnPass runs each node's declared mutations against the accepted code. onSurvivor: 'warn' merges and flags; 'hold' keeps it unmerged. requirePrecondition makes `trellis run` refuse to start if any node's frozen tests changed since `trellis verify-tests` last proved them non-vacuous against a null stub — set false to restore the old behavior (verify-tests as an optional command), or pass --skip-verify to run once without changing the config.",
+    "$comment": "mutationsOnPass runs each node's declared mutations against the accepted code. onSurvivor: 'warn' merges and flags; 'hold' keeps it unmerged. requirePrecondition makes `trellis run` refuse to start if any node's frozen tests changed since `trellis verify-tests` last proved them non-vacuous against a null stub — set false to restore the old behavior (verify-tests as an optional command), or pass --skip-verify to run once without changing the config. structuralMutants runs a mechanical, zero-token sweep of comparison/logical/boolean-literal flips against every node's implementation, in addition to (not instead of) any LLM-authored `mutations` in the graph, capped at structuralMutantLimit per node. proposeOnSurvivor writes a held-for-human proposal under evolution/proposals/ whenever a mutant survives, rather than leaving that evidence sitting only in state.json.",
     "mutationsOnPass": true,
     "onSurvivor": "warn",
-    "requirePrecondition": true
+    "requirePrecondition": true,
+    "structuralMutants": true,
+    "structuralMutantLimit": 8,
+    "proposeOnSurvivor": true
   },
 
   "driver": {
@@ -136,6 +139,7 @@
       ".gitignore",
       "**/.gitignore",
       ".github/workflows/**",
+      "evolution/proposals/**",
 
       "package.json",
       "**/package.json",

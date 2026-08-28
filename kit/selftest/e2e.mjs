@@ -198,7 +198,12 @@ console.log("downstream ok");
     ],
     gate: { timeoutMs: 30000, feedbackChars: 2000 },
     routing: { enabled: false },
-    verify: { mutationsOnPass: true, onSurvivor: "warn" },
+    // structuralMutants: false -- "weak" asserts an exact survivor count and
+    // mutation, and its clamp() has real comparison operators the mechanical
+    // sweep would also flip and survive. That sweep gets its own dedicated
+    // coverage (kit/selftest/units.mjs); this fixture is about the
+    // LLM-authored mutation path specifically.
+    verify: { mutationsOnPass: true, onSurvivor: "warn", structuralMutants: false },
     budget: { maxTotalAttempts: null, maxWorkerTokens: null, maxWallClockMs: null, maxCostUsd: null },
     boundaries: { denyWrite: [".git/**", ".trellis/**", "trellis.config.json"] },
   }, null, 2));
@@ -704,7 +709,58 @@ if (other !== 1) throw new Error("nope");
     assert.strictEqual(reviewEvent.reason, "onSurvivor-hold",
       `expected the event to distinguish this from a high-risk hold, got: ${JSON.stringify(reviewEvent)}`);
   });
+
+  // ---- ADVERSARIAL: closing the mutation loop -- a survivor becomes a held proposal, never an auto-committed test ----
+  check("ADVERSARIAL a surviving mutant writes a proposal under evolution/proposals/, held for a human", () => {
+    const propDir = path.join(holdRoot, "evolution", "proposals");
+    assert.ok(fs.existsSync(propDir), "expected evolution/proposals/ to exist after a surviving mutant");
+    const files = fs.readdirSync(propDir);
+    assert.ok(files.length > 0, "expected at least one proposal file");
+    const text = fs.readFileSync(path.join(propDir, files[0]), "utf8");
+    assert.match(text, /surviving mutant/i);
+    assert.match(text, /upper bound is exclusive/);
+    // Never auto-applied: writeProposal's own tier logic forces "load-bearing"
+    // for an arbitrary project's own files (they classify as "unclassified"),
+    // and that must show up in the artifact a human actually reads.
+    assert.match(text, /only when a human merges it/);
+  });
   fs.rmSync(holdRoot, { recursive: true, force: true });
+
+  // ---- ADVERSARIAL: verify.proposeOnSurvivor: false opts back out ----
+  const noPropRoot = makeRepo();
+  write(noPropRoot, "tests/weak2.test.mjs", "import { clamp } from '../src/weak2.mjs';\nif (clamp(5) !== 5) throw new Error('nope');\n");
+  write(noPropRoot, ".trellis/graph.json", JSON.stringify({
+    version: 1, project: "noprop",
+    nodes: [{ id: "weak2", title: "weak2", goal: "export clamp(n)", write: ["src/weak2.mjs"],
+      tests: ["tests/weak2.test.mjs"], gate: "node tests/weak2.test.mjs",
+      mutations: ["the upper bound is exclusive instead of inclusive"] }],
+  }, null, 2));
+  const noPropMock = await startMockServer({
+    models: ["mock/cheap"],
+    responses: { weak2: [{ content: FILE("src/weak2.mjs", "export const clamp=(n)=>n<0?0:(n>10?10:n);") }] },
+    mutants: { "upper bound is exclusive": FILE("src/weak2.mjs", "export const clamp=(n)=>n<0?0:(n>=10?9:n);") },
+  });
+  write(noPropRoot, "trellis.config.json", JSON.stringify({
+    project: "noprop", baseBranch: "main", concurrency: 1,
+    tiers: [{ name: "cheap", baseUrl: noPropMock.url, model: "mock/cheap", maxAttempts: 1 }],
+    gate: { timeoutMs: 20000 },
+    routing: { enabled: false },
+    verify: { mutationsOnPass: true, onSurvivor: "warn", structuralMutants: false, proposeOnSurvivor: false },
+    boundaries: { denyWrite: [".git/**", ".trellis/**", "trellis.config.json"] },
+  }, null, 2));
+  g(noPropRoot, "add", "-A"); g(noPropRoot, "commit", "-qm", "fixture");
+
+  const noPropCfg = loadConfig(noPropRoot);
+  const noPropGraph = loadGraph(noPropRoot, noPropCfg.paths.graph);
+  const noPropState = st.initState(noPropRoot, noPropCfg, noPropGraph);
+  await run(noPropCfg, noPropGraph, noPropState, {});
+  await noPropMock.close();
+  check("ADVERSARIAL verify.proposeOnSurvivor: false skips writing a proposal", () => {
+    assert.strictEqual(noPropState.nodes.weak2.survivingMutations.length, 1, "the mutant should still survive and be reported");
+    assert.ok(!fs.existsSync(path.join(noPropRoot, "evolution", "proposals")),
+      "proposeOnSurvivor: false must not write anything under evolution/proposals/");
+  });
+  fs.rmSync(noPropRoot, { recursive: true, force: true });
 
   // ---- ADVERSARIAL: a mutation oracle that never ran must not look like a clean pass ----
   //

@@ -34,6 +34,7 @@ import { spawnSync } from "node:child_process";
 import { changedPaths, ignoredPaths, revertPaths, git, isClean, commitWorktree, mergeNode } from "../lib/worktree.mjs";
 import { runGate } from "../lib/gate.mjs";
 import { checkMutations } from "../lib/mutate.mjs";
+import { generateStructuralMutants } from "../lib/structuralMutants.mjs";
 import { Budget } from "../lib/budget.mjs";
 import { writeReport, untrustedBlock } from "../lib/report.mjs";
 import { matchAny, matchDeny, matchAllow, FS_CASE_INSENSITIVE, globsOverlap, safeRelative, readJsonOrNull, parseJsonl } from "../lib/paths.mjs";
@@ -2622,6 +2623,7 @@ checkAsync("ADVERSARIAL checkMutations reports its provider spend through onCall
     gate: { timeoutMs: 20000 },
     worker: { requestTimeoutMs: 5000 },
     paths: { worktrees: ".worktrees", state: ".trellis" },
+    verify: { structuralMutants: false },
   };
   const node = { id: "n01", write: ["src/clamp.mjs"], tests: [], gate: "node --version",
     mutations: ["upper bound is exclusive"] };
@@ -2659,6 +2661,7 @@ checkAsync("ADVERSARIAL checkMutations does not score an environment failure as 
     gate: { timeoutMs: 20000 },
     worker: { requestTimeoutMs: 5000 },
     paths: { worktrees: ".worktrees", state: ".trellis" },
+    verify: { structuralMutants: false },
   };
   const node = { id: "n01", write: ["src/clamp.mjs"], tests: [], gate: "node src/clamp.mjs",
     mutations: ["upper bound is exclusive"] };
@@ -2676,6 +2679,82 @@ checkAsync("ADVERSARIAL checkMutations does not score an environment failure as 
   } finally {
     await mock.close();
   }
+});
+
+// ---------------------------------------------------- structural mutants
+//
+// Item 9: a mechanical, zero-token mutation sweep runs alongside (not
+// instead of) any LLM-authored `mutations` in the graph, so a node scores
+// SOME mutation coverage even when the graph declared none at all.
+
+checkAsync("ADVERSARIAL checkMutations runs structural mutants even when the graph declares no mutations at all", async () => {
+  const dir = gitRepoWith({ "src/clamp.mjs": "export const clamp = (n) => (n < 0 ? 0 : n > 10 ? 10 : n);\n" });
+  const cfg = {
+    tiers: [{ name: "cheap", baseUrl: "http://127.0.0.1:1", model: "mock/cheap" }],
+    boundaries: { denyWrite: [] },
+    gate: { timeoutMs: 20000 },
+    worker: { requestTimeoutMs: 5000 },
+    paths: { worktrees: ".worktrees", state: ".trellis" },
+  };
+  // The test never checks clamp(11) or clamp(-1) against the exact bound --
+  // a "<" -> "<=" or ">" -> ">=" flip changes nothing this gate can see.
+  const node = { id: "n01", write: ["src/clamp.mjs"], tests: [],
+    gate: "node -e \"const {clamp}=require('./src/clamp.mjs'); if (clamp(5)!==5) process.exit(1)\"" };
+  const steps = [];
+  const result = await checkMutations(cfg, node, dir, dir, { onStep: (s) => steps.push(s) });
+  assert(result.checked > 0, `expected the mechanical sweep to check something with no LLM mutations declared, got ${result.checked}`);
+  assert(steps.some((s) => /\[structural\]/.test(s.mutation)), `expected a [structural]-labelled step, got: ${JSON.stringify(steps)}`);
+});
+
+checkAsync("ADVERSARIAL a structural mutant that survives is scored exactly like an LLM-authored one", async () => {
+  const dir = gitRepoWith({ "src/clamp.mjs": "export const clamp = (n) => (n < 0 ? 0 : n);\n" });
+  const cfg = {
+    tiers: [{ name: "cheap" }],
+    boundaries: { denyWrite: [] },
+    gate: { timeoutMs: 20000 },
+    paths: { worktrees: ".worktrees", state: ".trellis" },
+  };
+  const node = {
+    id: "n01", write: ["src/clamp.mjs"], tests: [],
+    // Only ever calls clamp(5) -- the "<" boundary at 0 is never probed, so
+    // flipping it to "<=" cannot change this gate's outcome.
+    gate: `node --input-type=module -e "import {clamp} from './src/clamp.mjs'; if (clamp(5)!==5) process.exit(1)"`,
+  };
+  const result = await checkMutations(cfg, node, dir, dir);
+  assert(result.checked > 0, `expected at least one structural mutant checked, got ${result.checked}`);
+  assert(result.survivors.some((s) => /</.test(s.mutation)),
+    `expected the "<" flip to survive an assertion that never probes n===0, got: ${JSON.stringify(result.survivors)}`);
+});
+
+check("ADVERSARIAL a structural mutant that would not parse never occupies a checked slot", () => {
+  // The syntax-check step must run BEFORE the mutant reaches the gate --
+  // this asserts the property directly against generateStructuralMutants'
+  // contract rather than re-deriving it through a whole checkMutations run:
+  // every returned mutant, once mutated, must still be syntactically valid.
+  const source = "export const f = (a) => a === 1 ? 'x' : 'y';\n";
+  for (const m of generateStructuralMutants(source)) {
+    // node --check needs a real file; string content alone is enough to
+    // confirm this specific operator table never emits a truncated token
+    // (e.g. "===" -> "=!=" instead of "!=="), which is the failure shape a
+    // careless regex would produce.
+    const mutated = m.mutate();
+    assert(/===|!==/.test(mutated) || /true|false/.test(mutated),
+      `mutant "${m.description}" produced unparseable output: ${mutated}`);
+  }
+});
+
+check("ADVERSARIAL verify.structuralMutants: false disables the mechanical sweep entirely", async () => {
+  const dir = gitRepoWith({ "src/clamp.mjs": "export const clamp = (n) => (n < 0 ? 0 : n > 10 ? 10 : n);\n" });
+  const cfg = {
+    tiers: [{ name: "cheap", baseUrl: "http://127.0.0.1:1", model: "mock/cheap" }],
+    boundaries: { denyWrite: [] },
+    gate: { timeoutMs: 20000 },
+    paths: { worktrees: ".worktrees", state: ".trellis" },
+    verify: { structuralMutants: false },
+  };
+  const node = { id: "n01", write: ["src/clamp.mjs"], tests: [], gate: "node --version" };
+  const result = await checkMutations(cfg, node, dir, dir);
+  assert(result.checked === 0, `expected the disabled sweep to check nothing, got ${result.checked}`);
 });
 
 check("Budget keeps worker attempts and oracle calls in separate counters", () => {
@@ -2717,6 +2796,7 @@ checkAsync("ADVERSARIAL Budget.recordOracleCall counts a mutation check's spend 
     gate: { timeoutMs: 20000 },
     worker: { requestTimeoutMs: 5000 },
     paths: { worktrees: ".worktrees", state: ".trellis" },
+    verify: { structuralMutants: false },
     budget: {},
   };
   const node = { id: "n01", write: ["src/clamp.mjs"], tests: [], gate: "node --version",

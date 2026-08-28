@@ -15,7 +15,10 @@ const DEFAULTS = {
   boundaries: { denyWrite: [] },
   budget: { maxTotalAttempts: null, maxWorkerTokens: null, maxWallClockMs: null, maxCostUsd: null },
   routing: { enabled: false, minObservations: 5, minSuccessRate: 0.15 },
-  verify: { mutationsOnPass: true, onSurvivor: "warn", requirePrecondition: true },
+  verify: {
+    mutationsOnPass: true, onSurvivor: "warn", requirePrecondition: true,
+    structuralMutants: true, structuralMutantLimit: 8, proposeOnSurvivor: true,
+  },
   specPath: null,
   paths: { state: ".trellis", worktrees: ".worktrees", graph: ".trellis/graph.json" },
 };
