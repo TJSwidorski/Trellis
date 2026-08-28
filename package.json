@@ -1,6 +1,6 @@
 {
   "name": "trellis-kit",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "private": true,
   "type": "module",
   "description": "Product graph in, working software out. Claude Code orchestrates, open-source models implement, the loop lives in code.",

@@ -10,6 +10,25 @@ under `kit/schema/`) are **not** tracked by this file. They change only on an
 incompatible on-disk format break, documented in `UPGRADING.md`, not on a routine
 release.
 
+## v2.6.0 — a driver that actually launches on Windows
+
+- **`trellis auto` can launch its driver on a Windows install where `claude`
+  is an npm global shim** (`kit/lib/driver.mjs`). `driver.command` is a bare
+  name, and `npm install -g` on Windows resolves that to a `.cmd`/`.ps1`
+  shim trio — Node's CVE-2024-27980 fix refuses to exec a `.cmd` directly
+  without `shell:true`, throwing `EINVAL` *synchronously*, which escaped
+  `runSession`'s un-caught executor entirely and surfaced as a bare crash
+  instead of the intended "Is Claude Code on PATH?" hint. `shell:true` is
+  gated to `win32` and paired with quoting both the command and every arg —
+  Node's own args-are-concatenated-not-escaped warning is real, confirmed
+  here two different ways: an unquoted multi-word prompt arrives torn into
+  several argv entries, and an unquoted command path containing a space (a
+  `Program Files` install, a Windows username with a space in it) fails to
+  launch at all. `kit/bench/run.mjs`'s identical `spawn("claude", ...)` call
+  got the same args-quoting fix.
+
+Regression 190 (was 189), units 28/28, e2e 44/44 (unchanged).
+
 ## v2.5.0 — one command, a whole cycle
 
 Landed the `run-two-fixes` branch (re-reviewed, blockers fixed inline, ported

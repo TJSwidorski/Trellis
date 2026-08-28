@@ -19,7 +19,7 @@ Get-ChildItem -Recurse -Filter package.json | Select-Object -First 1 FullName
 npm test
 ```
 
-You should see three suites pass: `28/28 unit checks`, `188 regression checks`, and
+You should see three suites pass: `28/28 unit checks`, `190 regression checks`, and
 `43/43` end-to-end. (An *installed* copy reports slightly fewer regression checks:
 the ones that verify the installer itself need `setup.mjs`, which the installer
 does not install.) They spin up a fake model server and throwaway git repos and
