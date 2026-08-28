@@ -4,6 +4,7 @@ import os from "node:os";
 import { chatWithBackoff } from "./provider.mjs";
 import { parseBlocks } from "./extract.mjs";
 import { exec, gateEnv } from "./gate.mjs";
+import { detectEnvFailure } from "./envfail.mjs";
 import { copyRepo } from "./verify.mjs";
 import { safeRelative, matchDeny, matchAllow } from "./paths.mjs";
 
@@ -105,6 +106,24 @@ export async function checkMutations(cfg, node, worktree, root, { onStep, onCall
       }
 
       const r = await exec(node.gate, scratch, cfg.gate.timeoutMs, gateEnv(cfg));
+
+      // A missing dependency exits non-zero exactly like a killed mutant —
+      // verify.mjs's own null-stub check already treats this as disqualifying
+      // rather than as proof of anything (see its comment: "a missing
+      // dependency makes every test look strong"), and that reasoning was
+      // never carried over here. Without it, a mutator that emits code with a
+      // stray syntax error, an unbalanced brace, or an import of something
+      // copyRepo's scratch tree does not have produces a non-zero exit for a
+      // reason that has nothing to do with whether the tests discriminate —
+      // scored as "killed" regardless, so a systematically broken mutator (or
+      // environment) reports a perfect, meaningless mutation score forever.
+      const env = r.code !== 0 ? detectEnvFailure(r.output) : null;
+      if (env) {
+        skipped.push(`${mutation} — environment broken, not evaluated: ${env.hint}`);
+        onStep?.({ mutation, envFailure: true });
+        continue;
+      }
+
       checked++;
       if (r.code === 0) {
         survivors.push({

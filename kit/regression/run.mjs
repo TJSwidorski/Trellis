@@ -2638,6 +2638,46 @@ checkAsync("ADVERSARIAL checkMutations reports its provider spend through onCall
   }
 });
 
+checkAsync("ADVERSARIAL checkMutations does not score an environment failure as a killed mutant", async () => {
+  // Finding 03. A mutator's output that fails to even RUN (a missing
+  // dependency, a stray syntax error, an import copyRepo's scratch tree does
+  // not have) exits non-zero exactly like a genuinely killed mutant --
+  // verify.mjs's own null-stub check already treats this as disqualifying
+  // ("a missing dependency makes every test look strong"), but that
+  // reasoning was never carried over here, so a systematically broken
+  // mutator reported a perfect, meaningless mutation score.
+  const dir = gitRepoWith({ "src/clamp.mjs": "export const clamp = (n) => (n < 0 ? 0 : n > 10 ? 10 : n);\n" });
+  const mock = await startMockServer({
+    mutants: {
+      "upper bound is exclusive":
+        "### FILE: src/clamp.mjs\n```js\nimport 'a-package-that-is-definitely-not-installed';\nexport const clamp = (n) => n;\n```\n",
+    },
+  });
+  const cfg = {
+    tiers: [{ name: "cheap", baseUrl: mock.url, model: "mock/cheap" }],
+    boundaries: { denyWrite: [] },
+    gate: { timeoutMs: 20000 },
+    worker: { requestTimeoutMs: 5000 },
+    paths: { worktrees: ".worktrees", state: ".trellis" },
+  };
+  const node = { id: "n01", write: ["src/clamp.mjs"], tests: [], gate: "node src/clamp.mjs",
+    mutations: ["upper bound is exclusive"] };
+  const steps = [];
+  try {
+    const result = await checkMutations(cfg, node, dir, dir, { onStep: (s) => steps.push(s) });
+    assert(result.checked === 0,
+      `an environment failure must not count toward "checked" (a genuinely evaluated mutant), got ${result.checked}`);
+    assert(result.survivors.length === 0,
+      `an environment failure must never be scored as a surviving mutant either: ${JSON.stringify(result.survivors)}`);
+    assert(result.skipped.some((s) => /environment broken/.test(s)),
+      `expected a skipped entry naming the environment failure, got: ${JSON.stringify(result.skipped)}`);
+    assert(steps.some((s) => s.envFailure === true),
+      `expected onStep to report envFailure:true, got: ${JSON.stringify(steps)}`);
+  } finally {
+    await mock.close();
+  }
+});
+
 check("Budget keeps worker attempts and oracle calls in separate counters", () => {
   const cfg = { tiers: [{ name: "cheap", costPer1kInput: 1, costPer1kOutput: 1 }], budget: { maxTotalAttempts: 2 } };
   const budget = new Budget(cfg);

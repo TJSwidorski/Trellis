@@ -137,8 +137,10 @@ export async function run(cfg, graph, state, { dryRun = false, only = null, hist
       let weak = false;
       if ((node.mutations || []).length && (cfg.verify?.mutationsOnPass ?? true)) {
         const mut = await checkMutations(cfg, node, wt.dir, root, {
-          onStep: ({ mutation, survived }) =>
-            log.node(id, survived
+          onStep: ({ mutation, survived, envFailure }) =>
+            log.node(id, envFailure
+              ? log.yellow(`mutant not evaluated (environment broken): ${mutation.slice(0, 60)}`)
+              : survived
               ? log.red(`mutant SURVIVED: ${mutation.slice(0, 70)}`)
               : log.dim(`mutant killed: ${mutation.slice(0, 60)}`)),
           // Mutation calls spend real tokens but are not a worker retrying
