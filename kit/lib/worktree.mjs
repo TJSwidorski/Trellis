@@ -180,10 +180,21 @@ export function removeWorktree(root, cfg, nodeId, { quiet = false } = {}) {
   return r.ok;
 }
 
+/**
+ * Commit the worktree's current state. Returns `{ ok, message }`, not a bare
+ * boolean: a failed `git commit` (no identity configured, gpgsign
+ * misconfigured, disk full) used to be indistinguishable from a genuine
+ * success to the one caller that reads this — which then reported the node
+ * merged, force-removed the worktree, and left main with zero lines of the
+ * work the gate had actually just proven correct. `message` carries what git
+ * actually said, since the caller needs to explain the failure, not just
+ * detect it.
+ */
 export function commitWorktree(wt, message) {
   git(wt, ["add", "-A"]);
   const r = git(wt, ["commit", "-m", message, "--no-verify"]);
-  return r.ok || /nothing to commit/i.test(r.out + r.err);
+  const ok = r.ok || /nothing to commit/i.test(r.out + r.err);
+  return { ok, message: ok ? "" : (r.err || r.out || "git commit exited non-zero with no output") };
 }
 
 /**
@@ -232,8 +243,27 @@ export function mergeNode(root, cfg, nodeId) {
   if (head !== cfg.baseBranch) {
     return { ok: false, conflict: false, message: `Repo is on "${head}", expected "${cfg.baseBranch}".` };
   }
+  const before = git(root, ["rev-parse", "HEAD"]).out;
   const r = git(root, ["merge", "--no-ff", "-m", `trellis: merge ${nodeId}`, branch]);
-  if (r.ok) return { ok: true, conflict: false, message: r.out };
+  if (r.ok) {
+    // "Already up to date." is a SUCCESSFUL exit from git's perspective, but
+    // it means the branch had nothing to contribute — most likely because
+    // whatever was supposed to land on it never actually got committed there
+    // (worker.mjs now catches that specific case before this is ever
+    // reached, but this stays as the general-purpose guard: nothing here
+    // should ever be able to report a node MERGED when the base branch's
+    // HEAD did not move).
+    const after = git(root, ["rev-parse", "HEAD"]).out;
+    if (after === before) {
+      return {
+        ok: false,
+        conflict: false,
+        message: `git reported the merge as already up to date — "${branch}" contributed no new ` +
+          `commit, so nothing landed on ${cfg.baseBranch} even though the merge command exited 0.`,
+      };
+    }
+    return { ok: true, conflict: false, message: r.out };
+  }
   const conflicted = git(root, ["diff", "--name-only", "--diff-filter=U"]).out;
   git(root, ["merge", "--abort"]);
   return {

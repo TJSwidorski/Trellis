@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { chatWithBackoff, ProviderError } from "./provider.mjs";
 import { parseBlocks, screenBlocks, worstFlag } from "./extract.mjs";
 import { runGate } from "./gate.mjs";
+import { envFailureMessage } from "./envfail.mjs";
 import { commitWorktree } from "./worktree.mjs";
 import { safeRelative, matchDeny } from "./paths.mjs";
 import * as log from "./log.mjs";
@@ -279,7 +280,28 @@ export async function runNode(cfg, node, worktree, { onAttempt } = {}) {
       if (gate.ok) {
         attempts.push(record);
         onAttempt?.(record);
-        commitWorktree(worktree, `trellis(${node.id}): ${node.title}\n\ntier=${tier.name} attempt=${a}`);
+        const committed = commitWorktree(worktree, `trellis(${node.id}): ${node.title}\n\ntier=${tier.name} attempt=${a}`);
+        if (!committed.ok) {
+          // The gate genuinely passed (the attempt record above is correct
+          // and stays as recorded) — but a failed commit means nothing here
+          // survives the worktree being torn down, so returning "passed"
+          // would have the runner merge a branch that never received this
+          // work, report the node merged, and force-delete the only copy.
+          // This is a host/environment problem (git identity, gpgsign, disk
+          // full), not a model one: retrying or escalating tiers reproduces
+          // the identical failure for money, exactly like an env-failure.
+          const env = {
+            hint: `git commit failed: ${committed.message.split("\n")[0]}`,
+            matched: committed.message.slice(0, 300),
+          };
+          return {
+            status: "env-failure",
+            attempts,
+            tier: tier.name,
+            env,
+            feedback: envFailureMessage(env, { nodeId: node.id, command: "git commit (after a passing gate)" }),
+          };
+        }
         return { status: "passed", attempts, tier: tier.name };
       }
 

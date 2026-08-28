@@ -29,7 +29,7 @@ import { kindActionable, kindCounts, shortlist } from "../lib/evolve.mjs";
 import os from "node:os";
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { changedPaths, ignoredPaths, revertPaths, git, isClean } from "../lib/worktree.mjs";
+import { changedPaths, ignoredPaths, revertPaths, git, isClean, commitWorktree, mergeNode } from "../lib/worktree.mjs";
 import { runGate } from "../lib/gate.mjs";
 import { checkMutations } from "../lib/mutate.mjs";
 import { Budget } from "../lib/budget.mjs";
@@ -2342,6 +2342,71 @@ checkAsync("ADVERSARIAL a truncated reply gets a bigger cap on the same tier, no
   } finally {
     await mock.close();
   }
+});
+
+// ------------------------------------------ a passing gate whose commit fails
+//
+// Finding 01: commitWorktree's return value used to be discarded entirely, so
+// a git commit that failed AFTER the gate genuinely passed (no author
+// identity, gpgsign misconfigured, disk full) was reported as a merged node
+// and the worktree holding the only copy of the work was then force-deleted.
+// gpgsign=true with no signing key configured fails deterministically
+// regardless of the machine's own git identity setup, isolating exactly the
+// variable this exercises.
+
+check("commitWorktree reports failure instead of a bare falsy value when git commit fails", () => {
+  const dir = gitRepoWith({ "a.txt": "x\n" }, { "a.txt": "y\n" });
+  spawnSync("git", ["config", "commit.gpgsign", "true"], { cwd: dir, encoding: "utf8" });
+  const committed = commitWorktree(dir, "should not succeed");
+  assert(committed.ok === false, `expected ok:false with gpgsign misconfigured, got: ${JSON.stringify(committed)}`);
+  assert(committed.message && committed.message.length > 0, "expected a non-empty failure message");
+});
+
+checkAsync("ADVERSARIAL runNode reports env-failure, not passed, when the gate passes but the commit cannot", async () => {
+  const dir = gitRepoWith({ "tests/n01.test.mjs":
+    "import assert from 'node:assert';\nimport { n01 } from '../src/n01.mjs';\nassert.strictEqual(n01(), 1);\n" });
+  spawnSync("git", ["config", "commit.gpgsign", "true"], { cwd: dir, encoding: "utf8" });
+  const mock = await startMockServer({
+    responses: { n01: [{ content: "### FILE: src/n01.mjs\n```js\nexport const n01 = () => 1;\n```\n" }] },
+  });
+  const cfg = {
+    tiers: [{ name: "cheap", baseUrl: mock.url, model: "mock/cheap", maxAttempts: 1, maxTokens: 8000, temperature: 0.1 }],
+    boundaries: { denyWrite: [] },
+    worker: { requestTimeoutMs: 5000, maxContextFileBytes: 40000 },
+    gate: { timeoutMs: 20000, feedbackChars: 4000 },
+  };
+  const node = { id: "n01", role: "implementer", title: "n01", goal: "g",
+    write: ["src/n01.mjs"], tests: ["tests/n01.test.mjs"], gate: "node tests/n01.test.mjs" };
+  try {
+    const result = await runNode(cfg, node, dir, {});
+    assert(result.status === "env-failure",
+      `a passing gate with a failed commit must not report "passed" -- got status ${result.status}: ${JSON.stringify(result)}`);
+    assert(/git commit/.test(result.env?.hint ?? ""),
+      `expected the env hint to name the git commit failure, got: ${JSON.stringify(result.env)}`);
+    // The implementation really did pass its gate -- confirm the correct
+    // code is still sitting uncommitted in the tree, not silently discarded.
+    const src = fs.readFileSync(path.join(dir, "src", "n01.mjs"), "utf8");
+    assert(/n01\s*=\s*\(\)\s*=>\s*1/.test(src), "the correct implementation should still be on disk, uncommitted");
+  } finally {
+    await mock.close();
+  }
+});
+
+// ------------------------------------------ mergeNode: "up to date" is not a merge
+
+check("mergeNode refuses to report success when the branch contributes no new commit", () => {
+  const dir = gitRepoWith({ "a.txt": "x\n" });
+  // A branch cut from HEAD with no further commits: merging it back into
+  // HEAD is a legitimate git no-op ("Already up to date.") that exits 0.
+  // Must match branchName()'s own "trellis/<id>" convention, not an
+  // arbitrary name -- mergeNode derives the branch to merge from the id.
+  spawnSync("git", ["branch", "trellis/noop-node"], { cwd: dir, encoding: "utf8" });
+  // gitRepoWith's default branch name depends on the git version's init
+  // default; read it back rather than assuming "main".
+  const branch = spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: dir, encoding: "utf8" }).stdout.trim();
+  const result = mergeNode(dir, { baseBranch: branch }, "noop-node");
+  assert(result.ok === false, `expected the up-to-date merge to be reported as failure, got: ${JSON.stringify(result)}`);
+  assert(/up to date/i.test(result.message), `expected the message to explain why, got: ${result.message}`);
 });
 
 // ------------------------------------------------------ mutation-check spend
