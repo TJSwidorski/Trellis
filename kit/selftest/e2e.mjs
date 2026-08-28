@@ -902,6 +902,29 @@ assert.strictEqual(b(), 1);
     assert.ok(cp.nodes.some((n) => n.id === "held1"), "held node was not written to checkpoint.json");
     assert.ok(!fs.existsSync(path.join(rjRoot, "src/h1.mjs")), "held node's branch was merged onto main");
   });
+
+  // ---- Phase-4 blocker 5: checkpoint.json is never cleared ----
+  //
+  // A human reviews held1 and merges it by hand (simulated here — accept
+  // --merge is the one-way door a real operator would run). A LATER
+  // apply-triage call, on a run with nothing held, must show an EMPTY
+  // checkpoint, not the stale entry from before. Writing checkpoint.json
+  // only when rows.checkpoint was non-empty left the PRIOR checkpoint on
+  // disk forever once its node was finally accepted, and `trellis auto`
+  // reads this file unconditionally on every cycle.
+  const rjState3 = st.loadState(rjRoot, rjCfg);
+  rjState3.nodes.held1.status = "merged";
+  rjState3.nodes.held1.acceptedAt = new Date().toISOString();
+  st.saveState(rjRoot, rjCfg, rjState3);
+  write(rjRoot, ".trellis/triage.json", JSON.stringify({
+    decisions: [{ node: "held1", verdict: "accept", reason: "merged after human review" }],
+  }, null, 2));
+  const rjApplyResult2 = spawnSync("node", [CLI, "apply-triage", "--apply"], { cwd: rjRoot, encoding: "utf8" });
+  check("ADVERSARIAL a stale checkpoint is cleared once nothing is held any more", () => {
+    assert.strictEqual(rjApplyResult2.status, 0, rjApplyResult2.stdout + rjApplyResult2.stderr);
+    const cp = JSON.parse(fs.readFileSync(path.join(rjRoot, ".trellis/checkpoint.json"), "utf8"));
+    assert.deepStrictEqual(cp.nodes, [], `expected an empty checkpoint, still shows: ${JSON.stringify(cp.nodes)}`);
+  });
   fs.rmSync(rjRoot, { recursive: true, force: true });
 
   // ---- report ----
