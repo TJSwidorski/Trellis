@@ -34,7 +34,8 @@ import { runGate } from "../lib/gate.mjs";
 import { checkMutations } from "../lib/mutate.mjs";
 import { Budget } from "../lib/budget.mjs";
 import { writeReport, untrustedBlock } from "../lib/report.mjs";
-import { matchAny, matchDeny, matchAllow, FS_CASE_INSENSITIVE, globsOverlap } from "../lib/paths.mjs";
+import { matchAny, matchDeny, matchAllow, FS_CASE_INSENSITIVE, globsOverlap, safeRelative, readJsonOrNull, parseJsonl } from "../lib/paths.mjs";
+import { normaliseTarget } from "../lib/evolve.mjs";
 import { recordsFor, ledgerPath } from "../lib/ledger.mjs";
 import { initState, resumePlan, nodeHash } from "../lib/state.mjs";
 import { currentCycle, beginCycle, cycleIdFor } from "../lib/cycle.mjs";
@@ -2119,6 +2120,69 @@ check("ADVERSARIAL globsOverlap agrees with matchAllow's own case-folding decisi
   // A clearly distinct pair must never be reported as overlapping regardless
   // of platform -- folding must not make the check trigger-happy.
   assert(!globsOverlap(["src/alpha.mjs"], ["src/beta.mjs"]), "unrelated files were wrongly reported as overlapping");
+});
+
+// ------------------------------- shared JSON/JSONL helpers (paths.mjs) ----
+//
+// readJsonOrNull and parseJsonl replace nine near-identical inline
+// try/catch blocks across cycle.mjs, driver.mjs (x2), state.mjs, cli.mjs
+// (x2), built.mjs (x2), evolve.mjs, friction.mjs, ledger.mjs, and
+// skills.mjs. One implementation, tested once, is what keeps a future
+// hardening (logging on a corrupt file, say) from silently missing whichever
+// copies nobody remembered existed.
+
+check("readJsonOrNull returns the parsed value, or null for missing/unparseable files", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-readjson-"));
+  const good = path.join(dir, "good.json");
+  const bad = path.join(dir, "bad.json");
+  fs.writeFileSync(good, JSON.stringify({ a: 1 }));
+  fs.writeFileSync(bad, "{not json");
+  const got = readJsonOrNull(good);
+  assert(got && got.a === 1, `expected {a:1}, got ${JSON.stringify(got)}`);
+  assert(readJsonOrNull(bad) === null, "unparseable JSON must return null, not throw");
+  assert(readJsonOrNull(path.join(dir, "missing.json")) === null, "a missing file must return null, not throw");
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+check("parseJsonl parses each line independently and never throws on a torn line", () => {
+  const text = '{"a":1}\n{"a":2}\nnot json\n\n  \n{"a":3}\n';
+  const rows = parseJsonl(text);
+  // Blank/whitespace-only lines are dropped outright; a torn line becomes
+  // null (the caller filters it out) rather than losing every row around it.
+  assert(JSON.stringify(rows) === JSON.stringify([{ a: 1 }, { a: 2 }, null, { a: 3 }]),
+    `unexpected rows: ${JSON.stringify(rows)}`);
+  assert(parseJsonl("").length === 0, "empty text should parse to zero rows");
+  assert(parseJsonl(null).length === 0, "null text should parse to zero rows, not throw");
+});
+
+// -------------------------------- safeRelative / normaliseTarget parity ---
+//
+// Two independent lexical path-safety validators exist on purpose (one
+// resolves against a real worktree root, one is pure-lexical for a proposal
+// target with no root to check itself against) but must reject the SAME
+// shapes, or a future tightening applied to only one silently leaves the
+// other unpatched. This asserts they agree on the boundary case that used
+// to differ: a UNC-style path. Confirmed by hand that removing the fix does
+// NOT fail this specific check on win32 -- Node's own path.isAbsolute
+// already treats a UNC path as absolute there, so safeRelative's existing
+// first check already caught it before this fix on this platform. The
+// added check is what makes the two validators agree on POSIX, where a
+// UNC-shaped string is not absolute at all; the ubuntu-latest leg of CI
+// (added this same series) is what actually exercises that branch.
+
+check("ADVERSARIAL safeRelative and normaliseTarget agree on UNC-style paths", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-safere-"));
+  for (const unc of ["\\\\server\\share\\file.txt", "//server/share/file.txt"]) {
+    const sr = safeRelative(dir, unc);
+    const nt = normaliseTarget(unc);
+    assert(!sr.ok, `safeRelative accepted a UNC-style path: ${unc} -> ${JSON.stringify(sr)}`);
+    assert(!nt.ok, `normaliseTarget accepted a UNC-style path: ${unc} -> ${JSON.stringify(nt)}`);
+  }
+  // And both still accept an ordinary relative path -- the fix must not have
+  // widened rejection past the shapes it was meant to catch.
+  assert(safeRelative(dir, "src/a.mjs").ok, "safeRelative wrongly rejected an ordinary relative path");
+  assert(normaliseTarget("src/a.mjs").ok, "normaliseTarget wrongly rejected an ordinary relative path");
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 check("ADVERSARIAL the shipped denyWrite covers the files a gate command reads", () => {

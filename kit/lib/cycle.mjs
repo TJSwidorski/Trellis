@@ -24,15 +24,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { readJsonOrNull } from "./paths.mjs";
 
 export function cyclePath(root, cfg) {
   return path.join(root, cfg?.paths?.state ?? ".trellis", "cycle.json");
 }
 
 export function currentCycle(root, cfg) {
-  const p = cyclePath(root, cfg);
-  if (!fs.existsSync(p)) return null;
-  try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch { return null; }
+  return readJsonOrNull(cyclePath(root, cfg));
 }
 
 /**

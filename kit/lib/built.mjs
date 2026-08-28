@@ -16,6 +16,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { readJsonOrNull } from "./paths.mjs";
 import * as ledger from "./ledger.mjs";
 import * as st from "./state.mjs";
 
@@ -56,12 +57,8 @@ export function builtNodes(root, cfg) {
   }
 
   const mp = manualPath(root, cfg);
-  if (fs.existsSync(mp)) {
-    try {
-      const manual = JSON.parse(fs.readFileSync(mp, "utf8"));
-      for (const id of manual.nodes ?? []) ids.add(id);
-    } catch { /* a malformed manual file adds nothing rather than crashing slice */ }
-  }
+  // A malformed manual file adds nothing rather than crashing slice.
+  for (const id of readJsonOrNull(mp)?.nodes ?? []) ids.add(id);
 
   return [...ids].sort();
 }
@@ -69,9 +66,7 @@ export function builtNodes(root, cfg) {
 /** Write the derived cache, and report what changed since the last write. */
 export function writeBuilt(root, cfg) {
   const p = builtPath(root, cfg);
-  const before = fs.existsSync(p)
-    ? (() => { try { return JSON.parse(fs.readFileSync(p, "utf8")).nodes ?? []; } catch { return []; } })()
-    : [];
+  const before = readJsonOrNull(p)?.nodes ?? [];
   const nodes = builtNodes(root, cfg);
   fs.mkdirSync(path.dirname(p), { recursive: true });
   fs.writeFileSync(p, JSON.stringify({ at: new Date().toISOString(), nodes }, null, 2) + "\n");

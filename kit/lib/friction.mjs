@@ -15,6 +15,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { parseJsonl } from "./paths.mjs";
 import { loadCodes, normaliseCode } from "./codes.mjs";
 
 /**
@@ -70,9 +71,7 @@ export function validate(rec) {
 export function read(root, cfg) {
   const p = frictionPath(root, cfg);
   if (!fs.existsSync(p)) return [];
-  return fs.readFileSync(p, "utf8").split("\n").filter(Boolean)
-    .map((l) => { try { return JSON.parse(l); } catch { return null; } })
-    .filter(Boolean);
+  return parseJsonl(fs.readFileSync(p, "utf8")).filter(Boolean);
 }
 
 /**

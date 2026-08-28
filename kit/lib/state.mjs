@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { readJsonOrNull } from "./paths.mjs";
 
 export const STATUS = {
   PENDING: "pending",
@@ -59,9 +60,7 @@ export function initState(root, cfg, graph, { runId } = {}) {
 }
 
 export function loadState(root, cfg) {
-  const p = statePath(root, cfg);
-  if (!fs.existsSync(p)) return null;
-  try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch { return null; }
+  return readJsonOrNull(statePath(root, cfg));
 }
 
 export function saveState(root, cfg, state) {

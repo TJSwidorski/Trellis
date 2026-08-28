@@ -22,6 +22,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { readJsonOrNull, parseJsonl } from "./paths.mjs";
 import * as friction from "./friction.mjs";
 import * as evolve from "./evolve.mjs";
 import * as ledger from "./ledger.mjs";
@@ -110,9 +111,7 @@ export const DEFAULT_CHAIN = STAGES.filter((s) => !s.periodic);
 // -------------------------------------------------------------- verification
 
 function readJson(root, rel) {
-  const p = path.resolve(root, rel);
-  if (!fs.existsSync(p)) return null;
-  try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch { return null; }
+  return readJsonOrNull(path.resolve(root, rel));
 }
 
 /**
@@ -701,9 +700,7 @@ export function recordSession(root, cfg, entry) {
 export function sessionStats(root, cfg) {
   const p = path.resolve(root, statePath(cfg, "sessions.jsonl"));
   if (!fs.existsSync(p)) return {};
-  const rows = fs.readFileSync(p, "utf8").split("\n").filter(Boolean).map((l) => {
-    try { return JSON.parse(l); } catch { return null; }
-  }).filter(Boolean);
+  const rows = parseJsonl(fs.readFileSync(p, "utf8")).filter(Boolean);
 
   const by = {};
   for (const r of rows) {

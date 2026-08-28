@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { loadConfig, tierKey } from "../lib/config.mjs";
 import { loadGraph, validateGraph, indexNodes, levels } from "../lib/graph.mjs";
 import { repoRoot, git, currentBranch, isClean, removeWorktree, syncWorkspaceFile, mergeNode, changedPaths } from "../lib/worktree.mjs";
-import { norm } from "../lib/paths.mjs";
+import { norm, readJsonOrNull } from "../lib/paths.mjs";
 import { listModels } from "../lib/provider.mjs";
 import * as st from "../lib/state.mjs";
 import * as log from "../lib/log.mjs";
@@ -635,9 +635,8 @@ function applyTriageCore(root, cfg, { apply, quiet = false } = {}) {
   if (!state) return null;
 
   const triagePath = path.resolve(root, ".trellis/triage.json");
-  if (!fs.existsSync(triagePath)) return null;
-  let triage;
-  try { triage = JSON.parse(fs.readFileSync(triagePath, "utf8")); } catch { return null; }
+  const triage = readJsonOrNull(triagePath);
+  if (!triage) return null;
   const decisions = Array.isArray(triage.decisions) ? triage.decisions : [];
   if (!decisions.length) return null;
 
@@ -1719,11 +1718,6 @@ function sliceNodes(root) {
   if (!plan || !derived) return [];
   const want = new Set((plan.nodes ?? []).map((n) => (typeof n === "string" ? n : n.id)));
   return (derived.nodes ?? []).filter((n) => want.has(n.id));
-}
-
-function readJsonOrNull(p) {
-  if (!fs.existsSync(p)) return null;
-  try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch { return null; }
 }
 
 /** Compute and apply the active skill set for a stage. Zero model tokens. */

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { parseJsonl } from "./paths.mjs";
 import { PASSED_GATE } from "./state.mjs";
 
 /**
@@ -30,9 +31,7 @@ export function append(root, cfg, records) {
 export function read(root, cfg) {
   const p = ledgerPath(root, cfg);
   if (!fs.existsSync(p)) return [];
-  return fs.readFileSync(p, "utf8").split("\n").filter(Boolean)
-    .map((l) => { try { return JSON.parse(l); } catch { return null; } })
-    .filter(Boolean);
+  return parseJsonl(fs.readFileSync(p, "utf8")).filter(Boolean);
 }
 
 /** Build the per-node records for a finished run. */

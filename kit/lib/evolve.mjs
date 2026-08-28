@@ -10,6 +10,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { parseJsonl } from "./paths.mjs";
 import { loadCodes, normaliseCode, isBucketed } from "./codes.mjs";
 import * as ledger from "./ledger.mjs";
 import { isKnownKind } from "./kinds.mjs";
@@ -86,6 +87,11 @@ export const ADVISORY = [
  * touch the regression suite that we should quietly permit, it is a request
  * nobody should be making, and resolving it would mean the boundary's answer
  * depended on a traversal an attacker chose.
+ *
+ * This is the pure-lexical twin of paths.mjs's safeRelative — that one needs
+ * a real `root` to resolve against (a proposal target has no worktree to
+ * check itself against, only a string); this one does not. They validate the
+ * same set of shapes on purpose. If you tighten one, tighten the other.
  */
 export function normaliseTarget(raw) {
   const s = String(raw ?? "").trim();
@@ -145,9 +151,7 @@ export function triagePath(root, cfg) {
 export function triageRows(root, cfg) {
   const p = triagePath(root, cfg);
   if (!fs.existsSync(p)) return [];
-  return fs.readFileSync(p, "utf8").split("\n").filter(Boolean)
-    .map((l) => { try { return JSON.parse(l); } catch { return null; } })
-    .filter(Boolean);
+  return parseJsonl(fs.readFileSync(p, "utf8")).filter(Boolean);
 }
 
 // Triage records structured rejection codes, not prose. "the error handling is

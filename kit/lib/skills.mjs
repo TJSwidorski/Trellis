@@ -18,7 +18,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { safeRelative } from "./paths.mjs";
+import { safeRelative, parseJsonl } from "./paths.mjs";
 
 // Only these may ever be activated. 'pending' means nobody has audited it yet and
 // 'rejected' means somebody did — either way it does not enter a context window.
@@ -178,9 +178,7 @@ export function recordActivation(root, cfg, { run, stage, active }) {
 export function readActivations(root, cfg) {
   const p = activationPath(root, cfg);
   if (!fs.existsSync(p)) return [];
-  return fs.readFileSync(p, "utf8").split("\n").filter(Boolean)
-    .map((l) => { try { return JSON.parse(l); } catch { return null; } })
-    .filter(Boolean);
+  return parseJsonl(fs.readFileSync(p, "utf8")).filter(Boolean);
 }
 
 /** Rules that can fire on their own. `manual` is not one — it needs a human. */
