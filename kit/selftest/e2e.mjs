@@ -937,6 +937,126 @@ if (other !== 1) throw new Error("nope");
   await sbMock.close();
   fs.rmSync(sbRoot, { recursive: true, force: true });
 
+  // ---- ADVERSARIAL: re-gate at level boundaries -- two siblings that each pass alone, but conflict once both are actually merged ----
+  //
+  // Finding 14 / item 8. Each node's own gate runs on a worktree branched
+  // before any sibling at the same dependency depth has merged, so it can
+  // only prove "the tests accept THIS implementation in isolation" -- never
+  // "...once every sibling in this wave is also on baseBranch." Two root
+  // nodes (same depth, no dep between them) each write their own file and
+  // each individually assert "exactly one handler file exists" -- true
+  // in each one's own worktree, false the moment BOTH are actually merged.
+  const regateRoot = makeRepo();
+  const handlerCountGate = (own) =>
+    `node ${own} && node -e "const fs=require('fs'); const files=fs.readdirSync('src').filter(f=>/^handler-.*\\.mjs$/.test(f)); ` +
+    `if (files.length!==1) { console.error('handler count: '+files.length); process.exit(1); }"`;
+  write(regateRoot, "tests/sib1.test.mjs", "console.log('sib1 ok');\n");
+  write(regateRoot, "tests/sib2.test.mjs", "console.log('sib2 ok');\n");
+  write(regateRoot, ".trellis/graph.json", JSON.stringify({
+    version: 1, project: "regate",
+    nodes: [
+      { id: "sib1", title: "sib1", goal: "export handler 1", write: ["src/handler-1.mjs"],
+        tests: ["tests/sib1.test.mjs"], gate: handlerCountGate("tests/sib1.test.mjs") },
+      { id: "sib2", title: "sib2", goal: "export handler 2", write: ["src/handler-2.mjs"],
+        tests: ["tests/sib2.test.mjs"], gate: handlerCountGate("tests/sib2.test.mjs") },
+    ],
+  }, null, 2));
+  const regateMock = await startMockServer({
+    models: ["mock/cheap"],
+    responses: {
+      sib1: [{ content: FILE("src/handler-1.mjs", "export const h1=()=>1;") }],
+      sib2: [{ content: FILE("src/handler-2.mjs", "export const h2=()=>2;") }],
+    },
+  });
+  write(regateRoot, "trellis.config.json", JSON.stringify({
+    project: "regate", baseBranch: "main", concurrency: 2,
+    tiers: [{ name: "cheap", baseUrl: regateMock.url, model: "mock/cheap", maxAttempts: 1 }],
+    gate: { timeoutMs: 20000 },
+    routing: { enabled: false },
+    verify: { requirePrecondition: false, structuralMutants: false, mutationsOnPass: false },
+    boundaries: { denyWrite: [".git/**", ".trellis/**", "trellis.config.json"] },
+  }, null, 2));
+  g(regateRoot, "add", "-A"); g(regateRoot, "commit", "-qm", "fixture");
+
+  const regateCfg = loadConfig(regateRoot);
+  const regateGraph = loadGraph(regateRoot, regateCfg.paths.graph);
+  const regateState = st.initState(regateRoot, regateCfg, regateGraph);
+  await run(regateCfg, regateGraph, regateState, {});
+  await regateMock.close();
+
+  check("ADVERSARIAL both siblings pass their own gate alone before either merges", () => {
+    for (const id of ["sib1", "sib2"]) {
+      const firstAttempt = regateState.nodes[id].attempts?.find((a) => a.tier !== "regate");
+      assert.ok(firstAttempt?.ok, `expected ${id}'s own attempt to pass, got: ${JSON.stringify(firstAttempt)}`);
+    }
+  });
+  check("ADVERSARIAL both siblings are held for review once the level boundary re-gate catches the conflict", () => {
+    for (const id of ["sib1", "sib2"]) {
+      assert.strictEqual(regateState.nodes[id].status, "review",
+        `expected ${id} held for review after regate, got ${regateState.nodes[id].status}`);
+      assert.match(regateState.nodes[id].reason, /combined with its dependency-level siblings/);
+    }
+  });
+  check("ADVERSARIAL the code stays on baseBranch -- regate holds, it never reverts", () => {
+    for (const f of ["src/handler-1.mjs", "src/handler-2.mjs"]) {
+      assert.ok(fs.existsSync(path.join(regateRoot, f)), `${f} should still be on baseBranch after a regate failure`);
+    }
+  });
+  check("ADVERSARIAL a regate attempt is recorded distinctly from the node's own attempts", () => {
+    for (const id of ["sib1", "sib2"]) {
+      const regateAttempt = regateState.nodes[id].attempts?.find((a) => a.tier === "regate");
+      assert.ok(regateAttempt, `expected a "regate" attempt recorded for ${id}`);
+      assert.strictEqual(regateAttempt.ok, false);
+      assert.strictEqual(regateAttempt.kind, "test-failure");
+    }
+  });
+  fs.rmSync(regateRoot, { recursive: true, force: true });
+
+  // ---- ADVERSARIAL: verify.regateAtLevelBoundaries: false skips the mechanism entirely ----
+  const noRegateRoot = makeRepo();
+  write(noRegateRoot, "tests/sib1.test.mjs", "console.log('sib1 ok');\n");
+  write(noRegateRoot, "tests/sib2.test.mjs", "console.log('sib2 ok');\n");
+  write(noRegateRoot, ".trellis/graph.json", JSON.stringify({
+    version: 1, project: "noregate",
+    nodes: [
+      { id: "sib1", title: "sib1", goal: "export handler 1", write: ["src/handler-1.mjs"],
+        tests: ["tests/sib1.test.mjs"], gate: handlerCountGate("tests/sib1.test.mjs") },
+      { id: "sib2", title: "sib2", goal: "export handler 2", write: ["src/handler-2.mjs"],
+        tests: ["tests/sib2.test.mjs"], gate: handlerCountGate("tests/sib2.test.mjs") },
+    ],
+  }, null, 2));
+  const noRegateMock = await startMockServer({
+    models: ["mock/cheap"],
+    responses: {
+      sib1: [{ content: FILE("src/handler-1.mjs", "export const h1=()=>1;") }],
+      sib2: [{ content: FILE("src/handler-2.mjs", "export const h2=()=>2;") }],
+    },
+  });
+  write(noRegateRoot, "trellis.config.json", JSON.stringify({
+    project: "noregate", baseBranch: "main", concurrency: 2,
+    tiers: [{ name: "cheap", baseUrl: noRegateMock.url, model: "mock/cheap", maxAttempts: 1 }],
+    gate: { timeoutMs: 20000 },
+    routing: { enabled: false },
+    verify: { requirePrecondition: false, structuralMutants: false, mutationsOnPass: false, regateAtLevelBoundaries: false },
+    boundaries: { denyWrite: [".git/**", ".trellis/**", "trellis.config.json"] },
+  }, null, 2));
+  g(noRegateRoot, "add", "-A"); g(noRegateRoot, "commit", "-qm", "fixture");
+
+  const noRegateCfg = loadConfig(noRegateRoot);
+  const noRegateGraph = loadGraph(noRegateRoot, noRegateCfg.paths.graph);
+  const noRegateState = st.initState(noRegateRoot, noRegateCfg, noRegateGraph);
+  await run(noRegateCfg, noRegateGraph, noRegateState, {});
+  await noRegateMock.close();
+  check("ADVERSARIAL regateAtLevelBoundaries: false leaves both siblings merged, uncaught", () => {
+    for (const id of ["sib1", "sib2"]) {
+      assert.strictEqual(noRegateState.nodes[id].status, "merged",
+        `expected ${id} merged with the mechanism off, got ${noRegateState.nodes[id].status}`);
+      assert.ok(!(noRegateState.nodes[id].attempts ?? []).some((a) => a.tier === "regate"),
+        `expected no regate attempt recorded for ${id} with the mechanism off`);
+    }
+  });
+  fs.rmSync(noRegateRoot, { recursive: true, force: true });
+
   // ---- auto driver, build stage ----
   //
   // `trellis auto` chains sessions headless. Every stage but 05_build spawns a

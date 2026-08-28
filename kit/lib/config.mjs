@@ -18,6 +18,7 @@ const DEFAULTS = {
   verify: {
     mutationsOnPass: true, onSurvivor: "warn", requirePrecondition: true,
     structuralMutants: true, structuralMutantLimit: 8, proposeOnSurvivor: true,
+    regateAtLevelBoundaries: true,
   },
   specPath: null,
   paths: { state: ".trellis", worktrees: ".worktrees", graph: ".trellis/graph.json" },

@@ -1,8 +1,12 @@
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
-import { indexNodes, normalizeNode } from "./graph.mjs";
+import { indexNodes, normalizeNode, levels } from "./graph.mjs";
 import { createWorktree, removeWorktree, mergeNode, syncWorkspaceFile, isClean, currentBranch } from "./worktree.mjs";
 import { runNode } from "./worker.mjs";
 import { checkMutations } from "./mutate.mjs";
+import { exec, gateEnv } from "./gate.mjs";
+import { copyRepo } from "./verify.mjs";
 import { planTiers } from "./routing.mjs";
 import { Budget } from "./budget.mjs";
 import * as ledger from "./ledger.mjs";
@@ -71,6 +75,76 @@ export async function run(cfg, graph, state, { dryRun = false, only = null, hist
         log.node(id, log.dim(`blocked (${state.nodes[id].reason})`));
         log.event("node.blocked", { id, deps: bad });
       }
+    }
+  };
+
+  // ---- re-gate at level boundaries ----
+  //
+  // Finding 14. Every node's own gate proves the tests accept ITS
+  // implementation in isolation, on a worktree branched before any of its
+  // dependency-level siblings had merged. Two nodes at the same depth can
+  // each pass alone and still conflict once both are actually on
+  // `baseBranch` together — a shared config file edited in compatible-alone
+  // ways, an interface both implement slightly differently. Nothing today
+  // re-checks a node once its whole wave of siblings has actually landed.
+  //
+  // Depth reuses graph.mjs's own levels() — the same hardened, cycle-safe
+  // primitive item 19 promoted for exactly this reason. A level "completing"
+  // is a per-depth event only, not a global synchronisation barrier: two
+  // disconnected parts of the graph can complete their own depth-N at
+  // different wall-clock times, and that is fine — each is re-gated the
+  // moment ITS wave finishes, whenever that is.
+  const depthOf = levels(graph);
+  const levelMembers = new Map();
+  for (const id of nodes.keys()) {
+    const d = depthOf.get(id) ?? 0;
+    if (!levelMembers.has(d)) levelMembers.set(d, []);
+    levelMembers.get(d).push(id);
+  }
+  const regatedLevels = new Set();
+  const regateEnabled = cfg.verify?.regateAtLevelBoundaries ?? true;
+
+  const regateOne = async (id) => {
+    const node = nodes.get(id);
+    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-regate-"));
+    try {
+      copyRepo(root, scratch, cfg);
+      const r = await exec(node.gate, scratch, cfg.gate.timeoutMs, gateEnv(cfg), cfg.gate?.sandbox);
+      const ok = r.code === 0;
+      const attempt = {
+        tier: "regate", attempt: (state.nodes[id].attempts?.length ?? 0) + 1,
+        phase: "regate", ok, kind: ok ? "pass" : "test-failure",
+        reason: ok ? null : `gate failed once this node's dependency-level siblings were also merged (exit ${r.code})`,
+      };
+      state.nodes[id].attempts = [...(state.nodes[id].attempts ?? []), attempt];
+      log.event("node.regate", { id, ok });
+      if (!ok) {
+        state.nodes[id].status = st.STATUS.REVIEW;
+        state.nodes[id].reason =
+          "passed alone, fails combined with its dependency-level siblings — held for review, not reverted";
+        log.node(id, log.red(`RE-GATE FAILED at level boundary: passed alone, fails combined with siblings`));
+        log.event("node.regate_failed", { id });
+      } else {
+        log.node(id, log.dim(`re-gate passed (level boundary, combined with siblings)`));
+      }
+    } finally {
+      fs.rmSync(scratch, { recursive: true, force: true });
+    }
+  };
+
+  const checkLevelBoundaries = async () => {
+    if (!regateEnabled) return;
+    for (const [depth, ids] of levelMembers) {
+      if (regatedLevels.has(depth)) continue;
+      const allResolved = ids.every((id) => {
+        const s = state.nodes[id].status;
+        return s !== st.STATUS.PENDING && s !== st.STATUS.RUNNING;
+      });
+      if (!allResolved) continue;
+      regatedLevels.add(depth);
+      const landed = ids.filter((id) => st.LANDED.has(state.nodes[id].status));
+      for (const id of landed) await regateOne(id);
+      if (landed.length) st.saveState(root, cfg, state);
     }
   };
 
@@ -237,6 +311,7 @@ export async function run(cfg, graph, state, { dryRun = false, only = null, hist
 
   // ---------- the loop ----------
   markBlocked();
+  await checkLevelBoundaries();
 
   for (;;) {
     // An environment fault stops launching for the same reason a budget breach
@@ -264,12 +339,14 @@ export async function run(cfg, graph, state, { dryRun = false, only = null, hist
     if (active.size === 0) {
       if (breach) break;
       markBlocked();
+      await checkLevelBoundaries();
       if (readySet().length === 0) break;
       continue;
     }
 
     await Promise.race(active.values());
     markBlocked();
+    await checkLevelBoundaries();
   }
 
   if (envHalt) {
@@ -329,7 +406,7 @@ export async function run(cfg, graph, state, { dryRun = false, only = null, hist
   state.finishedAt = new Date().toISOString();
   state.budget = budget.snapshot();
   st.saveState(root, cfg, state);
-  syncWorkspaceFile(root, cfg, keptWorktrees(state));
+  syncWorkspaceFile(root, cfg, keptWorktrees(state, root, cfg));
 
   const records = ledger.recordsFor(state, nodes);
   const ledgerFile = ledger.append(root, cfg, records);
@@ -338,7 +415,14 @@ export async function run(cfg, graph, state, { dryRun = false, only = null, hist
   return { state, reportPath, ledgerFile, budget: budget.snapshot() };
 }
 
-function keptWorktrees(state) {
+function keptWorktrees(state, root, cfg) {
   const keep = [st.STATUS.EXHAUSTED, st.STATUS.REVIEW, st.STATUS.CONFLICT];
-  return Object.entries(state.nodes).filter(([, v]) => keep.includes(v.status)).map(([k]) => k);
+  return Object.entries(state.nodes)
+    .filter(([, v]) => keep.includes(v.status))
+    .map(([k]) => k)
+    // A level-boundary re-gate failure sets an ALREADY-MERGED node to REVIEW
+    // without a worktree — its own worktree was already removed at merge
+    // time (the code stays on baseBranch; nothing is reverted). Listing it
+    // here would put a phantom, non-existent folder in the workspace file.
+    .filter((id) => fs.existsSync(path.join(root, cfg.paths.worktrees, id)));
 }

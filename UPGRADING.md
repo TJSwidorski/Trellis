@@ -1,3 +1,32 @@
+# Upgrading to 2.8.2: a merged node can be held for review after the fact
+
+**Real behaviour break.** `verify.regateAtLevelBoundaries` defaults to `true`.
+Once every node at a given dependency depth has resolved, `trellis run` now
+re-runs each merged one's gate against the current `baseBranch` — catching a
+node that passed its own gate in isolation but conflicts with a
+dependency-level sibling now that both are actually merged together (a
+shared config file edited in compatible-alone-but-incompatible-together
+ways, two implementations of one interface that disagree). Each merged
+node's own worktree only ever saw itself; nothing before this re-checked
+what happens once a whole wave of siblings is actually on the branch
+together.
+
+**What breaks:** a node that used to end a run simply `merged` can now end
+it `review` instead, with a `regate` entry in its `attempts` array, if a
+level-mate's changes conflict with it. **Nothing is reverted** — the code
+stays on `baseBranch` exactly as merged; the node is only held for review,
+which blocks ITS OWN dependents from starting (the same as any other
+`review`-status upstream), until a human resolves it.
+
+**Fix, in order of preference:**
+
+1. Read the two (or more) level-mates named across their `reason` fields and
+   resolve the actual conflict — this is real evidence of an integration
+   break the isolated gates could not see.
+2. Set `verify.regateAtLevelBoundaries: false` in `trellis.config.json` to
+   restore the old behaviour (each node's own gate is the only check that
+   ever runs) project-wide.
+
 # Upgrading to 2.7.3: `trellis run` now requires verify-tests
 
 **Real behaviour break.** `verify.requirePrecondition` defaults to `true`. `trellis

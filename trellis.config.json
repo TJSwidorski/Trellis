@@ -32,7 +32,9 @@
     "requirePrecondition": true,
     "structuralMutants": true,
     "structuralMutantLimit": 8,
-    "proposeOnSurvivor": true
+    "proposeOnSurvivor": true,
+    "$comment_regate": "regateAtLevelBoundaries re-runs each merged node's own gate, against baseBranch, once every node at its dependency depth has resolved -- catching a node that passes alone but conflicts with a level sibling once both are actually merged together. A failure holds the (already-merged, not reverted) node for review and blocks its dependents; it never auto-reverts.",
+    "regateAtLevelBoundaries": true
   },
 
   "driver": {
