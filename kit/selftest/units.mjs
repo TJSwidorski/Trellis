@@ -3,7 +3,7 @@ import fs from "node:fs"; import os from "node:os"; import path from "node:path"
 import assert from "node:assert"; import { spawnSync } from "node:child_process";
 import { startMockServer } from "./mock-server.mjs";
 import { loadConfig } from "../lib/config.mjs";
-import { loadGraph, validateGraph, normalizeNode } from "../lib/graph.mjs";
+import { loadGraph, validateGraph, normalizeNode, ancestors } from "../lib/graph.mjs";
 import { run } from "../lib/runner.mjs";
 import { verifyTests, buildStub, importedNames } from "../lib/verify.mjs";
 import { planTiers } from "../lib/routing.mjs";
@@ -303,6 +303,63 @@ check("validateGraph still runs the collision scan when the graph is acyclic and
   const { errors } = validateGraph(g, graphCfg, os.tmpdir(), { requireTests: false });
   assert.ok(errors.some((e) => /can run concurrently but both claim write access/.test(e)),
     `expected the write-collision error, got: ${JSON.stringify(errors)}`);
+});
+
+// ---------- unit: ancestors() is cycle-safe ----------
+check("ancestors computes the same transitive closure as before on an acyclic graph", () => {
+  // a -> b -> c, a -> c directly too (diamond-ish), d is unrelated.
+  const byId = new Map([
+    ["a", { deps: ["b", "c"] }],
+    ["b", { deps: ["c"] }],
+    ["c", { deps: [] }],
+    ["d", { deps: [] }],
+  ]);
+  const anc = ancestors(byId);
+  assert.deepStrictEqual([...anc.get("a")].sort(), ["b", "c"]);
+  assert.deepStrictEqual([...anc.get("b")].sort(), ["c"]);
+  assert.deepStrictEqual([...anc.get("c")].sort(), []);
+  assert.deepStrictEqual([...anc.get("d")].sort(), []);
+});
+check("ADVERSARIAL ancestors terminates and stays sound on a cyclic graph", () => {
+  // a <-> b, both depending on c, plus an unrelated node d. A real cycle is
+  // already rejected by validateGraph before this is ever reached in
+  // practice; the property this proves is that a future caller cannot get a
+  // crash, an infinite loop, or a false-POSITIVE ordering claim out of it --
+  // only ever a possibly-incomplete (never over-complete) answer.
+  const byId = new Map([
+    ["a", { deps: ["b", "c"] }],
+    ["b", { deps: ["a"] }],
+    ["c", { deps: [] }],
+    ["d", { deps: [] }],
+  ]);
+  const anc = ancestors(byId); // must return, not hang or throw
+  // Soundness: every id ancestors() claims for a node must be reachable by
+  // actually walking that node's own deps graph -- no fabricated edges.
+  // Deliberately does NOT pre-seed `seen` with `start`: in a real cycle,
+  // walking back to `start` via an actual edge chain is a sound thing for
+  // ancestors() to report (b -> a -> b is a genuine, if trivial, closed
+  // path), so self-reachability must be provable the same way as any other
+  // node's, not excluded by construction.
+  const reachable = (start, limit = 10) => {
+    const seen = new Set();
+    const stack = [...(byId.get(start)?.deps || [])];
+    let steps = 0;
+    while (stack.length && steps++ < limit) {
+      const d = stack.pop();
+      if (seen.has(d)) continue;
+      seen.add(d);
+      for (const dd of byId.get(d)?.deps || []) stack.push(dd);
+    }
+    return seen;
+  };
+  for (const [id, set] of anc) {
+    const real = reachable(id);
+    for (const claimed of set) {
+      assert.ok(real.has(claimed), `ancestors() claimed "${id}" -> "${claimed}" with no such reachable edge`);
+    }
+  }
+  // d is untouched by the cycle and must be reported exactly.
+  assert.deepStrictEqual([...anc.get("d")], []);
 });
 
 for (const [s,n,m] of R) console.log(s==="pass"?`  \u001b[32m✓\u001b[0m ${n}`:`  \u001b[31m✗ ${n}\u001b[0m\n      ${m}`);

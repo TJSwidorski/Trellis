@@ -284,22 +284,53 @@ function normaliseBullet(s) {
   return String(s).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
-/** Map id -> Set of all transitive dependencies. */
+/**
+ * Map id -> Set of all transitive dependencies.
+ *
+ * `validateGraph` only ever calls this after its own cycle check has already
+ * passed, but this function is exported and has nothing to stop a future
+ * caller (the level-aware slicing work is one) from reaching it on data that
+ * has not been through that check. The old recursive version was unsound on
+ * a cycle: `visit(id)` short-circuited to an empty `new Set()` the instant it
+ * re-entered a node already on the current call stack, and that placeholder
+ * then got permanently cached via `memo.set(id, out)` -- so a node whose
+ * closure happened to be computed WHILE a cycle above it was still open
+ * memoized a silently incomplete answer, reused by every later caller.
+ *
+ * Rewritten so no id's memo entry is ever written until its own walk has
+ * finished, and a walk never consults another node's memo entry while that
+ * node is still being resolved as part of the SAME walk (the `visiting` set
+ * below) -- so a node cannot inherit its own not-yet-finished, and therefore
+ * possibly incomplete, closure back through a memo lookup. On an acyclic
+ * graph this computes exactly the same sets as before. On a cyclic one
+ * (already rejected elsewhere, but this function has no way to enforce
+ * that) the error is one-directional and safe for every caller that treats
+ * the result as "definitely an ancestor, not exhaustively every ancestor":
+ * a set here can be a subset of the true transitive closure, never a
+ * superset, so `.has()` can wrongly say no but never wrongly say yes.
+ */
 export function ancestors(byId) {
   const memo = new Map();
-  const visit = (id, seen = new Set()) => {
-    if (memo.has(id)) return memo.get(id);
-    if (seen.has(id)) return new Set();
-    seen.add(id);
+  const resolve = (start) => {
+    if (memo.has(start)) return memo.get(start);
     const out = new Set();
-    for (const d of byId.get(id)?.deps || []) {
+    const visiting = new Set([start]);
+    const stack = [...(byId.get(start)?.deps || [])];
+    while (stack.length) {
+      const d = stack.pop();
+      if (out.has(d) || visiting.has(d)) continue; // already counted, or folds back into this walk
       out.add(d);
-      for (const x of visit(d, seen)) out.add(x);
+      if (memo.has(d)) {
+        for (const x of memo.get(d)) out.add(x);
+        continue;
+      }
+      visiting.add(d);
+      for (const dd of byId.get(d)?.deps || []) stack.push(dd);
     }
-    memo.set(id, out);
+    memo.set(start, out);
     return out;
   };
-  for (const id of byId.keys()) visit(id);
+  for (const id of byId.keys()) resolve(id);
   return memo;
 }
 
