@@ -402,6 +402,28 @@ export function copyRepo(root, dest, cfg) {
     },
   });
 
+  // Belt-and-braces sweep of the finished copy. This is a security boundary —
+  // a credential left in a world-readable scratch dir — and fs.cpSync's
+  // `filter` cannot be trusted to enforce it alone: on Node 20 / Windows the
+  // runner's 8.3 short-name tmpdir makes `path.relative(root, src)` inside the
+  // filter return a path `matchDeny` no longer recognises, and `.env` sailed
+  // straight through into the copy (green on Node 24, red on the CI leg).
+  // Here `rel` is computed against `dest`, walking only clean joined segments,
+  // so nothing can have been mangled.
+  const sweep = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const abs = path.join(dir, entry.name);
+      const rel = norm(path.relative(dest, abs));
+      if (entry.isDirectory()) {
+        if (skip.has(rel) || matchDeny(rel, deny)) { fs.rmSync(abs, { recursive: true, force: true }); continue; }
+        sweep(abs);
+      } else if (matchDeny(rel, deny)) {
+        fs.rmSync(abs, { force: true });
+      }
+    }
+  };
+  sweep(dest);
+
   // node_modules is excluded from the copy above — copying it in full would
   // be slow (and pointless: dependencies aren't user code a check needs a
   // fresh view of) — but without it AT ALL, a gate like `npx vitest run` or

@@ -3106,12 +3106,14 @@ check("ADVERSARIAL verify-tests does not copy secrets into the system temp dir",
   // copyRepo's scratch lands in os.tmpdir() and the gate command then EXECUTES
   // there. A SIGKILL before the cleanup left credentials behind.
   const src = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-cpsrc-"));
-  fs.mkdirSync(path.join(src, "src"), { recursive: true });
+  fs.mkdirSync(path.join(src, "src", "nested"), { recursive: true });
   fs.mkdirSync(path.join(src, ".claude"), { recursive: true });
   fs.writeFileSync(path.join(src, "src", "a.mjs"), "export const a = 1;\n");
   fs.writeFileSync(path.join(src, ".env"), "OPENROUTER_API_KEY=sk-secret\n");
   fs.writeFileSync(path.join(src, ".claude", "settings.json"), "{}\n");
   fs.writeFileSync(path.join(src, "id_rsa.pem"), "-----BEGIN PRIVATE KEY-----\n");
+  // A secret one directory down: proves the sweep recurses, not just the top.
+  fs.writeFileSync(path.join(src, "src", "nested", "creds.pem"), "-----BEGIN PRIVATE KEY-----\n");
 
   const dest = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "trellis-cpdst-")), "copy");
   copyRepo(src, dest, {
@@ -3120,7 +3122,7 @@ check("ADVERSARIAL verify-tests does not copy secrets into the system temp dir",
   });
 
   assert(fs.existsSync(path.join(dest, "src", "a.mjs")), "the copy is useless if the source did not come with it");
-  for (const secret of [".env", "id_rsa.pem", ".claude/settings.json"]) {
+  for (const secret of [".env", "id_rsa.pem", ".claude/settings.json", "src/nested/creds.pem"]) {
     assert(!fs.existsSync(path.join(dest, secret)), `${secret} was copied into the world-readable scratch dir`);
   }
 });
