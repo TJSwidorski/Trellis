@@ -63,6 +63,8 @@ export const NOT_INSTALLED = [
   ".bench",          // A/B harness output: scratch repos and REPORT.md
   "tasks",           // this repo's own working notes; a target repo keeps its own
   ".github",         // this repo's own CI; a target repo keeps its own
+  "docs",            // this repo's own audit/roadmap writeup; a target repo has no use for Trellis's own history
+  "Skill-evaluation", // unrelated work-in-progress at the repo root, not part of Trellis's own payload -- excluded here, contents untouched
   ".git",
   "node_modules",
 ];

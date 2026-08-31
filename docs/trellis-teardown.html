@@ -1,0 +1,705 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trellis Teardown</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+:root{
+  --ground:#F6F7F4; --surface:#FFFFFF; --surface-2:#EFF1EC; --surface-3:#E7EAE3;
+  --ink:#14201C; --ink-2:#55635E; --ink-3:#7D8A85;
+  --line:#DBE0D9; --line-2:#C6CEC4;
+  --accent:#1E6F5C; --accent-2:#155445;
+  --accent-wash:#E4EFEA;
+  --critical:#A33B22; --critical-wash:#F6E6E0;
+  --high:#8A6410; --high-wash:#F5EEDD;
+  --medium:#3F6478; --medium-wash:#E5EDF1;
+  --good:#2F6B3F;
+  --shadow:0 1px 2px rgba(20,32,28,.06), 0 6px 20px rgba(20,32,28,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0F1412; --surface:#161C19; --surface-2:#1C2420; --surface-3:#232D28;
+    --ink:#E9EEEA; --ink-2:#A4B1AB; --ink-3:#7B8882;
+    --line:#28322D; --line-2:#39463F;
+    --accent:#5FC3A6; --accent-2:#8AD8C0; --accent-wash:#16302A;
+    --critical:#E4886B; --critical-wash:#331E17;
+    --high:#D4A94F; --high-wash:#302713;
+    --medium:#84B2C9; --medium-wash:#16262E;
+    --good:#74C48A;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 22px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0F1412; --surface:#161C19; --surface-2:#1C2420; --surface-3:#232D28;
+  --ink:#E9EEEA; --ink-2:#A4B1AB; --ink-3:#7B8882;
+  --line:#28322D; --line-2:#39463F;
+  --accent:#5FC3A6; --accent-2:#8AD8C0; --accent-wash:#16302A;
+  --critical:#E4886B; --critical-wash:#331E17;
+  --high:#D4A94F; --high-wash:#302713;
+  --medium:#84B2C9; --medium-wash:#16262E;
+  --good:#74C48A;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 22px rgba(0,0,0,.3);
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--ground); color:var(--ink);
+  font-family:"Source Serif 4",Georgia,"Times New Roman",serif;
+  font-size:17px; line-height:1.62; margin:0;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px 96px;}
+@media(min-width:1080px){
+  .wrap{display:grid;grid-template-columns:200px minmax(0,1fr);gap:56px;padding-right:40px}
+  .rail{grid-column:1}
+  main{grid-column:2;min-width:0}
+}
+
+h1,h2,h3,h4,.ui{font-family:Archivo,"Helvetica Neue",Arial,sans-serif}
+h1{font-size:clamp(2.1rem,5vw,3.1rem);line-height:1.04;font-weight:700;letter-spacing:-.022em;margin:0;text-wrap:balance}
+h2{font-size:clamp(1.4rem,2.6vw,1.85rem);font-weight:700;letter-spacing:-.016em;line-height:1.15;margin:0;text-wrap:balance}
+h3{font-size:1.1rem;font-weight:600;letter-spacing:-.008em;line-height:1.25;margin:0;text-wrap:balance}
+h4{font-size:.95rem;font-weight:600;margin:0}
+p{margin:0;max-width:68ch}
+a{color:var(--accent);text-decoration:none;border-bottom:1px solid color-mix(in oklab,var(--accent) 35%,transparent)}
+a:hover{border-bottom-color:var(--accent)}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px}
+code,.mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.855em}
+code{background:var(--surface-2);border:1px solid var(--line);border-radius:4px;padding:.08em .34em;word-break:break-word}
+strong{font-weight:600}
+
+.eyebrow{font-family:Archivo,sans-serif;font-size:.7rem;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)}
+
+/* ---------- masthead ---------- */
+.mast{border-bottom:1px solid var(--line);margin-bottom:44px;padding:64px 0 34px}
+.mast .lede{font-size:1.16rem;color:var(--ink-2);margin-top:20px;max-width:60ch}
+.lattice{display:flex;gap:5px;margin-bottom:26px}
+.lattice i{display:block;width:26px;height:5px;background:var(--accent);opacity:.9;border-radius:1px}
+.lattice i:nth-child(2){opacity:.7}.lattice i:nth-child(3){opacity:.52}
+.lattice i:nth-child(4){opacity:.36}.lattice i:nth-child(5){opacity:.22}
+.lattice i:nth-child(6){opacity:.12}
+
+.scoreboard{display:flex;flex-wrap:wrap;gap:0;margin-top:34px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.sb{flex:1 1 150px;padding:16px 18px;border-right:1px solid var(--line)}
+.sb:last-child{border-right:0}
+.sb .n{font-family:Archivo,sans-serif;font-size:1.75rem;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.sb .l{font-family:Archivo,sans-serif;font-size:.7rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-top:7px}
+.sb.crit .n{color:var(--critical)} .sb.high .n{color:var(--high)} .sb.med .n{color:var(--medium)}
+
+/* ---------- rail ---------- */
+.rail{display:none}
+@media(min-width:1080px){
+  .rail{display:block;position:sticky;top:0;align-self:start;padding-top:78px;max-height:100vh;overflow-y:auto}
+  .rail ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px}
+  .rail a{display:block;font-family:Archivo,sans-serif;font-size:.78rem;font-weight:500;color:var(--ink-3);
+    border-bottom:0;border-left:2px solid var(--line);padding:6px 0 6px 12px;line-height:1.3}
+  .rail a:hover{color:var(--accent);border-left-color:var(--accent)}
+  .rail .sub{padding-left:24px;font-size:.72rem}
+}
+
+section{margin-bottom:72px;scroll-margin-top:24px}
+.shead{display:flex;align-items:baseline;gap:14px;border-bottom:2px solid var(--ink);padding-bottom:12px;margin-bottom:28px;flex-wrap:wrap}
+.shead .num{font-family:Archivo,sans-serif;font-weight:700;font-size:.8rem;color:var(--accent);letter-spacing:.06em}
+.stack{display:flex;flex-direction:column;gap:18px}
+.stack-lg{display:flex;flex-direction:column;gap:34px}
+
+/* ---------- findings ---------- */
+.finding{background:var(--surface);border:1px solid var(--line);border-radius:8px;
+  border-left:4px solid var(--line-2);box-shadow:var(--shadow);overflow:hidden}
+.finding.crit{border-left-color:var(--critical)}
+.finding.high{border-left-color:var(--high)}
+.finding.med{border-left-color:var(--medium)}
+.finding summary{list-style:none;cursor:pointer;padding:15px 18px;display:grid;
+  grid-template-columns:auto 1fr;gap:4px 14px;align-items:baseline}
+.finding summary::-webkit-details-marker{display:none}
+.finding summary:hover{background:var(--surface-2)}
+.fid{font-family:Archivo,sans-serif;font-weight:700;font-size:.78rem;color:var(--ink-3);font-variant-numeric:tabular-nums;padding-top:2px}
+.ftitle{font-family:Archivo,sans-serif;font-weight:600;font-size:1rem;line-height:1.3;color:var(--ink)}
+.fmeta{grid-column:2;display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:5px}
+.pill{font-family:Archivo,sans-serif;font-size:.66rem;font-weight:600;letter-spacing:.07em;text-transform:uppercase;
+  padding:2.5px 7px;border-radius:3px;white-space:nowrap}
+.pill.crit{background:var(--critical-wash);color:var(--critical)}
+.pill.high{background:var(--high-wash);color:var(--high)}
+.pill.med{background:var(--medium-wash);color:var(--medium)}
+.pill.v{background:var(--accent-wash);color:var(--accent)}
+.floc{font-family:"IBM Plex Mono",monospace;font-size:.73rem;color:var(--ink-3)}
+.fbody{padding:2px 18px 18px;border-top:1px solid var(--line);margin-top:2px}
+.fbody p{font-size:.95rem;color:var(--ink-2);margin-top:14px;max-width:74ch}
+.fbody p:first-child{margin-top:16px}
+.fbody .lab{font-family:Archivo,sans-serif;font-size:.68rem;font-weight:600;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-3);display:block;margin-bottom:2px}
+
+/* ---------- pipeline ---------- */
+.pipe{border:1px solid var(--line);border-radius:8px;background:var(--surface);overflow:hidden;box-shadow:var(--shadow)}
+.pipe-row{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--line)}
+.stg{background:var(--surface);padding:13px 11px;display:flex;flex-direction:column;gap:5px;min-height:118px}
+.stg.build{background:var(--accent-wash)}
+.stg .k{font-family:"IBM Plex Mono",monospace;font-size:.7rem;font-weight:500;color:var(--accent);letter-spacing:-.01em}
+.stg .t{font-family:Archivo,sans-serif;font-size:.82rem;font-weight:600;line-height:1.2}
+.stg .d{font-size:.75rem;color:var(--ink-2);line-height:1.35;font-family:Archivo,sans-serif;font-weight:500}
+.who{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--line);border-top:1px solid var(--line)}
+.who div{background:var(--surface-2);padding:8px 11px;font-family:Archivo,sans-serif;font-size:.68rem;font-weight:600;
+  letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3)}
+.who div.zero{background:var(--accent);color:var(--surface)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]) .who div.zero{color:#0F1412}}
+:root[data-theme="dark"] .who div.zero{color:#0F1412}
+@media(max-width:820px){
+  .pipe-row,.who{grid-template-columns:repeat(2,1fr)}
+  .stg{min-height:0}
+}
+.pipe-cap{font-size:.85rem;color:var(--ink-3);margin-top:10px;font-family:Archivo,sans-serif;font-weight:500}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.9rem;min-width:520px}
+th,td{text-align:left;padding:11px 15px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:Archivo,sans-serif;font-size:.68rem;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--ink-3);background:var(--surface-2);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td.num{font-variant-numeric:tabular-nums;font-family:"IBM Plex Mono",monospace;font-size:.82rem;white-space:nowrap}
+
+/* ---------- moves ---------- */
+.move{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:20px 22px;box-shadow:var(--shadow)}
+.move-head{display:flex;justify-content:space-between;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:11px}
+.move h3{flex:1 1 300px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-family:Archivo,sans-serif;font-size:.65rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  padding:3px 8px;border-radius:3px;background:var(--surface-3);color:var(--ink-2);white-space:nowrap}
+.chip.pay{background:var(--accent-wash);color:var(--accent)}
+.move p{font-size:.95rem;color:var(--ink-2);margin-top:10px}
+.move p.why{color:var(--ink);border-left:2px solid var(--accent);padding-left:13px;font-size:.9rem}
+
+.callout{background:var(--accent-wash);border:1px solid color-mix(in oklab,var(--accent) 26%,transparent);
+  border-radius:8px;padding:20px 24px}
+.callout h3{margin-bottom:9px}
+.callout p{font-size:.95rem;max-width:70ch}
+.callout p+p{margin-top:11px}
+
+.note{border-left:3px solid var(--line-2);padding-left:16px;color:var(--ink-2);font-size:.94rem}
+
+ul.tight{margin:0;padding-left:1.15em;display:flex;flex-direction:column;gap:7px;font-size:.95rem;color:var(--ink-2);max-width:70ch}
+ul.tight strong{color:var(--ink)}
+
+footer{border-top:1px solid var(--line);padding-top:26px;margin-top:20px;font-size:.85rem;color:var(--ink-3)}
+footer ol{padding-left:1.2em;display:flex;flex-direction:column;gap:5px;margin:12px 0 0}
+footer a{font-size:.85rem}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="rail" aria-label="Contents">
+  <ol>
+    <li><a href="#audit">01 — The audit</a></li>
+    <li><a href="#appendix" class="sub">Secondary findings</a></li>
+    <li><a href="#how">02 — How it works</a></li>
+    <li><a href="#ideas" class="sub">The three ideas</a></li>
+    <li><a href="#roadmap">03 — Roadmap</a></li>
+    <li><a href="#r-honest" class="sub">Make green honest</a></li>
+    <li><a href="#r-tokens" class="sub">Spend fewer tokens</a></li>
+    <li><a href="#r-ship" class="sub">Ship faster</a></li>
+    <li><a href="#r-prove" class="sub">Prove it works</a></li>
+    <li><a href="#verdict">04 — Verdict</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<header class="mast">
+  <div class="lattice"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="eyebrow">Adversarial audit &middot; architecture brief &middot; roadmap</div>
+  <h1>Trellis Teardown</h1>
+  <p class="lede">Five independent reviewers went at <span class="mono">kit/</span> with no knowledge of each other or of you. What they found, what the machine actually does, and where the next order of magnitude is.</p>
+
+  <div class="scoreboard">
+    <div class="sb crit"><div class="n">6</div><div class="l">Critical</div></div>
+    <div class="sb high"><div class="n">6</div><div class="l">High</div></div>
+    <div class="sb med"><div class="n">3</div><div class="l">Medium</div></div>
+    <div class="sb"><div class="n">13</div><div class="l">Verified by hand</div></div>
+    <div class="sb"><div class="n">0</div><div class="l">Refuted</div></div>
+  </div>
+</header>
+
+<!-- ==================== AUDIT ==================== -->
+<section id="audit">
+  <div class="shead"><span class="num">01</span><h2>The audit</h2></div>
+
+  <div class="stack-lg">
+    <div class="stack">
+      <p>Ten review lenses, merged into five clean-context agents: line-level correctness, Windows/Node platform pitfalls, cross-module contracts, DAG execution semantics, safety-guarantee defeat, reuse, simplification, token efficiency, altitude, and doc-vs-code drift. Nothing from this conversation reached them.</p>
+      <p>I re-read the source myself for thirteen of the fifteen and confirmed the mechanism in every case. The two marked <span class="pill v">plausible</span> need one run to settle.</p>
+
+      <div class="callout">
+        <h3>The shape of the result</h3>
+        <p>Almost nothing here is a crash. The dominant failure mode is <strong>a guarantee that fails open</strong> — a check that cannot run, an error scored as a pass, a halt that reports success. That is the worst possible failure class for this specific system, because Trellis's entire proposition is that you can stop reading the code and trust the gate.</p>
+        <p>The good news is that the architecture is sound and these are point defects in the enforcement layer, not in the design. The doc-drift sweep came back nearly clean: every documented command and flag exists and behaves as written, every stage artifact promised under <span class="mono">sessions/</span> is both produced and independently verified by the driver, and the Windows <span class="mono">.cmd</span> shim fix was generalised properly across spawn sites rather than left as a one-off.</p>
+      </div>
+    </div>
+
+    <div class="stack">
+      <h3>Findings, most severe first</h3>
+
+      <details class="finding crit" open>
+        <summary>
+          <span class="fid">01</span>
+          <span class="ftitle">A failed commit is reported as a merged node, then the work is deleted</span>
+          <span class="fmeta"><span class="pill crit">Critical</span><span class="pill v">Confirmed</span><span class="floc">kit/lib/worker.mjs:282</span></span>
+        </summary>
+        <div class="fbody">
+          <p><span class="lab">Mechanism</span><span class="mono">commitWorktree</span> returns a boolean — <span class="mono">worktree.mjs:153</span> knows it can fail — and nothing reads it.</p>
+          <p><span class="lab">Failure</span>A checkout with no <span class="mono">user.email</span> set, or <span class="mono">commit.gpgsign</span> with no key. The node passes its gate, <span class="mono">git commit</span> exits 128, and <span class="mono">runNode</span> returns <span class="mono">{status:"passed"}</span> anyway. <span class="mono">runner.mjs:170</span> merges a branch still pointing at base, so git says <em>"Already up to date."</em> and exits&nbsp;0. Status is set to <span class="mono">merged</span> and <span class="mono">removeWorktree(..., --force)</span> destroys the only copy. REPORT.md says green. <span class="mono">main</span> has zero lines of it.</p>
+          <p><span class="lab">Fix</span>Read the return value; on false, fail the node. Then assert <span class="mono">git merge-base --is-ancestor</span> after every merge — "already up to date" must never count as a successful merge of new work.</p>
+        </div>
+      </details>
+
+      <details class="finding crit">
+        <summary>
+          <span class="fid">02</span>
+          <span class="ftitle">The gate command can write anywhere on the host</span>
+          <span class="fmeta"><span class="pill crit">Critical</span><span class="pill v">Confirmed</span><span class="floc">kit/lib/gate.mjs:24</span></span>
+        </summary>
+        <div class="fbody">
+          <p><span class="lab">Mechanism</span>Every boundary check is <span class="mono">git status</span> run with <span class="mono">cwd</span> set to the worktree. It reports nothing about paths outside that directory, so <span class="mono">denyWrite</span> — which is only ever matched against git-status output and against <span class="mono">### FILE:</span> block paths — never applies to them.</p>
+          <p><span class="lab">Failure</span>A node legitimately scoped to <span class="mono">src/calc.mjs</span> gets an implementation whose top level writes <span class="mono">../../.git/hooks/post-merge</span>. A linked worktree's <span class="mono">.git</span> is a file; the real hook directory is the orchestrator repo's. The write shows up in neither <span class="mono">changedDuring</span> nor <span class="mono">ignoredDuring</span>, tests pass, and <span class="mono">runner.mjs:170</span> runs <span class="mono">git merge</span> in the repo root — executing the hook as you. The same route reaches <span class="mono">~/.ssh</span>, <span class="mono">.claude/settings.json</span>, and <span class="mono">kit/lib/gate.mjs</span> itself.</p>
+          <p><span class="lab">Fix</span>This is the one finding that cannot be patched with a check, because the gate runs arbitrary project commands by design. It needs a real boundary: run gates in a container or sandbox. <span class="mono">references/worker-trust.md</span> already admits "not a sandbox" for the process — the gap is that worktree <em>containment</em> is asserted elsewhere with nothing enforcing it.</p>
+        </div>
+      </details>
+
+      <details class="finding crit">
+        <summary>
+          <span class="fid">03</span>
+          <span class="ftitle">Any non-zero exit counts as a killed mutant</span>
+          <span class="fmeta"><span class="pill crit">Critical</span><span class="pill v">Confirmed</span><span class="floc">kit/lib/mutate.mjs:110</span></span>
+        </summary>
+        <div class="fbody">
+          <p><span class="lab">Mechanism</span><span class="mono">if (r.code === 0)</span> records a survivor; every other exit code silently records <span class="mono">survived:false</span>. There is no <span class="mono">detectEnvFailure</span> here — and <span class="mono">verify.mjs:296</span> performs exactly that check for the structurally identical situation, with a comment explaining why: <em>a missing dependency makes every test look strong.</em> That reasoning was never carried across.</p>
+          <p><span class="lab">Failure</span>The mutator is <span class="mono">cfg.tiers[0]</span>, the cheapest model in the config. It emits an unbalanced brace or an import that doesn't resolve. The gate exits 1, <span class="mono">checked</span> increments, <span class="mono">survivors</span> stays empty, and the node merges as <span class="mono">MERGED</span> with <span class="mono">mutationsChecked: 3</span> written into state and REPORT.md. A systematically broken mutator produces a permanently clean mutation report — the tests were never shown to detect anything.</p>
+        </div>
+      </details>
+
+      <details class="finding crit">
+        <summary>
+          <span class="fid">04</span>
+          <span class="ftitle">copyRepo strips node_modules, so the gates it runs cannot work</span>
+          <span class="fmeta"><span class="pill crit">Critical</span><span class="pill v">Plausible</span><span class="floc">kit/lib/verify.mjs:327</span></span>
+        </summary>
+        <div class="fbody">
+          <p><span class="lab">Mechanism</span>The scratch-copy skip set excludes <span class="mono">node_modules</span>, and both the null-stub proof and the mutation check run the project's real gate inside that scratch tree.</p>
+          <p><span class="lab">Failure</span>Gate is <span class="mono">npx vitest run</span>. In scratch there is no <span class="mono">vitest</span>. In <span class="mono">verify.mjs</span>, <span class="mono">detectEnvFailure</span> catches it and emits an env-failure for <em>every</em> node, so the only practical remedy is to stop running <span class="mono">verify-tests</span> — which finding 06 makes painless. In <span class="mono">mutate.mjs</span>, which shares <span class="mono">copyRepo</span> but has no such detection, the identical failure is scored as <em>every mutant killed</em> (finding 03). One missing directory disables both of the mechanisms that make delegation safe, in opposite directions.</p>
+          <p><span class="lab">To settle</span>One run of <span class="mono">trellis verify-tests</span> against a project with an npm-installed test runner.</p>
+        </div>
+      </details>
+
+      <details class="finding crit">
+        <summary>
+          <span class="fid">05</span>
+          <span class="ftitle">An environment-halted run reports success and exits 0</span>
+          <span class="fmeta"><span class="pill crit">Critical</span><span class="pill v">Confirmed</span><span class="floc">kit/lib/runner.mjs:237</span></span>
+        </summary>
+        <div class="fbody">
+          <p><span class="lab">Mechanism</span>Launching stops on <span class="mono">budget.check() || (envHalt ? … : null)</span> at line 198. But the end-of-run sweep at line 237 re-derives <span class="mono">const breach = budget.check();</span> <em>without</em> the envHalt term, so the <span class="mono">PENDING → BUDGET</span> pass never runs and every untried node stays <span class="mono">pending</span> — which <span class="mono">rollup</span> counts as neither <em>done</em> nor <em>stuck</em>.</p>
+          <p><span class="lab">Failure</span>20-node graph, <span class="mono">pytest</span> present but a dependency missing. Node 1 halts the run. <span class="mono">state.finishedAt</span> is set unconditionally, <span class="mono">process.exitCode = stuck ? 1 : 0</span> gives 0, REPORT.md shows <span class="mono">0/20 landed</span> with no "cut short" banner, and <span class="mono">trellis auto</span> advances to triage, triages an empty run, and marks the cycle complete. The one halt path designed to be loud is the only silent one.</p>
+        </div>
+      </details>
+
+      <details class="finding crit">
+        <summary>
+          <span class="fid">06</span>
+          <span class="ftitle">trellis run never invokes verify-tests</span>
+          <span class="fmeta"><span class="pill crit">Critical</span><span class="pill v">Confirmed</span><span class="floc">kit/bin/cli.mjs:395</span></span>
+        </summary>
+        <div class="fbody">
+          <p><span class="lab">Mechanism</span><span class="mono">cmdRun</span> calls <span class="mono">validateGraph</span> and then <span class="mono">run(...)</span>. <span class="mono">verifyTests</span> is imported at <span class="mono">cli.mjs:15</span> and referenced only by <span class="mono">cmdVerifyTests</span>. Nothing in state, the schema, or the runner records whether verification ever happened, or when relative to the last edit of the tests.</p>
+          <p><span class="lab">Failure</span>A test containing <span class="mono">assert.ok(true)</span> passes <span class="mono">validateGraph</span> — the file exists, isn't ignored, isn't in write scope, all true. The worker writes an empty function, the gate exits 0, the node merges. If the node declares no mutations, <span class="mono">runner.mjs:138</span> short-circuits the mutation block too, and a fully vacuous node reaches <span class="mono">main</span> with no discriminating check of any kind.</p>
+          <p><span class="lab">Scope</span>The <span class="mono">auto</span> path is safe: <span class="mono">driver.mjs:295</span> spawns the real <span class="mono">verify-tests</span> for stage 04. The hole is the manual path, which is the one QUICKSTART teaches first.</p>
+        </div>
+      </details>
+
+      <details class="finding high">
+        <summary>
+          <span class="fid">07</span>
+          <span class="ftitle">denyWrite omits the test configs today's runners actually read</span>
+          <span class="fmeta"><span class="pill high">High</span><span class="pill v">Confirmed</span><span class="floc">trellis.config.json</span></span>
+        </summary>
+        <div class="fbody">
+          <p><span class="lab">Mechanism</span>The <span class="mono">$gate-config</span> comment states the principle exactly right — <em>"a worker that can write package.json decides what npm test runs"</em> — and then enumerates incompletely. Missing: <span class="mono">vite.config.*</span>, <span class="mono">tsconfig*.json</span>, <span class="mono">playwright.config.*</span>, <span class="mono">babel.config.*</span>, <span class="mono">requirements.txt</span>, <span class="mono">pom.xml</span>, <span class="mono">build.gradle*</span>, <span class="mono">.github/workflows/**</span>.</p>
+          <p><span class="lab">Failure</span>Gate is <span class="mono">npx vitest run</span>. With no <span class="mono">vitest.config.*</span>, vitest reads <span class="mono">vite.config.ts</span>. A worker adds a <span class="mono">test.include</span> glob that excludes <span class="mono">tests/</span>; vitest exits 0 with "no test files found"; <span class="mono">runGate</span> returns <span class="mono">{ok:true, kind:"pass"}</span>. The frozen test is untouched, so the tamper checks never fire, and the node merges having run zero assertions. <span class="mono">tsconfig</span> path mapping achieves the same thing by redirecting the import.</p>
+        </div>
+      </details>
+
+      <details class="finding high">
+        <summary>
+          <span class="fid">08</span>
+          <span class="ftitle">Windows gate timeout orphans the test process and hangs the run</span>
+          <span class="fmeta"><span class="pill high">High</span><span class="pill v">Confirmed</span><span class="floc">kit/lib/gate.mjs:215</span></span>
+        </summary>
+        <div class="fbody">
+          <p><span class="lab">Mechanism</span><span class="mono">shell:true</span> on win32 makes the child <span class="mono">cmd.exe /d /s /c "&lt;gate&gt;"</span>. <span class="mono">child.kill("SIGKILL")</span> maps to <span class="mono">TerminateProcess</span> on that one handle; Node does no tree kill on Windows. The grandchild inherits the stdio pipe write handles and survives, and <span class="mono">'close'</span> only fires once the process ends <em>and</em> the streams close.</p>
+          <p><span class="lab">Failure</span>A worker writes an implementation with an unclosed handle. At timeout, <span class="mono">cmd.exe</span> dies and the test runner keeps going. Neither <span class="mono">close</span> nor <span class="mono">error</span> ever fires, the exec promise never settles, and <span class="mono">runner.mjs:225</span>'s <span class="mono">Promise.race</span> never resolves. <span class="mono">trellis run</span> sits silent forever with state frozen at <span class="mono">running</span>. The <span class="mono">timedOut</span> branch at <span class="mono">gate.mjs:105</span> is dead code on your platform.</p>
+        </div>
+      </details>
+
+      <details class="finding high">
+        <summary>
+          <span class="fid">09</span>
+          <span class="ftitle">The same orphan bug in runSession — the only timeout in trellis auto</span>
+          <span class="fmeta"><span class="pill high">High</span><span class="pill v">Confirmed</span><span class="floc">kit/lib/driver.mjs:614</span></span>
+        </summary>
+        <div class="fbody">
+          <p><span class="lab">Mechanism</span>The v2.6.0 fix added <span class="mono">shell: IS_WINDOWS</span> at line 598 and left the kill path alone. Same shape as finding 08 — the sibling the generalisation missed.</p>
+          <p><span class="lab">Failure</span>A stage session wedges. At <span class="mono">sessionTimeoutMs</span>, SIGTERM kills <span class="mono">cmd.exe</span>; the <span class="mono">claude</span> process survives holding both pipes; <span class="mono">close</span> never fires; <span class="mono">await runSession(...)</span> never returns. No verify, no <span class="mono">recordSession</span>, no backoff, no retry — the whole chain hangs with <span class="mono">04_tests — attempt 1/N</span> as its last line. There is also no <span class="mono">timedOut</span> flag at all, so even on POSIX the driver cannot tell a timeout from a clean exit.</p>
+        </div>
+      </details>
+
+      <details class="finding high">
+        <summary>
+          <span class="fid">10</span>
+          <span class="ftitle">The request timeout is cleared before the response body is read</span>
+          <span class="fmeta"><span class="pill high">High</span><span class="pill v">Confirmed</span><span class="floc">kit/lib/provider.mjs:63</span></span>
+        </summary>
+        <div class="fbody">
+          <p><span class="lab">Mechanism</span><span class="mono">clearTimeout(timer)</span> sits one line above <span class="mono">const raw = await res.text()</span>. So <span class="mono">worker.requestTimeoutMs</span> guards only until response <em>headers</em> arrive.</p>
+          <p><span class="lab">Failure</span>A provider returns 200 with headers and then stalls. <span class="mono">res.text()</span> blocks indefinitely with the abort controller already cancelled. <span class="mono">chatWithBackoff</span> can't retry because it never sees a throw; the node never returns; the run hangs with no log line and no budget stop. There's no size cap either, so a runaway streamed body buffers until the process OOMs.</p>
+        </div>
+      </details>
+
+      <details class="finding high">
+        <summary>
+          <span class="fid">11</span>
+          <span class="ftitle">git() discards spawn errors, so the dirty-tree guard fails open</span>
+          <span class="fmeta"><span class="pill high">High</span><span class="pill v">Confirmed</span><span class="floc">kit/lib/worktree.mjs:45</span></span>
+        </summary>
+        <div class="fbody">
+          <p><span class="lab">Mechanism</span><span class="mono">git()</span> builds <span class="mono">out: (r.stdout || "").trim()</span> and never inspects <span class="mono">r.error</span>. A spawn failure is therefore indistinguishable from clean, empty output.</p>
+          <p><span class="lab">Failure</span>Git not on PATH, or the 32&nbsp;MB <span class="mono">maxBuffer</span> exceeded, and <span class="mono">isClean</span> returns <span class="mono">true</span>. <span class="mono">runner.mjs:38</span>'s guard — the one protecting your uncommitted work from being merged into — passes, and the run merges node branches into a branch holding your changes. The same fault hits <span class="mono">changedPaths</span>: past 32&nbsp;MB of status output it returns <span class="mono">[]</span>, so the gate tells a model that just wrote a correct implementation <em>"you produced no file changes"</em> and the node burns every tier to exhaustion on a false premise.</p>
+        </div>
+      </details>
+
+      <details class="finding high">
+        <summary>
+          <span class="fid">12</span>
+          <span class="ftitle">kit/ is not write-protected, contradicting CONTEXT.md</span>
+          <span class="fmeta"><span class="pill high">High</span><span class="pill v">Confirmed</span><span class="floc">.claude/hooks/protect-runner.mjs:12</span></span>
+        </summary>
+        <div class="fbody">
+          <p><span class="lab">Mechanism</span><span class="mono">CONTEXT.md:64</span> states flatly: <em>"<span class="mono">kit/</span> is write-protected by a hook."</em> The hook imports <span class="mono">PROTECTED</span> — ten specific paths — and never imports <span class="mono">LOAD_BEARING</span>, which is the list that actually contains <span class="mono">kit/lib/</span> and <span class="mono">kit/bin/</span>.</p>
+          <p><span class="lab">Failure</span>A Write to <span class="mono">kit/lib/worker.mjs</span> (which calls <span class="mono">screenBlocks</span>), <span class="mono">kit/lib/runner.mjs</span> (which holds the merge decision and the mutation gate), <span class="mono">kit/lib/graph.mjs</span>, <span class="mono">kit/lib/config.mjs</span> or <span class="mono">kit/bin/cli.mjs</span> exits 0. Deleting one call in <span class="mono">worker.mjs</span> disables the test-freeze, write-scope and output-screening guarantees together, and nothing mechanical objects.</p>
+          <p><span class="lab">Note</span>The design intent behind splitting <span class="mono">PROTECTED</span> from <span class="mono">LOAD_BEARING</span> is sound and well argued in <span class="mono">evolve.mjs</span>. The bug is that the hook enforcing the <em>documented</em> claim uses the narrower list.</p>
+        </div>
+      </details>
+
+      <details class="finding med">
+        <summary>
+          <span class="fid">13</span>
+          <span class="ftitle">guard-bash is inert in interactive sessions</span>
+          <span class="fmeta"><span class="pill med">Medium</span><span class="pill v">Confirmed</span><span class="floc">.claude/hooks/guard-bash.mjs:33</span></span>
+        </summary>
+        <div class="fbody">
+          <p><span class="lab">Mechanism</span><span class="mono">if (!process.env.TRELLIS_STAGE) process.exit(0);</span>. That variable is set only by <span class="mono">driver.mjs:595</span>, i.e. only in driver-spawned stages — and <span class="mono">driver.enabled</span> is <span class="mono">false</span> by default, so the guarded mode is the minority one. The other two hooks match <span class="mono">Read|Edit|Write</span> and read <span class="mono">file_path</span>, so neither sees a Bash command.</p>
+          <p><span class="lab">Failure</span>In an ordinary interactive session, <span class="mono">cat .env</span>, <span class="mono">printf '' &gt; .trellis/state.json</span>, <span class="mono">sed -i</span> against <span class="mono">kit/lib/paths.mjs</span>, and <span class="mono">git merge trellis/&lt;high-risk-node&gt;</span> are all uninspected — including the merge that OPERATING.md presents as the one non-negotiable human checkpoint.</p>
+          <p><span class="lab">Nuance</span>This is defensible as written — the comment calls it "a second layer, not a sandbox". It's ranked Medium because the <em>documentation</em> presents it as the answer to "why can't the orchestrator just merge it", and in the default configuration it isn't.</p>
+        </div>
+      </details>
+
+      <details class="finding med">
+        <summary>
+          <span class="fid">14</span>
+          <span class="ftitle">No re-gate after merge, so the tree is never proven</span>
+          <span class="fmeta"><span class="pill med">Medium</span><span class="pill v">Confirmed</span><span class="floc">kit/lib/runner.mjs:170</span></span>
+        </summary>
+        <div class="fbody">
+          <p><span class="lab">Mechanism</span>Worktrees snapshot the base branch at creation. <span class="mono">mergeNode</span> fires the instant a node passes, with no re-run of its gate against the post-merge base, and no verification pass anywhere in <span class="mono">run()</span>.</p>
+          <p><span class="lab">Failure</span>Two nodes with no dep edge and disjoint file globs both launch under <span class="mono">concurrency: 3</span> and both branch from base at t0. The first merges, changing the signature of a shared exported type. The second was gated at t0 against the old signature, passes, and merges cleanly because the files don't overlap textually. The base branch now holds a combination no gate ever executed. MISSION.md's <em>"nothing merges that was not proven against an oracle"</em> holds per node and fails for the tree.</p>
+          <p><span class="lab">Fix</span>Re-run the level's gates at each level boundary before advancing — the cheapest version of this is one extra gate run per level, not per node.</p>
+        </div>
+      </details>
+
+      <details class="finding med">
+        <summary>
+          <span class="fid">15</span>
+          <span class="ftitle">The driver hardcodes .trellis while config makes it configurable</span>
+          <span class="fmeta"><span class="pill med">Medium</span><span class="pill v">Confirmed</span><span class="floc">kit/lib/driver.mjs:317</span></span>
+        </summary>
+        <div class="fbody">
+          <p><span class="lab">Mechanism</span><span class="mono">driver.mjs</span> hardcodes the literal <span class="mono">".trellis"</span> in roughly 25 places. Exactly one function — <span class="mono">forgedTriageRuns</span> at line 400 — honours <span class="mono">cfg.paths.state</span>. The two disagree.</p>
+          <p><span class="lab">Failure</span>Set <span class="mono">paths.state</span> to anything else and the runner writes to the new path while <span class="mono">currentRunId</span> reads the old one, returns null, and every stage that attributes evidence to a run fails. Worse with a stale <span class="mono">.trellis/</span> left over: <span class="mono">currentRunId</span> returns a stale id while the anti-forgery check reads the new path, so it either silently disables itself or fails a valid stage as forged.</p>
+        </div>
+      </details>
+    </div>
+
+    <div class="stack" id="appendix">
+      <h3>Secondary findings</h3>
+      <p>Real, verified by the reviewers, below the top fifteen. Worth a pass but not blocking.</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Location</th><th>Finding</th><th>Cost</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">state.mjs:403</td><td><span class="mono">resumePlan</span> rebuilds already-merged nodes on a <span class="mono">nodeHash</span> change, transitively — doing automatically what <span class="mono">cmdReject</span> explicitly refuses to do</td><td>Editing one node's <span class="mono">notes</span> can reset three merged nodes to pending and re-merge against a base that still contains them; deletions are silently lost</td></tr>
+            <tr><td class="mono">runner.mjs:170</td><td>Crash between <span class="mono">mergeNode</span> and the state save leaves <span class="mono">running</span> on disk; resume rewinds it to <span class="mono">pending</span> with no <span class="mono">merge-base</span> reconciliation</td><td>A landed node rebuilds from a base already containing its own work, returns <span class="mono">no-op</span>, and burns every tier to exhaustion</td></tr>
+            <tr><td class="mono">budget.mjs</td><td>Mutation calls hit <span class="mono">budget.record</span> (counting as attempts) but never <span class="mono">onAttempt</span> (so they miss the cost rollup)</td><td>With <span class="mono">maxTotalAttempts: 120</span>, 25 nodes × 3 mutations spends 75 of the budget on non-attempts; two cost figures that cannot agree</td></tr>
+            <tr><td class="mono">paths.mjs:125</td><td><span class="mono">globsOverlap</span> is case-sensitive while <span class="mono">matchAllow</span> deliberately folds case</td><td>On Windows, <span class="mono">src/components/</span> vs <span class="mono">src/Components/</span> passes collision validation, then both nodes write the same physical file</td></tr>
+            <tr><td class="mono">cli.mjs:584</td><td><span class="mono">apply-triage</span>'s verdict vocabulary is disjoint from <span class="mono">triage.mjs</span>'s writable <span class="mono">VERDICTS</span></td><td><span class="mono">re-decompose</span> and <span class="mono">rewrite-contract</span> — the two verdicts REPORT.md tells you to pick — cannot be recorded; their handler branches are dead code</td></tr>
+            <tr><td class="mono">runner.mjs:218</td><td><span class="mono">run --only X</span> where X's dep is still pending: nothing is ready, nothing is doomed, loop breaks</td><td>Exits 0 with "0/1 landed" — the most likely operator typo produces a clean-looking no-op</td></tr>
+            <tr><td class="mono">graph.mjs:154</td><td>Early return on any field error skips both cycle detection and write-collision detection</td><td>A missing <span class="mono">title</span> hides a cycle and an overlap; three validate round-trips where one would do</td></tr>
+            <tr><td class="mono">product.mjs:127</td><td><span class="mono">findCycle</span>, <span class="mono">ancestors</span> and <span class="mono">levels</span> recurse where <span class="mono">graph.mjs</span>'s detector was deliberately written iteratively</td><td>Stack overflow on a deep chain; <span class="mono">ancestors</span> also memoises incomplete sets under a cycle, which can mask a real write collision</td></tr>
+            <tr><td class="mono">verify.mjs:168</td><td><span class="mono">buildStub</span> always emits ESM, though <span class="mono">REQUIRE_*</span> regexes show CJS is a supported input</td><td>Against a CJS project the stub fails to <em>parse</em>; no SyntaxError signature in <span class="mono">envfail.mjs</span>, so the non-zero exit is scored "non-vacuous" — a test asserting nothing is certified as having teeth</td></tr>
+            <tr><td class="mono">gate.mjs:218</td><td>Per-chunk <span class="mono">Buffer.toString()</span> splits multi-byte UTF-8 across pipe boundaries</td><td>Corrupts gate feedback and can make <span class="mono">detectEnvFailure</span> misclassify a real <span class="mono">ModuleNotFoundError</span> as an ordinary test failure — the exact case that branch exists to catch</td></tr>
+            <tr><td class="mono">runner.mjs:164</td><td>The <span class="mono">onSurvivor:"hold"</span> branch emits no log line and no event, unlike the structurally identical high-risk branch above it</td><td>A held node vanishes from the console, <span class="mono">run.jsonl</span>, and any consumer counting terminal events</td></tr>
+            <tr><td>4 modules</td><td>Duplicated primitives: two path-safety validators, two cycle detectors, <span class="mono">readJsonOrNull</span> copy-pasted 4×, JSONL parse 5×</td><td>Hardening any of them takes effect in one place out of nine</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">Two prose-only guarantees also surfaced: CLAUDE.md's "two review passes per node is the ceiling" is tracked nowhere, and "you do not run the graph turn by turn / stop reading run.jsonl" has no hook behind it. Both are norms, not mechanisms. Given MISSION.md's own standard — that a system which can edit its own regression suite has no regression suite — these are worth making mechanical.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== HOW ==================== -->
+<section id="how">
+  <div class="shead"><span class="num">02</span><h2>How Trellis actually works</h2></div>
+
+  <div class="stack-lg">
+    <div class="stack">
+      <p>Think of a <strong>construction site</strong>, not a chatbot.</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th style="width:31%">Trellis piece</th><th>Construction analogy</th></tr></thead>
+          <tbody>
+            <tr><td><span class="mono">MISSION.md</span></td><td>The building code. Nobody on site may amend it — only you, deliberately.</td></tr>
+            <tr><td>The product graph</td><td>The architect's blueprint, handed in finished. Trellis builds it; it does not design it.</td></tr>
+            <tr><td>Opus (the orchestrator)</td><td>The architect. Expensive, scarce, makes judgment calls. Never lays bricks.</td></tr>
+            <tr><td>Open-weight workers</td><td>The subcontractors. Abundant, cheap, supervised, never trusted.</td></tr>
+            <tr><td><span class="mono">kit/lib/runner.mjs</span></td><td>The site foreman. Plain deterministic code. Costs zero tokens.</td></tr>
+            <tr><td>The frozen tests</td><td>The inspection checklist, written <em>before</em> any concrete is poured.</td></tr>
+            <tr><td>Git worktrees</td><td>Fenced-off work areas — one sub each, so they can't wreck each other's work.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="stack">
+      <h3>One cycle, seven stages</h3>
+      <p>Each stage is a <em>separate session</em> that gets cleared afterwards. That is deliberate: a session that runs out of room mid-task reports success having done a fraction of the work. So anything the next stage needs must be on disk before this one stops.</p>
+      <div class="pipe">
+        <div class="pipe-row">
+          <div class="stg"><span class="k">01_ingest</span><span class="t">Validate</span><span class="d">Check the blueprint. If it's wrong, stop — that's correct, not a failure.</span></div>
+          <div class="stg"><span class="k">02_slice</span><span class="t">Cut a batch</span><span class="d">Take the next ≤25 nodes whose deps are already built.</span></div>
+          <div class="stg"><span class="k">03_cases</span><span class="t">Enumerate</span><span class="d">Turn each node's acceptance criteria into edge cases.</span></div>
+          <div class="stg"><span class="k">04_tests</span><span class="t">Freeze tests</span><span class="d">One test per case. Everything is red — nothing is built yet.</span></div>
+          <div class="stg build"><span class="k">05_build</span><span class="t">Run headless</span><span class="d">Worktree, cheap model, screen, gate, retry, escalate, mutate, merge.</span></div>
+          <div class="stg"><span class="k">06_triage</span><span class="t">Judge</span><span class="d">Read only what's exhausted or high-risk. Ignore the rest.</span></div>
+          <div class="stg"><span class="k">07_evolve</span><span class="t">Improve</span><span class="d">Periodic. Recurring failure patterns become proposals.</span></div>
+        </div>
+        <div class="who">
+          <div>Opus</div><div>Opus</div><div>Opus</div><div>Opus</div><div class="zero">0 tokens</div><div>Opus</div><div>Opus</div>
+        </div>
+      </div>
+      <p class="pipe-cap">Stage 05 is not a session you drive. It is <span class="mono">runner.mjs</span> executing the DAG headless. That absence is the central claim of the whole design.</p>
+    </div>
+
+    <div class="stack">
+      <h3>What stage 05 does per node</h3>
+      <p>Create a worktree off the base branch. Build a prompt — the node's contract, its frozen tests, scoped context. Call the <em>cheapest</em> tier. Screen the output against the node's write scope and the absolute <span class="mono">denyWrite</span> boundary. Apply it. Run the gate. On failure, feed back up to 4,000 characters of test output and retry; on exhaustion, escalate <span class="mono">cheap → mid → strong</span>. On success, run mutation tests, then merge <span class="mono">trellis/&lt;node-id&gt;</span>.</p>
+      <p>The whole loop stops at exactly one place it refuses to pass: a high-risk node — a one-way door, an auth/payments/secrets surface, an interface with two or more consumers — never merges into your base branch without your eyes on the diff.</p>
+    </div>
+
+    <div class="stack" id="ideas">
+      <h3>The three ideas that make it work</h3>
+      <ul class="tight">
+        <li><strong>The test is the contract.</strong> Delegating to a cheap model is only safe because an oracle written before the implementation existed decides what gets accepted.</li>
+        <li><strong>Judgment is rationed; implementation is abundant.</strong> Your context is the binding resource, so the design's whole job is keeping implementation out of it. The stated metric is <em>orchestrator tokens per shipped node, trending down.</em></li>
+        <li><strong>Completion is proven, never claimed.</strong> "Done" is a file on disk that the driver checks after the session exits. A model saying it finished is not evidence.</li>
+      </ul>
+      <div class="callout">
+        <h3>The crown jewel</h3>
+        <p><strong>The test author is a different model family than the implementer.</strong> Opus writes tests through Anthropic; workers implement through OpenRouter. A backdoor would have to exist in both, coordinated, to survive. It is the strongest safety property in the design and it costs nothing.</p>
+        <p>A second one is easy to miss. 2026's dominant long-horizon agent failure is <em>context rot</em> — accuracy falling as context grows — and the standard fix, compaction, has been shown to silently drop governance constraints during the rewrite. Trellis sidesteps both by <em>clearing</em> rather than compacting, and re-deriving state from disk. That is a real architectural advantage over the mainstream agent loop, and it is currently undocumented as such.</p>
+      </div>
+    </div>
+
+    <div class="stack">
+      <h3>Where to dig, in order of payoff</h3>
+      <ul class="tight">
+        <li><span class="mono">kit/lib/runner.mjs</span> — the loop. 264 lines. Read this first; everything else is support.</li>
+        <li><span class="mono">kit/lib/gate.mjs</span> + <span class="mono">kit/lib/verify.mjs</span> — what makes delegation safe. Findings 02, 04, 06 and 08 all live here.</li>
+        <li><span class="mono">kit/lib/worker.mjs</span> — prompt assembly. Your token bill lives in <span class="mono">buildPrompt</span>.</li>
+        <li><span class="mono">kit/lib/state.mjs</span> + <span class="mono">kit/lib/graph.mjs</span> — the DAG and its status machine.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== ROADMAP ==================== -->
+<section id="roadmap">
+  <div class="shead"><span class="num">03</span><h2>Where the next order of magnitude is</h2></div>
+
+  <div class="stack-lg">
+    <div class="callout">
+      <h3>Start here: your own benchmark is empty</h3>
+      <p><span class="mono">.bench/REPORT.md</span> has a column for Arm A (plain Claude Code) that is entirely dashes, and section 4 — <em>held-out pass rate, the only quality measure — is blank for both arms.</em> The structure of that report is excellent: it pre-registers its own asymmetries, books graph-authoring cost to neither arm, and refuses to score Trellis on tests Trellis wrote. It is a genuinely honest experimental design with no data in it.</p>
+      <p>Until it is filled, every item below — and every <span class="mono">trellis evolve</span> proposal — is an argument rather than a measurement. This is the single highest-leverage thing you can do, and it costs one run per arm.</p>
+    </div>
+
+    <div class="stack" id="r-honest">
+      <div class="shead" style="border-bottom-width:1px;margin-bottom:6px"><h3 style="font-size:1.25rem">Track A — Make green mean something</h3></div>
+      <p>Prerequisite for everything else. A speed improvement on a system that can report false green just gets you to the wrong place faster.</p>
+
+      <div class="move">
+        <div class="move-head"><h3>Make every verifier fail closed</h3>
+          <div class="chips"><span class="chip pay">High payoff</span><span class="chip">Low effort</span></div></div>
+        <p>Findings 03, 04, 05 and 11 are one bug wearing four hats: <em>an error that could not be evaluated is scored as a pass.</em> Add <span class="mono">detectEnvFailure</span> to <span class="mono">mutate.mjs</span>; make <span class="mono">git()</span> surface <span class="mono">r.error</span>; include the envHalt term in the end-of-run sweep; stop stripping <span class="mono">node_modules</span> from the scratch copy (symlink it).</p>
+        <p class="why">MISSION.md already says it: "a green run against weakened gates is a worse outcome than a red run against honest ones." These are the weakened gates.</p>
+      </div>
+
+      <div class="move">
+        <div class="move-head"><h3>Make verify-tests a precondition, not a command</h3>
+          <div class="chips"><span class="chip pay">High payoff</span><span class="chip">Low effort</span></div></div>
+        <p>Record a hash of every frozen test file alongside its verification result in state. <span class="mono">trellis run</span> refuses to start if any test file's hash has changed since it was last proven non-vacuous. This closes finding 06 <em>and</em> gives you something the system currently cannot answer: "were these specific tests ever proven to have teeth?"</p>
+      </div>
+
+      <div class="move">
+        <div class="move-head"><h3>Sandbox the gate</h3>
+          <div class="chips"><span class="chip pay">High payoff</span><span class="chip">High effort</span></div></div>
+        <p>The gate runs arbitrary project commands with no boundary (finding 02). The ecosystem converged on containers-per-agent for exactly this — Dagger's container-use is the reference implementation. A devcontainer or Docker gate also fixes findings 04 and 08 for free: dependencies are present, and killing a container is a real tree kill.</p>
+        <p class="why">This is the one finding that a code fix cannot close. It's also what would let you raise <span class="mono">concurrency</span> past 3 without worrying about what a worker's code does at import time.</p>
+      </div>
+
+      <div class="move">
+        <div class="move-head"><h3>Re-gate at level boundaries</h3>
+          <div class="chips"><span class="chip">Medium payoff</span><span class="chip">Low effort</span></div></div>
+        <p>Finding 14: per-node oracles never prove the tree. Run the level's gates once against the merged base before advancing to the next level. Zerg — one of the parallel-worktree orchestrators — uses exactly this rule: a level doesn't complete until all its workers pass. One extra gate run per level, not per node.</p>
+      </div>
+
+      <div class="move">
+        <div class="move-head"><h3>Add property-based tests to the oracle</h3>
+          <div class="chips"><span class="chip pay">High payoff</span><span class="chip">Medium effort</span></div></div>
+        <p>Frozen tests are example-based, which is why <span class="mono">worker-trust.md</span> has to argue at length about a worker that sees <span class="mono">assert(add(2,3)===5)</span> and writes <span class="mono">return 5</span>. Property-based tests are structurally resistant to that: you cannot hardcode your way past a universally quantified invariant. The Property-Generated Solver work reports 23–37% relative pass@1 improvement over example-based TDD for exactly this pairing.</p>
+        <p class="why">This strengthens the single load-bearing assumption of the entire architecture, and it is additive — stage 03 gains a "what invariant holds for all inputs?" question alongside its case enumeration.</p>
+      </div>
+
+      <div class="move">
+        <div class="move-head"><h3>Close the mutation loop instead of just warning</h3>
+          <div class="chips"><span class="chip">Medium payoff</span><span class="chip">Medium effort</span></div></div>
+        <p>Today, surviving mutants set a <span class="mono">weak-tests</span> flag and merge anyway. Feed them back as new cases for stage 03 instead. The MutGen result is the argument: a vanilla prompt plateaus at a 53% mutation score and stays there across four iterations <em>without</em> mutation feedback; with the feedback loop it reaches 89.5%.</p>
+      </div>
+    </div>
+
+    <div class="stack" id="r-tokens">
+      <div class="shead" style="border-bottom-width:1px;margin-bottom:6px"><h3 style="font-size:1.25rem">Track B — Spend fewer orchestrator tokens</h3></div>
+      <p>The stated success metric. Your own bench data says exactly where to aim.</p>
+
+      <div class="callout">
+        <h3>02_slice is 53% of your orchestrator cost</h3>
+        <p>From <span class="mono">.bench/raw.json</span>: of 7.79M cache-read tokens across the cycle, <strong>4.13M are stage 02 alone</strong> — and 29,991 of 38,536 output tokens, <strong>78%</strong>. Ingest, cases, tests and triage together are less than half of slice. If you optimise one stage, optimise that one; everything else is rounding.</p>
+        <p>Second target: the "always-on" tax is 22,921 tokens per session — system prompt, CLAUDE.md, CONTEXT.md, and every activated skill description — paid five times per cycle before any work happens. That is ~115k tokens of pure boot cost, and the number to watch before adding anything to the <span class="mono">always</span> list.</p>
+      </div>
+
+      <div class="move">
+        <div class="move-head"><h3>Fix the worker prompt's cache prefix</h3>
+          <div class="chips"><span class="chip pay">High payoff</span><span class="chip">Low effort</span></div></div>
+        <p><span class="mono">buildPrompt</span> places the mutable "current contents of files you may edit" block <em>before</em> the stable write-scope, gate and output-contract sections, so it invalidates everything after it on every retry. Move it to the end, add <span class="mono">cache_control</span> breakpoints, and set a stable <span class="mono">session_id</span> per node so OpenRouter's sticky routing returns you to the endpoint holding the warm cache.</p>
+        <p class="why">A node with 3 attempts across 2 tiers currently retransmits its frozen tests and read-only context 4–6 times at full price. This is the cheapest real win in the codebase.</p>
+      </div>
+
+      <div class="move">
+        <div class="move-head"><h3>Stop re-sending what cannot have changed</h3>
+          <div class="chips"><span class="chip">Medium payoff</span><span class="chip">Low effort</span></div></div>
+        <p>Retries rebuild the full prompt and append a synthetic assistant turn. Frozen tests and read-only reference files never change between attempts — only write-scope files do. Refresh those; leave the rest in the cached prefix.</p>
+      </div>
+
+      <div class="move">
+        <div class="move-head"><h3>Make the success metric a number the system prints</h3>
+          <div class="chips"><span class="chip pay">High payoff</span><span class="chip">Low effort</span></div></div>
+        <p>"Orchestrator tokens per shipped node" is the declared metric and is computed nowhere. Have <span class="mono">trellis status</span> print it and store it per cycle. Without it, <span class="mono">trellis evolve</span> has no objective function — it can spot recurring failure codes but cannot tell whether the system is getting cheaper.</p>
+        <p class="why">Note the two cost figures that already disagree (secondary findings): <span class="mono">budget.snapshot().costUsd</span> includes mutation spend and <span class="mono">runnerCostUsd</span> does not. Pick one before you start trending it.</p>
+      </div>
+    </div>
+
+    <div class="stack" id="r-ship">
+      <div class="shead" style="border-bottom-width:1px;margin-bottom:6px"><h3 style="font-size:1.25rem">Track C — Ship faster than plain Claude Code</h3></div>
+
+      <div class="move">
+        <div class="move-head"><h3>Sample in parallel instead of retrying in sequence</h3>
+          <div class="chips"><span class="chip pay">High payoff</span><span class="chip">Medium effort</span></div></div>
+        <p>Today a failed node retries serially within a tier, then escalates. But you already have a perfect automated verifier — the gate. That is exactly the setting where drawing <em>k</em> candidates at the cheap tier in parallel and keeping the first that passes beats <em>k</em> sequential repairs, because each sample is an independent draw rather than a conditioned one. Anthropic's own multi-agent finding is the general form: token usage alone explained 80% of performance variance, and parallelism is how you scale tokens without growing a context window.</p>
+        <p class="why">At current tier pricing, three parallel cheap-tier samples cost less than one strong-tier attempt. The gate makes selection free and objective.</p>
+      </div>
+
+      <div class="move">
+        <div class="move-head"><h3>Route on node features, not just tag history</h3>
+          <div class="chips"><span class="chip">Medium payoff</span><span class="chip">Medium effort</span></div></div>
+        <p><span class="mono">routing.mjs</span> is ledger-driven and inert until 5 observations of a tag/tier pair. Cascade research reports 50–98% cost reduction at matched quality, but the routers that achieve it use per-request difficulty signals, not just historical category rates. You have strong per-node features already: number of dependents, write-scope size, case count, risk tag, whether the node is an interface. Start the ladder at <span class="mono">mid</span> for the top decile of those and skip a guaranteed-failing cheap attempt.</p>
+      </div>
+
+      <div class="move">
+        <div class="move-head"><h3>Make the decomposition ceiling mechanical</h3>
+          <div class="chips"><span class="chip">Medium payoff</span><span class="chip">Low effort</span></div></div>
+        <p>CLAUDE.md says two review passes per node is the ceiling and a third means the decomposition is wrong. Nothing records or enforces it. Track the count in state and have a third pass <em>refuse</em>, emitting a re-decompose prompt instead. This is the direct lever on long-horizon reliability: success over <em>t</em> dependent steps is <span class="mono">p^t</span>, so bounding <em>t</em> per unit and forcing a split when <em>p</em> is empirically low is the whole game.</p>
+      </div>
+
+      <div class="move">
+        <div class="move-head"><h3>Give the graph a live view</h3>
+          <div class="chips"><span class="chip">Low payoff</span><span class="chip">Medium effort</span></div></div>
+        <p>The rule "if you are reading <span class="mono">run.jsonl</span>, stop" exists because watching the run is the most expensive thing you can do with your context. A local TUI or web view reading <span class="mono">state.json</span> removes the temptation entirely — this is essentially what Conductor and Vibe Kanban sell, and you already have the state file they'd need.</p>
+      </div>
+    </div>
+
+    <div class="stack" id="r-prove">
+      <div class="shead" style="border-bottom-width:1px;margin-bottom:6px"><h3 style="font-size:1.25rem">Track D — What the field says you already got right</h3></div>
+      <p>Worth knowing so you don't trade it away in a refactor.</p>
+      <ul class="tight">
+        <li><strong>Agentless workers.</strong> The Agentless result — a plain localise/repair/validate pipeline beating agent frameworks on SWE-bench at roughly a tenth the cost — is the strongest external evidence for your worker design. Your workers are single-shot with structured file blocks and no tool loop. Resist adding one.</li>
+        <li><strong>Clearing instead of compacting.</strong> The 2026 governance-decay work shows compaction silently dropping safety constraints during summarisation. Your session-per-stage-with-disk-handoff avoids the failure mode entirely.</li>
+        <li><strong>Cross-family test authorship.</strong> Nothing else in the ecosystem does this. It is a real and cheap security property, and it should be stated far more prominently than a line in <span class="mono">worker-trust.md</span>.</li>
+        <li><strong>The stop-and-say-why default.</strong> <span class="mono">01_ingest</span> halting on a bad graph, rather than repairing it, is the discipline that spec-driven frameworks like Spec Kit and OpenSpec are converging toward — and the reason they're displacing looser "vibe coding" loops.</li>
+      </ul>
+      <div class="callout">
+        <h3>The honest competitive read</h3>
+        <p>Trellis's cost is real and front-loaded: five sessions plus a hand-authored product graph, against one Claude Code session. Its advantage — cheap implementation under an oracle, and a build phase that costs you nothing — is structurally sound but <strong>currently unmeasured</strong>. The brute-force end of the field (a Ralph-style loop) will out-ship it on small greenfield work; Trellis should win as node count and risk rise, because that is where compounding error and context rot kill the single-session approach.</p>
+        <p>Track A makes that claim true. The benchmark makes it provable. Everything in Tracks B and C is optimisation on top of a thing you have not yet demonstrated — worth doing, but in that order.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== VERDICT ==================== -->
+<section id="verdict">
+  <div class="shead"><span class="num">04</span><h2>Verdict</h2></div>
+  <div class="stack">
+    <p>The architecture is better than its implementation. The layering, the artifact-on-disk discipline, the immutable mission, the split between protected and load-bearing paths, the refusal to let a proposal touch the regression suite, the pre-registered benchmark that books its own asymmetries honestly — that is a level of design care well above what the ecosystem is producing.</p>
+    <p>The defects cluster in one place and share one shape: <strong>enforcement that fails open</strong>. Six of the fifteen let something unverified be reported as verified. That is fixable in a focused pass, and none of it requires rethinking the design.</p>
+    <p>The thing that is genuinely missing is not code. It's the held-out number in section 4 of your own benchmark.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="eyebrow">Sources</div>
+  <ol>
+    <li><a href="https://huggingface.co/papers/2407.01489">Agentless: Demystifying LLM-based Software Engineering Agents</a></li>
+    <li><a href="https://arxiv.org/html/2509.23045v2">Kimi-Dev: Agentless Training as Skill Prior for SWE-Agents</a></li>
+    <li><a href="https://www.zenml.io/llmops-database/building-production-multi-agent-research-systems-with-claude">Anthropic: Building Production Multi-Agent Research Systems with Claude</a></li>
+    <li><a href="https://arxiv.org/html/2606.22528v2">Governance Decay: How Context Compaction Silently Erases Safety Constraints in Long-Horizon LLM Agents</a></li>
+    <li><a href="https://arxiv.org/pdf/2606.29718">Diagnosing and Mitigating Context Rot in Long-horizon Search</a></li>
+    <li><a href="https://arxiv.org/html/2506.18315v1">Use Property-Based Testing to Bridge LLM Code Generation and Validation</a></li>
+    <li><a href="https://arxiv.org/html/2602.07900v2">Rethinking the Value of Agent-Generated Tests for LLM-Based Software Engineering Agents</a></li>
+    <li><a href="https://www.augmentcode.com/guides/mutation-testing-ai-generated-code">Mutation Testing for AI-Generated Code</a></li>
+    <li><a href="https://arxiv.org/pdf/2509.09677">The Illusion of Diminishing Returns: Measuring Long Horizon Execution in LLMs</a></li>
+    <li><a href="https://arxiv.org/pdf/2604.11978">The Long-Horizon Task Mirage? Diagnosing Where and Why Agentic Systems Break</a></li>
+    <li><a href="https://openrouter.ai/docs/guides/best-practices/prompt-caching">OpenRouter — Prompt Caching best practices</a></li>
+    <li><a href="https://tianpan.co/blog/2025-11-03-llm-routing-model-cascades">LLM Routing and Model Cascades (FrugalGPT lineage)</a></li>
+    <li><a href="https://www.augmentcode.com/tools/open-source-agent-orchestrators">Open-Source Agent Orchestrators for AI Coding (2026)</a></li>
+    <li><a href="https://www.rockcybermusings.com/p/behold-zerg-parallel-claude-code-orchestration">Zerg: parallel Claude Code orchestration with level gates</a></li>
+    <li><a href="https://arceapps.com/blog/sdd-frameworks-analysis-spec-kit-openspec-bmad/">SDD Frameworks Deep Dive: Spec Kit, OpenSpec, BMAD-METHOD</a></li>
+    <li><a href="https://www.humanlayer.dev/blog/brief-history-of-ralph">A Brief History of Ralph (the brute-force loop)</a></li>
+  </ol>
+</footer>
+
+</main>
+</div>
+</body>
+</html>

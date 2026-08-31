@@ -18,6 +18,7 @@ changed since 2.0.0.
 | Understand how Trellis changes itself | `references/EVOLUTION.md` |
 | Migrate from 1.1.x | `UPGRADING.md` |
 | See what changed release to release | `CHANGELOG.md` |
+| Read an adversarial audit, an elementary walkthrough, and a roadmap | [`docs/trellis-teardown.html`](docs/trellis-teardown.html) |
 
 ## The shape of it
 
