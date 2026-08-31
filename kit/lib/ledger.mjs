@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseJsonl } from "./paths.mjs";
 import { PASSED_GATE } from "./state.mjs";
+import { featureBucket } from "./features.mjs";
 
 /**
  * The ledger is the only thing in Trellis that survives a run.
@@ -68,6 +69,8 @@ export function recordsFor(state, nodes) {
       nodeId: id,
       role: n.role,
       risk: n.risk,
+      // Deliberately real tags only — see tierStats() below for why the
+      // feature bucket (item 15) is folded in there instead of here.
       tags: (n.tags || []).length ? n.tags : ["__untagged"],
       depCount: (n.deps || []).length,
       writeCount: (n.write || []).length,
@@ -103,8 +106,16 @@ export function tierStats(records, { alpha = 1, beta = 2 } = {}) {
     // sum — summing would turn a three-tag node into three data points and
     // manufacture confidence that does not exist.
     const identity = `${r.runId}|${r.nodeId}`;
+    // Item 15: one more synthetic "tag" — a coarse size bucket from counts
+    // already on every record — folded into the SAME pooling loop tags
+    // already use, confined to tierStats/routing. Deliberately NOT written
+    // onto the record's own `tags` field: evolve.mjs's kindCounts() groups
+    // findings by that exact field too, and a synthetic bucket alongside
+    // real tags there would double-report the same incidents under two
+    // keys — routing signal is not evolve's evidence.
+    const poolTags = [...(r.tags || ["__untagged"]), featureBucket(r)];
     for (const [tier, t] of Object.entries(r.attemptsByTier || {})) {
-      for (const tag of r.tags || ["__untagged"]) {
+      for (const tag of poolTags) {
         const k = `${tag}|${tier}`;
         const s = byKey.get(k) || { nodes: new Set(), landedNodes: new Set(), attempts: 0 };
         s.nodes.add(identity);

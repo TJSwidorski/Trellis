@@ -1,4 +1,5 @@
 import { tierStats } from "./ledger.mjs";
+import { nodeFeatureBucket } from "./features.mjs";
 
 /**
  * Ledger-driven tier selection — the "Chief Optimization Officer" as arithmetic.
@@ -22,7 +23,13 @@ export function planTiers(cfg, node, records) {
   const minObs = routing.minObservations ?? 5;
   const minRate = routing.minSuccessRate ?? 0.15;
   const stats = tierStats(records);
-  const tags = (node.tags || []).length ? node.tags : ["__untagged"];
+  // Item 15: pool by the SAME union-of-identities machinery tags already
+  // use, with one more synthetic "tag" — a coarse size bucket derived from
+  // dep/write/test counts already on every node, not a second mechanism.
+  // A node with real tags still benefits: it is pooled by ITS tags AND by
+  // every other node sharing its size bucket, so a brand-new tag with no
+  // history yet still inherits some signal from "nodes this size in general".
+  const tags = [...((node.tags || []).length ? node.tags : ["__untagged"]), nodeFeatureBucket(node)];
 
   // Pool observations across all of the node's tags.
   // Pool by UNION of node identities, never by summing counts. A node tagged

@@ -7,6 +7,7 @@ import { loadGraph, validateGraph, normalizeNode, ancestors, levels } from "../l
 import { run } from "../lib/runner.mjs";
 import { verifyTests, buildStub, importedNames, isCJSTarget } from "../lib/verify.mjs";
 import { planTiers } from "../lib/routing.mjs";
+import { featureBucket, nodeFeatureBucket } from "../lib/features.mjs";
 import { tierStats, recordsFor, summarise } from "../lib/ledger.mjs";
 import { scopeBullets } from "../lib/spec.mjs";
 import { detectEnvFailure } from "../lib/envfail.mjs";
@@ -187,6 +188,41 @@ check("a multi-tagged node counts once, not once per tag", () => {
   const cfg = { tiers:[{name:"cheap"},{name:"mid"}], routing:{enabled:true,minObservations:3,minSuccessRate:0.15} };
   const p = planTiers(cfg, {tags:["adapter","parser","csv"]}, recs);
   assert.strictEqual(p.reason, null, "3 tags on 1 node must not satisfy minObservations of 3");
+});
+
+check("ADVERSARIAL routing pools a brand-new tag with no history via its size bucket", () => {
+  // Item 15. "brandnew" has never been seen before -- on tags alone this is
+  // routing's own "inert without enough observations" case. But every one
+  // of these fixture records is large (lots of deps/writes/tests, matching
+  // "brandnew"'s own size), so pooling by size:large gives it real signal
+  // from OTHER large nodes' history even though ITS OWN tag has zero.
+  const big = { depCount: 3, writeCount: 3, testCount: 3 }; // -> size:large
+  const history = Array.from({ length: 12 }, (_, i) => ({
+    runId: "r1", nodeId: `n${i}`, tags: ["something-else"], ...big,
+    attemptsByTier: { cheap: { attempts: 3, landed: false } },
+  }));
+  const cfg = { tiers: [{ name: "cheap" }, { name: "mid" }], routing: { enabled: true, minObservations: 5, minSuccessRate: 0.15 } };
+  const node = { tags: ["brandnew"], deps: ["a", "b", "c"], write: ["x", "y", "z"], tests: ["t1", "t2", "t3"] };
+  const p = planTiers(cfg, node, history);
+  assert.deepStrictEqual(p.tiers.map((t) => t.name), ["mid"],
+    `expected the size bucket to give "brandnew" enough pooled signal to skip cheap, got: ${JSON.stringify(p)}`);
+  assert.match(p.reason, /size:large/, `expected the reason to name the size bucket, got: ${p.reason}`);
+});
+
+check("ADVERSARIAL a small node is never pooled with a large node's bad history", () => {
+  // The flip side: size buckets must not smear signal across sizes that
+  // share nothing but a coincidental tag-less default.
+  const big = { depCount: 3, writeCount: 3, testCount: 3 }; // -> size:large
+  const history = Array.from({ length: 12 }, (_, i) => ({
+    runId: "r1", nodeId: `n${i}`, tags: ["something-large"], ...big,
+    attemptsByTier: { cheap: { attempts: 3, landed: false } },
+  }));
+  const cfg = { tiers: [{ name: "cheap" }, { name: "mid" }], routing: { enabled: true, minObservations: 5, minSuccessRate: 0.15 } };
+  // A DIFFERENT real tag, not __untagged, so the only possible shared
+  // pooling key with the fixture's history would be the size bucket itself.
+  const smallNode = { tags: ["something-small"], deps: [], write: ["x"], tests: [] }; // -> size:small
+  const p = planTiers(cfg, smallNode, history);
+  assert.strictEqual(p.reason, null, `a small node must not inherit a large node's poor history: ${JSON.stringify(p)}`);
 });
 
 check("weak-tests and review count as the tier having succeeded", () => {
@@ -835,6 +871,18 @@ check("pickBestSample picks index 0 immediately when it is already clean", () =>
   const bad = "### FILE: src/a.mjs\n```js\n\n"; // unterminated fence -> truncated flag
   const idx = pickBestSample(node, cfg, "/repo", [{ text: good }, { text: bad }]);
   assert.strictEqual(idx, 0);
+});
+
+check("featureBucket buckets by total size, small/medium/large in that order", () => {
+  assert.strictEqual(featureBucket({ depCount: 0, writeCount: 1, testCount: 1 }), "size:small");
+  assert.strictEqual(featureBucket({ depCount: 1, writeCount: 2, testCount: 2 }), "size:medium");
+  assert.strictEqual(featureBucket({ depCount: 3, writeCount: 3, testCount: 3 }), "size:large");
+  assert.strictEqual(featureBucket({}), "size:small", "no counts at all should not throw or misclassify");
+});
+
+check("nodeFeatureBucket derives counts from a task-graph node's own arrays", () => {
+  const node = { deps: ["a", "b"], write: ["x.mjs"], tests: [] };
+  assert.strictEqual(nodeFeatureBucket(node), featureBucket({ depCount: 2, writeCount: 1, testCount: 0 }));
 });
 
 await Promise.all(pending);

@@ -3229,6 +3229,13 @@ check("ADVERSARIAL resumePlan refuses to auto-rebuild a landed node — even one
 check("cosmetic edits do not rebuild anything", () => {
   // A title or a tag changes nothing about what a worker is asked to do, and a
   // run should not be discarded because someone fixed a typo.
+  //
+  // This is also why item 15's feature-based routing (routing.mjs's
+  // planTiers, ledger.mjs's tierStats) is safe to leave OUT of nodeHash:
+  // it derives a size bucket from deps/write/tests counts, all of which are
+  // already IN nodeHash via the underlying arrays. The bucket itself is a
+  // routing decision the worker never sees and is never graded against —
+  // same category as a tag, deliberately excluded here for the same reason.
   const before = [rnode("a"), rnode("b")];
   const state = stateFor(before);
   const after = { __hash: "h1", nodes: [rnode("a", { title: "nicer name" }), rnode("b", { tags: ["api"] })] };
