@@ -57,7 +57,7 @@ export class ProviderError extends Error {
  * hit a truncated reply can retry the same tier with more room without
  * mutating the tier config or affecting other nodes.
  */
-export async function chat(cfg, tier, messages, { signal, maxTokens } = {}) {
+export async function chat(cfg, tier, messages, { signal, maxTokens, user } = {}) {
   const key = tierKey(tier);
   if (tier.apiKeyEnv && !key) {
     throw new ProviderError(`Environment variable ${tier.apiKeyEnv} is not set (tier "${tier.name}").`);
@@ -77,6 +77,14 @@ export async function chat(cfg, tier, messages, { signal, maxTokens } = {}) {
     temperature: tier.temperature,
     max_tokens: maxTokens ?? tier.maxTokens,
     stream: false,
+    // OpenAI's own `user` field (an opaque per-end-user identifier), reused
+    // here as a stable per-NODE identifier instead — a gateway that routes
+    // on it for cache or session affinity (OpenRouter does, for sticky
+    // provider-backend routing) then sends every attempt on the same node
+    // to the same backend replica, which is what makes a provider-side
+    // cache_control hit anything at all across retries. Omitted entirely
+    // when the caller has none, rather than sent as an empty string.
+    ...(user ? { user } : {}),
   };
 
   const ac = new AbortController();
@@ -159,11 +167,11 @@ export async function chat(cfg, tier, messages, { signal, maxTokens } = {}) {
 }
 
 /** chat() with backoff on transient failures only. */
-export async function chatWithBackoff(cfg, tier, messages, { attempts = 3, maxTokens } = {}) {
+export async function chatWithBackoff(cfg, tier, messages, { attempts = 3, maxTokens, user } = {}) {
   let last;
   for (let i = 0; i < attempts; i++) {
     try {
-      return await chat(cfg, tier, messages, { maxTokens });
+      return await chat(cfg, tier, messages, { maxTokens, user });
     } catch (e) {
       last = e;
       if (!(e instanceof ProviderError) || !e.transient || i === attempts - 1) throw e;

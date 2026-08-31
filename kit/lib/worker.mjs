@@ -73,28 +73,40 @@ function fence(rel, text, truncated) {
   return `#### ${rel}${truncated ? "  (truncated)" : ""}\n\`\`\`${ext}\n${text}\n\`\`\``;
 }
 
+const SECTION_SEP = "\n\n---\n\n";
+
+/** buildPrompt as one string — see buildPromptParts for the real logic and
+ *  why the two halves it returns matter. */
+export function buildPrompt(cfg, node, worktree) {
+  const { stable, mutable } = buildPromptParts(cfg, node, worktree);
+  return [...stable, ...mutable].join(SECTION_SEP);
+}
+
 /**
- * Build the single user message for a node.
+ * Build the single user message for a node, in two halves.
  * Deliberately narrow: contract, frozen tests, a few read files, and the write
  * scope. Cheap models degrade fast with long context — do not hand them the repo.
  *
- * Section order is deliberate for prompt caching (item 11), not just
- * readability: everything through OUTPUT_CONTRACT is IDENTICAL across every
- * attempt on this node within one run — the goal, acceptance criteria,
- * frozen tests, read-only reference files, write scope, and gate command
- * never change attempt to attempt. Only "Current contents of files you may
- * edit" changes, because it reflects whatever the PREVIOUS attempt just
- * wrote. Putting that one mutable section LAST means a provider that
- * supports prompt caching (v2.9.2 wires up `cache_control` on this stable
- * prefix) can reuse the cached prefix on every retry, paying full price only
- * for the small mutable tail — instead of the whole prompt being a cache
- * miss the moment the file contents changed by even one byte.
+ * Kept as two arrays rather than one joined string so a caller can put the
+ * stable half under `cache_control` (v2.9.2's provider.mjs change) without
+ * re-deriving the split by searching joined text for a marker.
  *
- * `# Task: <title>` MUST stay first, verbatim: mock-server.mjs's own
- * `/# Task: ([^\n]+)/` match over the joined message text is how the test
- * harness routes a call to the right node's scripted responses.
+ * Section order is deliberate for prompt caching (item 11), not just
+ * readability: everything in `stable` is IDENTICAL across every attempt on
+ * this node within one run — the goal, acceptance criteria, frozen tests,
+ * read-only reference files, write scope, and gate command never change
+ * attempt to attempt. Only `mutable` ("Current contents of files you may
+ * edit") changes, because it reflects whatever the PREVIOUS attempt just
+ * wrote. A provider that supports prompt caching can reuse the cached
+ * stable half on every retry, paying full price only for the small mutable
+ * tail — instead of the whole prompt being a cache miss the moment the
+ * file contents changed by even one byte.
+ *
+ * `# Task: <title>` MUST stay first in `stable`, verbatim: mock-server.mjs's
+ * own `/# Task: ([^\n]+)/` match over the joined message text is how the
+ * test harness routes a call to the right node's scripted responses.
  */
-export function buildPrompt(cfg, node, worktree) {
+export function buildPromptParts(cfg, node, worktree) {
   const max = cfg.worker.maxContextFileBytes;
   const deny = cfg.boundaries?.denyWrite ?? [];
   const stable = [];
@@ -148,7 +160,39 @@ export function buildPrompt(cfg, node, worktree) {
     mutable.push(`## Current contents of files you may edit\n\n${existing.join("\n\n")}`);
   }
 
-  return [...stable, ...mutable].join("\n\n---\n\n");
+  return { stable, mutable };
+}
+
+/**
+ * The `stable`/`mutable` split as OpenAI-compatible message CONTENT — either
+ * the plain joined string (unchanged wire format), or, when
+ * cfg.provider.promptCaching is on, an array of content parts with
+ * `cache_control` on the stable half. This is the standard Anthropic
+ * Messages API content-block convention; OpenRouter passes it through to
+ * Claude models and other OpenAI-compatible endpoints are expected to
+ * ignore a field they don't recognise on a JSON body, per the wider spec's
+ * own extensibility norms — but it is still a wire-format change, so it is
+ * opt-in and defaults reflect that (see config.mjs).
+ *
+ * Only worth doing when both halves are non-empty: a single-part message
+ * gains nothing from being wrapped in a one-element array.
+ */
+export function promptContent(cfg, stable, mutable) {
+  const stableText = stable.join(SECTION_SEP);
+  const mutableText = mutable.length ? SECTION_SEP + mutable.join(SECTION_SEP) : "";
+  if (!(cfg.provider?.promptCaching ?? true) || !mutableText) {
+    return stableText + mutableText;
+  }
+  return [
+    { type: "text", text: stableText, cache_control: { type: "ephemeral" } },
+    { type: "text", text: mutableText },
+  ];
+}
+
+/** A stable identifier for this node, reused across every attempt and every
+ *  retry on it — see provider.mjs's `user` field docblock for why. */
+export function nodeSessionId(node) {
+  return `trellis-${node.id}`;
 }
 
 function applyBlocks({ writes, deletes }) {
@@ -188,7 +232,8 @@ export async function runNode(cfg, node, worktree, { onAttempt } = {}) {
       // you may edit" reflects it. Built once up front, a retry asked the
       // model to fix code it could not see; for a brand-new file that
       // section was simply absent from the prompt.
-      const prompt = buildPrompt(cfg, node, worktree);
+      const { stable, mutable } = buildPromptParts(cfg, node, worktree);
+      const prompt = promptContent(cfg, stable, mutable);
       const messages = [{ role: "system", content: system }];
       if (lastFeedback) {
         messages.push({ role: "user", content: prompt });
@@ -206,7 +251,7 @@ export async function runNode(cfg, node, worktree, { onAttempt } = {}) {
       const record = { tier: tier.name, model: tier.model, attempt: a, startedAt: new Date().toISOString() };
       let reply;
       try {
-        reply = await chatWithBackoff(cfg, tier, messages, { maxTokens: cap });
+        reply = await chatWithBackoff(cfg, tier, messages, { maxTokens: cap, user: nodeSessionId(node) });
       } catch (e) {
         record.ok = false;
         // A plain if, not a nested ternary: the regression suite extracts kind

@@ -14,7 +14,7 @@ import { chat, readCapped } from "../lib/provider.mjs";
 import { exec } from "../lib/gate.mjs";
 import { sandboxSupported, wrapForSandbox } from "../lib/sandbox.mjs";
 import { structurallyMutable, generateStructuralMutants } from "../lib/structuralMutants.mjs";
-import { buildPrompt } from "../lib/worker.mjs";
+import { buildPrompt, buildPromptParts, promptContent, nodeSessionId } from "../lib/worker.mjs";
 import http from "node:http";
 import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
@@ -771,6 +771,44 @@ check("ADVERSARIAL buildPrompt still starts with \"# Task:\" verbatim -- the moc
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-buildprompt2-"));
   const prompt = buildPrompt(cfg, node, dir);
   assert.match(prompt, /^# Task: my-node\n/);
+});
+
+check("promptContent puts cache_control on the stable half only, when caching is on and there is a mutable tail", () => {
+  const content = promptContent({ provider: { promptCaching: true } }, ["A", "B"], ["C"]);
+  assert.ok(Array.isArray(content), "expected an array of content parts");
+  assert.strictEqual(content.length, 2);
+  assert.deepStrictEqual(content[0].cache_control, { type: "ephemeral" });
+  assert.ok(!("cache_control" in content[1]), "the mutable part must not be marked cacheable");
+  assert.strictEqual(content[0].text, "A\n\n---\n\nB");
+  assert.strictEqual(content[1].text, "\n\n---\n\nC");
+  // Reassembling both parts must reproduce exactly what buildPrompt's plain
+  // string form would have produced -- caching must never change what the
+  // model actually reads, only how the wire request is shaped.
+  assert.strictEqual(content[0].text + content[1].text, "A\n\n---\n\nB\n\n---\n\nC");
+});
+
+check("promptContent falls back to a plain string when caching is off, or when there is no mutable tail", () => {
+  assert.strictEqual(promptContent({ provider: { promptCaching: false } }, ["A", "B"], ["C"]), "A\n\n---\n\nB\n\n---\n\nC");
+  assert.strictEqual(promptContent({ provider: { promptCaching: true } }, ["A", "B"], []), "A\n\n---\n\nB");
+  // Default (no provider config at all) is caching ON -- matches config.mjs's DEFAULTS.
+  assert.ok(Array.isArray(promptContent({}, ["A"], ["B"])), "expected caching on by default");
+});
+
+check("nodeSessionId is stable across calls for the same node and differs across nodes", () => {
+  const a1 = nodeSessionId({ id: "alpha" });
+  const a2 = nodeSessionId({ id: "alpha" });
+  const b = nodeSessionId({ id: "beta" });
+  assert.strictEqual(a1, a2);
+  assert.notStrictEqual(a1, b);
+});
+
+check("buildPromptParts and buildPrompt agree: joining the parts reproduces the plain-string prompt", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-promptparts-"));
+  const cfg = { worker: { maxContextFileBytes: 10000 }, boundaries: { denyWrite: [] } };
+  const node = { id: "n01", title: "t", goal: "g", tests: [], write: [], gate: "true" };
+  const { stable, mutable } = buildPromptParts(cfg, node, dir);
+  const joined = [...stable, ...mutable].join("\n\n---\n\n");
+  assert.strictEqual(joined, buildPrompt(cfg, node, dir));
 });
 
 await Promise.all(pending);

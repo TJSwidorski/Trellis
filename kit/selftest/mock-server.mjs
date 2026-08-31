@@ -26,7 +26,12 @@ export function startMockServer(script) {
     req.on("end", () => {
       const parsed = JSON.parse(body || "{}");
       const model = parsed.model;
-      const userText = parsed.messages.map((m) => m.content).join("\n");
+      // A message's content is either a plain string, or (prompt caching,
+      // item 24) an array of {type:"text", text, cache_control?} parts --
+      // join whichever shape arrived into the same flat text the rest of
+      // this file's matching was written against.
+      const contentText = (c) => (typeof c === "string" ? c : (c ?? []).map((p) => p.text ?? "").join(""));
+      const userText = parsed.messages.map((m) => contentText(m.content)).join("\n");
       // Mutator calls look nothing like node prompts — they carry a defect
       // description instead of a task heading. Route them separately.
       if (/Defect to reintroduce/.test(userText) && script.mutants) {
@@ -47,7 +52,10 @@ export function startMockServer(script) {
       let idx = seenPrompts.indexOf(userText);
       if (idx === -1) { idx = seenPrompts.length; seenPrompts.push(userText); }
       const entry = seq[Math.min(idx, seq.length - 1)];
-      calls.push({ node: key, model, idx, prompt: userText, maxTokens: parsed.max_tokens });
+      calls.push({
+        node: key, model, idx, prompt: userText, maxTokens: parsed.max_tokens,
+        user: parsed.user, rawContent: parsed.messages.map((m) => m.content),
+      });
 
       if (entry?.httpError) {
         res.writeHead(entry.httpError, { "Content-Type": "application/json" });

@@ -2496,6 +2496,58 @@ checkAsync("ADVERSARIAL mock-server indexes by distinct prompt, not raw call cou
   }
 });
 
+// -------------------------------------------------------- prompt caching
+//
+// Item 24. The `user` field and cache_control content-blocks are wire-level
+// concerns of provider.mjs's chat(); this proves they actually reach a real
+// HTTP request, not just that the pure helpers in worker.mjs compute the
+// right shape in isolation.
+
+checkAsync("ADVERSARIAL chat() forwards a `user` identifier onto the request body when given one", async () => {
+  const mock = await startMockServer({ responses: { n01: [{ content: "ok" }] } });
+  const cfg = { headers: {}, worker: { requestTimeoutMs: 5000 } };
+  const tier = { name: "cheap", baseUrl: mock.url, model: "mock/cheap", maxTokens: 100, temperature: 0.1 };
+  try {
+    await chat(cfg, tier, [{ role: "user", content: "# Task: n01\n" }], { user: "trellis-n01" });
+    assert(mock.calls[0].user === "trellis-n01", `expected the user field to reach the request, got ${JSON.stringify(mock.calls[0].user)}`);
+  } finally {
+    await mock.close();
+  }
+});
+
+checkAsync("ADVERSARIAL chat() omits the user field entirely when none is given, rather than sending an empty one", async () => {
+  const mock = await startMockServer({ responses: { n01: [{ content: "ok" }] } });
+  const cfg = { headers: {}, worker: { requestTimeoutMs: 5000 } };
+  const tier = { name: "cheap", baseUrl: mock.url, model: "mock/cheap", maxTokens: 100, temperature: 0.1 };
+  try {
+    await chat(cfg, tier, [{ role: "user", content: "# Task: n01\n" }]);
+    assert(mock.calls[0].user === undefined, `expected no user field at all, got ${JSON.stringify(mock.calls[0].user)}`);
+  } finally {
+    await mock.close();
+  }
+});
+
+checkAsync("ADVERSARIAL a cache_control content-array message still reaches the model with its text intact", async () => {
+  // chat() must pass content through as-given, whatever shape it is --
+  // provider.mjs owns no cache_control logic of its own, only forwarding.
+  const mock = await startMockServer({ responses: { n01: [{ content: "ok" }] } });
+  const cfg = { headers: {}, worker: { requestTimeoutMs: 5000 } };
+  const tier = { name: "cheap", baseUrl: mock.url, model: "mock/cheap", maxTokens: 100, temperature: 0.1 };
+  const content = [
+    { type: "text", text: "# Task: n01\nstable part", cache_control: { type: "ephemeral" } },
+    { type: "text", text: "\nmutable part" },
+  ];
+  try {
+    await chat(cfg, tier, [{ role: "user", content }]);
+    assert(mock.calls[0].prompt === "# Task: n01\nstable part\nmutable part",
+      `expected the mock's flattened text to reconstruct both parts, got: ${JSON.stringify(mock.calls[0].prompt)}`);
+    assert(JSON.stringify(mock.calls[0].rawContent[0]) === JSON.stringify(content),
+      "the raw content array must reach the wire unmodified");
+  } finally {
+    await mock.close();
+  }
+});
+
 // ------------------------------------------------------ provider truncation
 //
 // A too-small max_tokens is not a broken endpoint. An empty completion with

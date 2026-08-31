@@ -21,6 +21,7 @@ const DEFAULTS = {
     regateAtLevelBoundaries: true,
   },
   validate: { decompositionCeiling: 25 },
+  provider: { promptCaching: true },
   specPath: null,
   paths: { state: ".trellis", worktrees: ".worktrees", graph: ".trellis/graph.json" },
 };
