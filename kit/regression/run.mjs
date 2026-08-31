@@ -3509,6 +3509,50 @@ check("ADVERSARIAL a worker's embedded backticks in gate output do not escape th
   assert(/````/.test(md), "the report's real writeReport path used a fixed triple-backtick fence, not a widened one");
 });
 
+check("ADVERSARIAL the report's worker-tokens-per-shipped-node figure is derived, not the old hardcoded 0", () => {
+  // v2.10.0: report.mjs used to print a single line "Orchestrator tokens spent
+  // during the run: **0**" and stop. Zero is true for the orchestrator on the
+  // headless path, but it is not the metric MISSION.md commits to trending.
+  // The published number now is worker tokens summed from
+  // state.nodes[].attempts[].usage, divided by nodes that actually shipped —
+  // and it must divide by the shipped count, never the total node count.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-rep-cost-"));
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  const graph = { nodes: [
+    { id: "n01", title: "shipped", write: ["src/a/**"], tests: [], gate: "x" },
+    { id: "n02", title: "stuck", write: ["src/b/**"], tests: [], gate: "x" },
+  ] };
+  const state = {
+    runId: "r1", project: "p", startedAt: "t", finishedAt: "t", baseBranch: "main", nodes: {
+      // 1000 + 300 + 200 = 1500 prompt, 100 + 50 + 25 = 175 completion → 1675 total.
+      n01: {
+        status: "merged", tier: "cheap", reason: null, survivingMutations: [],
+        attempts: [
+          { tier: "cheap", attempt: 1, ok: false, kind: "test-failure", usage: { prompt_tokens: 1000, completion_tokens: 100 } },
+          { tier: "cheap", attempt: 2, ok: true, kind: "pass", usage: { prompt_tokens: 300, completion_tokens: 50 } },
+        ],
+      },
+      n02: {
+        status: "exhausted", tier: "cheap", reason: "all attempts failed", survivingMutations: [],
+        attempts: [
+          { tier: "cheap", attempt: 1, ok: false, kind: "test-failure", usage: { prompt_tokens: 200, completion_tokens: 25 } },
+        ],
+      },
+    },
+  };
+  writeReport(dir, { paths: { state: ".trellis", worktrees: ".worktrees" }, tiers: [{ name: "cheap" }], baseBranch: "main" }, graph, state);
+  const md = fs.readFileSync(path.join(dir, ".trellis", "REPORT.md"), "utf8");
+
+  assert(/Orchestrator tokens spent during the run: \*\*0\*\*/.test(md),
+    "the headless guarantee line (orchestrator tokens = 0) must still be there");
+  assert(/Worker tokens: \*\*1675\*\* \(1500 prompt \+ 175 completion\)/.test(md),
+    `worker tokens must be summed from every attempt's usage across every node; got:\n${md}`);
+  // 1675 / 1 shipped node = 1675. Dividing by the total node count (2) would give 838.
+  assert(/Per shipped node: \*\*1675\*\* over 1 landed/.test(md),
+    `per-shipped-node must divide by the shipped count, not the node count; got:\n${md}`);
+  assert(!/838/.test(md), "per-node figure divided by total nodes (2) instead of shipped nodes (1)");
+});
+
 // ----------------------------------------------------------- cycles roll runId
 //
 // The headline claim: a second pass at the graph must be a DISTINCT run, or

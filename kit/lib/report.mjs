@@ -217,7 +217,39 @@ export function writeReport(root, cfg, graph, state) {
       (b.costUsd !== null ? ` · est. $${b.costUsd.toFixed(4)}` : ""));
     L.push("");
   }
+  // The success metric MISSION.md commits to is "orchestrator tokens per
+  // shipped node, trending down across runs". On the headless path that number
+  // is structurally zero — nothing here calls the orchestrator model — so the
+  // figure that actually moves between runs is worker spend per node that
+  // shipped. Report both: the zero is the guarantee, the ratio is the metric.
+  //
+  // Sourced from state.nodes[].attempts[].usage — the same reduction
+  // st.usageByTier (above) and ledger.recordsFor do. That path only ever sees
+  // worker attempts. state.budget / budget.snapshot() also sums the mutation
+  // scorer's calls, so dividing IT by shipped nodes would inflate the figure
+  // on any run with a live oracle; this deliberately does not.
+  const workerPrompt = Object.values(usage).reduce((a, u) => a + u.prompt, 0);
+  const workerCompletion = Object.values(usage).reduce((a, u) => a + u.completion, 0);
+  const workerTokens = workerPrompt + workerCompletion;
+  const landedCount = Object.values(state.nodes).filter((s) => st.LANDED.has(s.status)).length;
+  const mergedCount = Object.values(state.nodes).filter((s) => s.status === st.STATUS.MERGED).length;
+
   L.push(`Orchestrator tokens spent during the run: **0**. Everything above ran headless.`);
+  L.push("");
+  L.push(`Worker tokens: **${workerTokens}** (${workerPrompt} prompt + ${workerCompletion} completion), ` +
+    `mutation-scoring calls excluded.`);
+  if (landedCount > 0) {
+    L.push(
+      `Per shipped node: **${Math.round(workerTokens / landedCount)}** ` +
+      `over ${landedCount} landed (merged + audit + weak-tests)` +
+      (mergedCount !== landedCount && mergedCount > 0
+        ? `; **${Math.round(workerTokens / mergedCount)}** over ${mergedCount} merged-clean`
+        : "") +
+      `.`
+    );
+  } else {
+    L.push(`Per shipped node: n/a — nothing landed.`);
+  }
   L.push("");
 
   const escalated = Object.entries(state.nodes).filter(
