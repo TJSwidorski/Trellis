@@ -155,3 +155,57 @@ named check go red.
   unchecked.
 - `ignoredPaths` uses `--ignored=traditional`, so an ignored write inside an
   already-ignored directory is reported as the directory, not the file.
+
+---
+
+# Remediation and improvement series (plan: `here-are-my-thoughts-idempotent-pike.md`)
+
+Separate from the self-improvement loop above. An adversarial audit of `kit/`
+(five clean-context reviewers, ten lenses) returned 15 verified findings plus
+~12 secondaries, all sharing one shape: **enforcement that fails open**. This
+series fixed those and landed 17 improvements alongside, one patch tag per
+change, minor bump at each track boundary.
+
+| Track | Tags | Theme |
+| --- | --- | --- |
+| A | `v2.6.1`–`v2.6.22` | fail loudly — false-green bugs first |
+| B | `v2.7.0`–`v2.7.5` | the oracle fails closed |
+| C | `v2.8.1`–`v2.8.3` | level-aware slicing and re-gating |
+| D | `v2.9.0`–`v2.9.4` | cheaper attempts — cache prefix, sampling, routing |
+| E | `v2.10.0`–`v2.10.2` | what it cost — the metric, the bench, a live view |
+
+**Track E, in one line each**
+
+| Tag | Effect |
+| --- | --- |
+| `v2.10.0` | REPORT.md publishes worker tokens per shipped node, summed from `state.nodes[].attempts[].usage` (never the mutation scorer), with the denominator stated |
+| `v2.10.1` | `kit/bench/score.mjs` runs the held-out suite and Arm B's self-grade into `compare()`; section 4 of the A/B report is no longer structurally blank; `--dry-run` fills it with canned figures; `FIRST-RUN-SPEC.md` no longer points at retired `/trellis-plan` |
+| `v2.10.2` | `trellis watch` — the `validate` level view re-rendered from `state.json` on `fs.watch`, plus one self-contained HTML snapshot; no server, no dependency |
+
+**Final**
+
+- Item 30 — `docs/trellis-teardown.html` committed and linked from `README.md`
+  (`08496fc`), pushed to the public repo.
+- Item 31 — `protect-runner.mjs` restored to `.claude/settings.json`'s
+  `PreToolUse` list, byte-identical to its pre-series state.
+- `Skill-evaluation/` at the repo root is unrelated work-in-progress, excluded
+  by name from the installer's completeness check (`08496fc`), contents
+  untouched, still untracked — the user is handling it separately.
+
+**Verification.** `npm test` green — units 71/71, regression 227, e2e 68/68.
+Each tag in the range carries its own commit and tests.
+
+## Re-audit (follow-up — not yet done)
+
+Once this series has settled, re-run the same three-part process against the
+**changed** `kit/` — the fixes here add mechanism, and mechanism is where
+defects live:
+
+1. A fresh adversarial audit — five clean-context reviewers, the same ten
+   lenses — over the new `kit/`.
+2. A rewritten elementary explanation reflecting level-based batching, the
+   fail-closed oracle, and the opt-in sandbox.
+3. A new improvement brainstorm, grounded in whatever `.bench/REPORT.md` says
+   by then — the first time the roadmap can argue from measurements rather than
+   from reasoning. This needs a real paid A/B run first (`kit/bench/run.mjs`,
+   held-out suite at `trellis-heldout/suite`).

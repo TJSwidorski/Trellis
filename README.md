@@ -3,7 +3,7 @@
 **Product graph in, working software out.** Claude Code orchestrates, open-source
 models implement, and the loop lives in code.
 
-Version 2.9.4. Coming from 1.1.x, read `UPGRADING.md` first — the runner is
+Version 2.10.2. Coming from 1.1.x, read `UPGRADING.md` first — the runner is
 unchanged, but the workspace layout is not. See `CHANGELOG.md` for what has
 changed since 2.0.0.
 

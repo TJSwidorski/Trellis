@@ -10,6 +10,47 @@ under `kit/schema/`) are **not** tracked by this file. They change only on an
 incompatible on-disk format break, documented in `UPGRADING.md`, not on a routine
 release.
 
+## v2.10.0 – v2.10.2 — what it cost
+
+Track E of the remediation series, and the last track of code changes. The
+declared success metric was a hardcoded zero, the A/B report's result
+section was structurally always blank, and a run in progress could only be
+inspected by reading JSONL. All three now produce a number or a view.
+
+- **Worker tokens per shipped node** (`kit/lib/report.mjs`, v2.10.0).
+  REPORT.md's Cost section ended with one line — "Orchestrator tokens spent
+  during the run: **0**". That line stays; it is the guarantee. But it is
+  not the metric MISSION.md commits to trending, and on the headless path
+  it is structurally zero. Added beneath it: worker tokens summed from
+  `state.nodes[].attempts[].usage` — the same reduction the ledger does,
+  and the one that never sees the mutation scorer's calls — divided by the
+  nodes that landed. The report states which denominator each ratio uses
+  (`st.LANDED` for the headline, merged-clean alongside it when they
+  differ).
+- **The held-out suite scorer is wired into the A/B report** (new
+  `kit/bench/score.mjs`, v2.10.1). `kit/bench/run.mjs` called `compare(a, b,
+  {})` with an empty options object, so section 4 of the report ("Result —
+  held-out suite") was always "—". `scoreHeldOut()` runs the held-out
+  acceptance suite exactly as `prompts.json` documents and parses a
+  pass/total out of node:test, mocha/jest, or bare-TAP output;
+  `armSelfGrade()` reads Arm B's own gate results for the self-grade gap.
+  `--dry-run` fills the section with canned figures so the render path is
+  exercised with nothing spent. `score.mjs` shells out to a suite in
+  another repo and is deliberately not importable from anything on the
+  `npm test` path. Also fixed `examples/FIRST-RUN-SPEC.md`, which still
+  pointed at the `/trellis-plan` skill flow retired in v2.5.0.
+- **`trellis watch`** (`kit/bin/cli.mjs`, new `kit/lib/watchview.mjs`,
+  v2.10.2). The `trellis validate` level view, re-rendered from
+  `.trellis/state.json` on `fs.watch`, each node annotated with its live
+  status; `--once` renders and exits. Alongside it, a single self-contained
+  HTML snapshot with the model JSON inlined — no server, no dependency, no
+  Pages workflow. The snapshot carries the rendered model, not raw
+  `state.json`: gate `feedback` is worker-influenced text and has no
+  business in an HTML page.
+
+Each tag in the range carries its own commit and tests. Regression grew
+225 → 227 checks, units 69 → 71.
+
 ## v2.9.0 – v2.9.4 — cheaper attempts
 
 Track D of the same remediation series — the highest blast-radius track,
