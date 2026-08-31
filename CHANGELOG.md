@@ -10,6 +10,44 @@ under `kit/schema/`) are **not** tracked by this file. They change only on an
 incompatible on-disk format break, documented in `UPGRADING.md`, not on a routine
 release.
 
+## v2.9.0 – v2.9.4 — cheaper attempts
+
+Track D of the same remediation series — the highest blast-radius track,
+landed last among code changes on purpose. Nothing here changes WHAT gets
+built; all of it changes what building it costs.
+
+- **mock-server.mjs indexes by distinct prompt, not call count** (v2.9.0).
+  A behaviour-preserving enabler, landed first and alone so its own
+  correctness was provable before anything load-bearing depended on it —
+  every existing fixture stayed green and unchanged.
+- **The mutable file-contents section moves to the end of the prompt**
+  (`kit/lib/worker.mjs`, v2.9.1). Everything through OUTPUT_CONTRACT is now
+  byte-identical across every attempt on a node; only the small mutable
+  tail changes. The prerequisite for both items below.
+- **`cache_control` on the stable prefix, a stable per-node `user` id**
+  (`kit/lib/provider.mjs`, `kit/lib/worker.mjs`, v2.9.2). Standard
+  Anthropic Messages API content-block caching, plus OpenAI's own `user`
+  field reused as a stable per-node identifier for gateway-level sticky
+  routing — both opt-in via `provider.promptCaching`, default on.
+- **Parallel sampling on the first attempt of the first tier**
+  (`kit/lib/worker.mjs`, v2.9.3). Config-gated (`sampling.parallelSamples`,
+  default 1 — off in practice), N concurrent requests sharing the cached
+  prefix, never `n` in one request body. Tiebreak: the first sample with no
+  disqualifying flag (tampering, out-of-scope, truncation) wins; the rest
+  of the existing single-reply pipeline is completely unchanged once a
+  winner is picked.
+- **Route on node features, not just tags** (`kit/lib/features.mjs`,
+  `kit/lib/routing.mjs`, `kit/lib/ledger.mjs`, v2.9.4). A coarse size
+  bucket derived from dep/write/test counts already on every node, folded
+  into the same tag-pooling machinery routing already had — a brand-new
+  tag with zero history still inherits signal from other nodes its size.
+  Deliberately kept out of evolve.mjs's own tag-grouped evidence to avoid
+  double-reporting the same incidents under two keys.
+
+Verification for the whole track: `npm test` green after every commit
+(units 69/69, regression 225, e2e 68/68 at the end of the range); every new
+behaviour's test confirmed to fail against the pre-fix code before landing.
+
 ## v2.8.1 – v2.8.3 — levels
 
 Track C of the same remediation series, per the user's own restated rule for
