@@ -4,7 +4,9 @@ A first Trellis test. Deliberately chosen: no external dependencies, real
 correctness surface, and a dependency shape that exercises the graph properly
 (two parallel roots, two parallel middles, one convergence).
 
-Copy this to `SPEC.md` in your repo root, then run `/trellis-plan SPEC.md`.
+Copy this to `SPEC.md` in your repo root, then follow `QUICKSTART.md` from
+step 6 — `trellis slice`, then the `sessions/02_slice` → `04_tests` stages —
+or drive the whole pipeline with `trellis auto`.
 
 ---
 

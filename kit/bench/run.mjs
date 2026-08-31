@@ -22,6 +22,7 @@ import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { meterSession, summariseArm, compare, WINDOW } from "./meter.mjs";
+import { scoreHeldOut, armSelfGrade } from "./score.mjs";
 import { STAGES } from "../lib/driver.mjs";
 import { loadConfig } from "../lib/config.mjs";
 
@@ -347,14 +348,14 @@ async function main() {
   // Refuse to score a run nothing can score. Both arms are graded by a held-out
   // suite neither can see; without it the run burns a subscription window and
   // produces two piles of code and no comparison.
-  const heldOut = PROMPTS.scoring?.heldOutSuitePath;
-  if (!DRY && heldOut && !fs.existsSync(heldOut)) {
-    console.error(`Held-out suite configured but not present at ${heldOut}.`);
+  const heldOutPath = PROMPTS.scoring?.heldOutSuitePath;
+  if (!DRY && heldOutPath && !fs.existsSync(heldOutPath)) {
+    console.error(`Held-out suite configured but not present at ${heldOutPath}.`);
     console.error(`A configured path that does not exist scores nothing — check the path`);
     console.error(`in kit/bench/prompts.json before spending a window.`);
     process.exit(1);
   }
-  if (!DRY && !heldOut) {
+  if (!DRY && !heldOutPath) {
     console.error(`No held-out acceptance suite configured.`);
     console.error(`Set scoring.heldOutSuitePath in kit/bench/prompts.json first.`);
     console.error(``);
@@ -374,7 +375,37 @@ async function main() {
   if (ARM === "both" || ARM === "a") results.a = await armA(specText);
   if (ARM === "both" || ARM === "b") results.b = await armB(specText, kitRoot, graphPath);
 
-  const cmp = results.a && results.b ? compare(results.a.summary, results.b.summary, {}) : null;
+  // ---- score both arms, then compare -------------------------------------
+  // Section 4 of the report ("Result — held-out suite") was structurally
+  // always "—": compare() was called with an empty options object, so
+  // heldOut/ownTests defaulted to {} and every derived per-node figure came
+  // out null. Wire the real numbers in.
+  //
+  // scoreHeldOut() shells out to a suite in another repo, so score.mjs is not
+  // importable from anything on the `npm test` path — this block is the only
+  // caller. In --dry-run it is skipped and canned figures stand in, so the
+  // section-4 render path is still exercised end to end with nothing spent.
+  const scoring = PROMPTS.scoring ?? {};
+  const heldOut = {};
+  let ownTests = {};
+  if (results.a && results.b) {
+    if (DRY) {
+      Object.assign(heldOut, { A: 0.62, B: 0.86 });
+      ownTests = { passRate: 0.95, mergedNodes: 6 };
+      console.log("\nDRY RUN — held-out scores are canned (A 62%, B 86%); nothing was executed.");
+    } else {
+      const opts = { suitePath: scoring.heldOutSuitePath, scanEntrypoint: scoring.scanEntrypoint };
+      const hoA = scoreHeldOut(results.a.dir, opts);
+      const hoB = scoreHeldOut(results.b.dir, opts);
+      if (hoA) { heldOut.A = hoA.passRate; console.log(`\nheld-out · Arm A: ${hoA.pass}/${hoA.total} (${(hoA.passRate * 100).toFixed(1)}%)`); }
+      if (hoB) { heldOut.B = hoB.passRate; console.log(`held-out · Arm B: ${hoB.pass}/${hoB.total} (${(hoB.passRate * 100).toFixed(1)}%)`); }
+      if (!hoA && !hoB) console.error(`\nHeld-out suite produced no parseable totals — section 4 will read "—".`);
+      const self = armSelfGrade(results.b.dir);
+      if (self) ownTests = self;
+    }
+  }
+
+  const cmp = results.a && results.b ? compare(results.a.summary, results.b.summary, { heldOut, ownTests }) : null;
   const report = renderReport({
     spec: specPath,
     dryRun: DRY,

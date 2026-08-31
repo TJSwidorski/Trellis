@@ -55,6 +55,7 @@
     "$rule": "Both arms are scored by a held-out acceptance suite that NEITHER arm can see, authored from SPEC.md before either arm runs and kept outside both working repos.",
     "$why": "Trellis writes its own tests and merges nodes when they pass. Scored on those, it wins by construction and the result carries no information. The gap between Arm B's own pass rate and its held-out pass rate is the single most informative number the experiment produces.",
     "heldOutSuitePath": "C:/Users/tswid/PersonalPrograms/trellis-heldout/suite",
+    "scanEntrypoint": "bin/scan.mjs",
     "invoke": "From the held-out suite directory: SCAN_CMD=\"node <arm-repo>/bin/scan.mjs\" npm test",
     "calibration": {
       "noImplementation": {
