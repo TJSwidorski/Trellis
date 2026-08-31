@@ -336,7 +336,10 @@ check("ADVERSARIAL wrong schema string is rejected", () => {
 // there and hold the implementation to it.
 const MISSION_PROTECTED = (() => {
   // kitRoot is declared further down; resolve independently rather than reorder.
-  const text = fs.readFileSync(path.resolve(here, "../..", "MISSION.md"), "utf8");
+  // Normalise line endings first: a GitHub-hosted Windows runner checks out
+  // with core.autocrlf=true, so the fence here arrives as ```\r\n and a bare
+  // ```\n match fails -- "no protected set" on Windows CI only.
+  const text = fs.readFileSync(path.resolve(here, "../..", "MISSION.md"), "utf8").replace(/\r\n/g, "\n");
   const block = /## The protected set[\s\S]*?```\n([\s\S]*?)```/.exec(text);
   if (!block) throw new Error("MISSION.md no longer states a protected set — that IS the finding");
   return block[1].split("\n").map((l) => l.trim()).filter(Boolean);

@@ -726,7 +726,10 @@ checkAsync("ADVERSARIAL a real ulimit -f gate sandbox kills an oversized write, 
   // regression test in kit/regression/run.mjs.
   if (!sandboxSupported()) return;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-sandbox-"));
-  const scriptPath = path.join(dir, "write-big.mjs");
+  // .cjs, not .mjs: the fixture body uses require(), which is a ReferenceError
+  // in an ES module and made this fail on the ubuntu leg for reasons that had
+  // nothing to do with the sandbox.
+  const scriptPath = path.join(dir, "write-big.cjs");
   // 5MB, deliberately far past any plausible interpretation of `ulimit -f`'s
   // block-size units for a 1MB config value -- this must fail regardless of
   // whether the shell in question treats -f as 512-byte or 1024-byte blocks.
