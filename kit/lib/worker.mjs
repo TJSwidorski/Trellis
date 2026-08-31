@@ -195,6 +195,46 @@ export function nodeSessionId(node) {
   return `trellis-${node.id}`;
 }
 
+/**
+ * Parallel sampling's tiebreak policy (item 14): given several replies to
+ * the IDENTICAL prompt (same attempt, sampled N ways), pick which one the
+ * rest of runNode's existing single-reply pipeline proceeds with.
+ *
+ * Deliberately cheap — this does NOT spin up a scratch copy and run the
+ * gate against each candidate. It only re-uses parseBlocks/screenBlocks,
+ * both pure and already computed once per reply regardless, to prefer the
+ * first sample (in order) that isn't obviously broken: no frozen-test
+ * tampering, no out-of-scope write, not truncated, and it actually wrote
+ * something. Running N full gate executions per attempt would multiply the
+ * slowest, most expensive part of the loop by N for a benefit (catching a
+ * candidate that LOOKS fine but fails the real gate) the existing
+ * truncation-retry and re-prompt machinery already recovers from on the
+ * next attempt regardless. If no sample clears even this cheap bar, index
+ * 0 is used — arbitrary, but deterministic, and the existing pipeline's own
+ * error handling explains to the model exactly what was wrong with it.
+ */
+export function pickBestSample(node, cfg, worktree, replies) {
+  for (let i = 0; i < replies.length; i++) {
+    const blocks = parseBlocks(replies[i].text);
+    const screened = screenBlocks(blocks, {
+      worktree, allowWrite: node.write, denyWrite: cfg.boundaries.denyWrite, frozen: node.tests || [],
+    });
+    if (screened.flags.size === 0 && (screened.writes.length || screened.deletes.length)) return i;
+  }
+  return 0;
+}
+
+/** Sum usage across every sample actually taken — all of them spent real
+ *  tokens, even the ones pickBestSample didn't choose. */
+function sumUsage(replies) {
+  const usages = replies.map((r) => r.usage).filter(Boolean);
+  if (!usages.length) return null;
+  return {
+    prompt_tokens: usages.reduce((s, u) => s + (u.prompt_tokens || 0), 0),
+    completion_tokens: usages.reduce((s, u) => s + (u.completion_tokens || 0), 0),
+  };
+}
+
 function applyBlocks({ writes, deletes }) {
   for (const w of writes) {
     fs.mkdirSync(path.dirname(w.abs), { recursive: true });
@@ -251,7 +291,30 @@ export async function runNode(cfg, node, worktree, { onAttempt } = {}) {
       const record = { tier: tier.name, model: tier.model, attempt: a, startedAt: new Date().toISOString() };
       let reply;
       try {
-        reply = await chatWithBackoff(cfg, tier, messages, { maxTokens: cap, user: nodeSessionId(node) });
+        // Parallel sampling (item 14): config-gated, off by default (N=1),
+        // and even when on, scoped to the cheapest possible spot to spend
+        // it — the FIRST attempt of the FIRST tier. The ladder already
+        // escalates tiers on failure; sampling every attempt of every tier
+        // would multiply the bill on exactly the attempts that were already
+        // going to pass. All N requests share this identical prompt (the
+        // whole economic case rests on that shared prefix actually hitting
+        // a provider-side cache — see v2.9.2's cache_control), so they are
+        // issued concurrently rather than as `n` in one request body: many
+        // OpenAI-compatible gateways ignore `n`, bill it oddly, or route
+        // the samples to different backends and defeat the cache entirely.
+        const nSamples = (tier === cfg.tiers[0] && a === 1) ? (cfg.sampling?.parallelSamples ?? 1) : 1;
+        if (nSamples <= 1) {
+          reply = await chatWithBackoff(cfg, tier, messages, { maxTokens: cap, user: nodeSessionId(node) });
+        } else {
+          const settled = await Promise.allSettled(
+            Array.from({ length: nSamples }, () =>
+              chatWithBackoff(cfg, tier, messages, { maxTokens: cap, user: nodeSessionId(node) }))
+          );
+          const replies = settled.filter((s) => s.status === "fulfilled").map((s) => s.value);
+          if (!replies.length) throw settled[0].reason; // every sample failed the same way a lone call would
+          const best = pickBestSample(node, cfg, worktree, replies);
+          reply = { ...replies[best], usage: sumUsage(replies) };
+        }
       } catch (e) {
         record.ok = false;
         // A plain if, not a nested ternary: the regression suite extracts kind

@@ -16,6 +16,14 @@ export function startMockServer(script) {
   // all "attempt 0"; a genuinely new prompt (a retry with different file
   // contents or feedback appended) is what advances the index.
   const distinctPromptsByNode = new Map();
+  // "node id + distinct-prompt index" -> how many calls have shared that
+  // exact combination so far. Parallel sampling (item 14) issues several
+  // concurrent calls with the IDENTICAL prompt for one attempt, all of
+  // which resolve to the same `idx` above -- a script needs a way to tell
+  // those apart to test that the real distinct SAMPLES actually differ, so
+  // a function-entry callback gets `sample` (0-based, per node+idx) instead
+  // of a second scripting mechanism alongside the existing one.
+  const sampleCountByNodeIdx = new Map();
   const server = http.createServer((req, res) => {
     if (req.url.endsWith("/models")) {
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -52,8 +60,11 @@ export function startMockServer(script) {
       let idx = seenPrompts.indexOf(userText);
       if (idx === -1) { idx = seenPrompts.length; seenPrompts.push(userText); }
       const entry = seq[Math.min(idx, seq.length - 1)];
+      const sampleKey = `${key}:${idx}`;
+      const sample = sampleCountByNodeIdx.get(sampleKey) ?? 0;
+      sampleCountByNodeIdx.set(sampleKey, sample + 1);
       calls.push({
-        node: key, model, idx, prompt: userText, maxTokens: parsed.max_tokens,
+        node: key, model, idx, sample, prompt: userText, maxTokens: parsed.max_tokens,
         user: parsed.user, rawContent: parsed.messages.map((m) => m.content),
       });
 
@@ -62,7 +73,7 @@ export function startMockServer(script) {
         return res.end(JSON.stringify({ error: { message: "scripted failure" } }));
       }
 
-      const content = typeof entry === "function" ? entry({ model, idx, prompt: userText }) : entry?.content ?? "";
+      const content = typeof entry === "function" ? entry({ model, idx, prompt: userText, sample }) : entry?.content ?? "";
       // finishReason lets a fixture script finish_reason:"length" — a truncated
       // reply, either empty (the provider-level truncation path) or carrying
       // whatever partial content the entry provides (the mid-file path).

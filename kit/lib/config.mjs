@@ -22,6 +22,7 @@ const DEFAULTS = {
   },
   validate: { decompositionCeiling: 25 },
   provider: { promptCaching: true },
+  sampling: { parallelSamples: 1 },
   specPath: null,
   paths: { state: ".trellis", worktrees: ".worktrees", graph: ".trellis/graph.json" },
 };

@@ -14,7 +14,7 @@ import { chat, readCapped } from "../lib/provider.mjs";
 import { exec } from "../lib/gate.mjs";
 import { sandboxSupported, wrapForSandbox } from "../lib/sandbox.mjs";
 import { structurallyMutable, generateStructuralMutants } from "../lib/structuralMutants.mjs";
-import { buildPrompt, buildPromptParts, promptContent, nodeSessionId } from "../lib/worker.mjs";
+import { buildPrompt, buildPromptParts, promptContent, nodeSessionId, pickBestSample } from "../lib/worker.mjs";
 import http from "node:http";
 import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
@@ -809,6 +809,32 @@ check("buildPromptParts and buildPrompt agree: joining the parts reproduces the 
   const { stable, mutable } = buildPromptParts(cfg, node, dir);
   const joined = [...stable, ...mutable].join("\n\n---\n\n");
   assert.strictEqual(joined, buildPrompt(cfg, node, dir));
+});
+
+check("pickBestSample prefers the first sample with no disqualifying flags over one that tampers with a frozen test", () => {
+  const node = { id: "n01", write: ["src/a.mjs"], tests: ["tests/a.test.mjs"] };
+  const cfg = { boundaries: { denyWrite: [] } };
+  const bad = "### FILE: tests/a.test.mjs\n```js\n// tampered\n```\n";
+  const good = "### FILE: src/a.mjs\n```js\nexport const a = 1;\n```\n";
+  const idx = pickBestSample(node, cfg, "/repo", [{ text: bad }, { text: good }, { text: good }]);
+  assert.strictEqual(idx, 1, "expected the first clean sample (index 1), not the tampering one");
+});
+
+check("pickBestSample falls back to index 0 when every sample is disqualified", () => {
+  const node = { id: "n01", write: ["src/a.mjs"], tests: ["tests/a.test.mjs"] };
+  const cfg = { boundaries: { denyWrite: [] } };
+  const bad = "### FILE: tests/a.test.mjs\n```js\n// tampered\n```\n";
+  const idx = pickBestSample(node, cfg, "/repo", [{ text: bad }, { text: bad }]);
+  assert.strictEqual(idx, 0);
+});
+
+check("pickBestSample picks index 0 immediately when it is already clean", () => {
+  const node = { id: "n01", write: ["src/a.mjs"], tests: [] };
+  const cfg = { boundaries: { denyWrite: [] } };
+  const good = "### FILE: src/a.mjs\n```js\nexport const a = 1;\n```\n";
+  const bad = "### FILE: src/a.mjs\n```js\n\n"; // unterminated fence -> truncated flag
+  const idx = pickBestSample(node, cfg, "/repo", [{ text: good }, { text: bad }]);
+  assert.strictEqual(idx, 0);
 });
 
 await Promise.all(pending);

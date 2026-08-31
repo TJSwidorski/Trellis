@@ -2418,6 +2418,12 @@ checkAsync("ADVERSARIAL a gate command that rewrites its own frozen test does no
   // import-time side effect of the gate command itself, not as a `### FILE:`
   // block. Nothing before runGate's new post-exec check could ever have seen
   // this on the attempt where it actually happens.
+  //
+  // timeoutMs raised from 5000 to 15000: every checkAsync test in this file
+  // races concurrently (they're only awaited together at the very end), so
+  // a trivial `node tamper.mjs` sharing the machine with a dozen other
+  // in-flight child processes and HTTP servers occasionally missed a tight
+  // 5s budget for reasons that had nothing to do with what this test checks.
   const dir = gitRepoWith(
     {
       "tests/frozen.test.mjs": "assert(1)\n",
@@ -2427,7 +2433,7 @@ checkAsync("ADVERSARIAL a gate command that rewrites its own frozen test does no
     { "src/x.mjs": "changed\n" }
   );
   const node = { id: "n01", write: ["src/x.mjs"], tests: ["tests/frozen.test.mjs"], gate: "node tamper.mjs" };
-  const cfg = { boundaries: { denyWrite: [] }, gate: { timeoutMs: 5000 } };
+  const cfg = { boundaries: { denyWrite: [] }, gate: { timeoutMs: 15000 } };
   const r = await runGate(cfg, node, dir);
   assert(!r.ok, "a gate command that rewrote its own test still reported ok:true");
   assert(r.kind === "gate-tampering", `expected gate-tampering, got ${JSON.stringify(r.kind)}`);
@@ -2452,7 +2458,7 @@ checkAsync("ADVERSARIAL a gate command cannot forge evidence in .trellis/ as a s
     { "src/x.mjs": "changed\n" }
   );
   const node = { id: "n01", write: ["src/x.mjs"], tests: [], gate: "node tamper.mjs" };
-  const cfg = { boundaries: { denyWrite: [".trellis/**"] }, gate: { timeoutMs: 5000 } };
+  const cfg = { boundaries: { denyWrite: [".trellis/**"] }, gate: { timeoutMs: 15000 } };
   const r = await runGate(cfg, node, dir);
   assert(!r.ok, "a gate command that wrote into .trellis/ still reported ok:true");
   assert(r.kind === "gate-tampering", `expected gate-tampering, got ${JSON.stringify(r.kind)}`);
@@ -2644,6 +2650,106 @@ checkAsync("ADVERSARIAL the second attempt's prompt shows the first attempt's fi
     assert(mock.calls.length === 2, `expected exactly 2 provider calls, got ${mock.calls.length}`);
     assert(mock.calls[1].prompt.includes("WRONG_MARKER_ATTEMPT_1"),
       "the second attempt's prompt did not show the first attempt's file contents — the prompt was built once, not per attempt");
+  } finally {
+    await mock.close();
+  }
+});
+
+// -------------------------------------------------------- parallel sampling
+//
+// Item 14. Config-gated, scoped to the first attempt of the first tier only
+// -- everywhere else in runNode's loop must behave exactly as if sampling
+// did not exist at all.
+
+checkAsync("ADVERSARIAL parallelSamples issues N concurrent requests sharing the identical prompt, and picks the first clean one", async () => {
+  const dir = gitRepoWith({ "tests/n01.test.mjs":
+    "import assert from 'node:assert';\nimport { n01 } from '../src/n01.mjs';\nassert.strictEqual(n01(), 1);\n" });
+  const mock = await startMockServer({
+    responses: {
+      // sample 0 tampers with the frozen test; sample 1 and 2 are clean --
+      // pickBestSample must skip the tampering one even though it's first.
+      // A sequence entry that is itself a function (not {content: fn}) is
+      // mock-server.mjs's contract for a per-call computed reply.
+      n01: [({ sample }) =>
+        sample === 0
+          ? "### FILE: tests/n01.test.mjs\n```js\n// tampered\n```\n"
+          : "### FILE: src/n01.mjs\n```js\nexport const n01 = () => 1;\n```\n"],
+    },
+  });
+  const cfg = {
+    tiers: [{ name: "cheap", baseUrl: mock.url, model: "mock/cheap", maxAttempts: 1, maxTokens: 8000, temperature: 0.1 }],
+    boundaries: { denyWrite: [] },
+    worker: { requestTimeoutMs: 5000, maxContextFileBytes: 40000 },
+    gate: { timeoutMs: 20000, feedbackChars: 4000 },
+    sampling: { parallelSamples: 3 },
+  };
+  const node = { id: "n01", role: "implementer", title: "n01", goal: "g",
+    write: ["src/n01.mjs"], tests: ["tests/n01.test.mjs"], gate: "node tests/n01.test.mjs" };
+  try {
+    const result = await runNode(cfg, node, dir, {});
+    assert(result.status === "passed", `expected the clean sample to win and pass, got: ${JSON.stringify(result)}`);
+    const n01Calls = mock.calls.filter((c) => c.node === "n01");
+    assert(n01Calls.length === 3, `expected exactly 3 concurrent samples, got ${n01Calls.length}`);
+    assert(n01Calls.every((c) => c.idx === 0), "all 3 samples must share the SAME distinct-prompt index -- one attempt, sampled 3 ways");
+    assert(new Set(n01Calls.map((c) => c.sample)).size === 3, `expected 3 distinct sample numbers, got: ${JSON.stringify(n01Calls.map((c) => c.sample))}`);
+    // Only ONE logical attempt was recorded, not 3 -- sampling multiplies API
+    // calls, not the attempt count the tier ladder and budget ceiling see.
+    assert(result.attempts.length === 1, `expected exactly 1 recorded attempt, got ${result.attempts.length}`);
+    assert(fs.readFileSync(path.join(dir, "tests/n01.test.mjs"), "utf8").includes("assert.strictEqual"),
+      "the tampering sample's write must never have reached the real worktree");
+  } finally {
+    await mock.close();
+  }
+});
+
+checkAsync("ADVERSARIAL parallelSamples sums token usage across every sample actually taken", async () => {
+  const dir = gitRepoWith({ "tests/n01.test.mjs":
+    "import assert from 'node:assert';\nimport { n01 } from '../src/n01.mjs';\nassert.strictEqual(n01(), 1);\n" });
+  const mock = await startMockServer({
+    responses: { n01: [{ content: "### FILE: src/n01.mjs\n```js\nexport const n01 = () => 1;\n```\n" }] },
+  });
+  const cfg = {
+    tiers: [{ name: "cheap", baseUrl: mock.url, model: "mock/cheap", maxAttempts: 1, maxTokens: 8000, temperature: 0.1 }],
+    boundaries: { denyWrite: [] },
+    worker: { requestTimeoutMs: 5000, maxContextFileBytes: 40000 },
+    gate: { timeoutMs: 20000, feedbackChars: 4000 },
+    sampling: { parallelSamples: 2 },
+  };
+  const node = { id: "n01", role: "implementer", title: "n01", goal: "g",
+    write: ["src/n01.mjs"], tests: ["tests/n01.test.mjs"], gate: "node tests/n01.test.mjs" };
+  const attemptRecords = [];
+  try {
+    const result = await runNode(cfg, node, dir, { onAttempt: (a) => attemptRecords.push(a) });
+    assert(result.status === "passed");
+    assert(attemptRecords.length === 1);
+    const n01Calls = mock.calls.filter((c) => c.node === "n01");
+    const expectedPrompt = n01Calls.reduce((s, c) => s + Math.ceil(c.prompt.length / 4), 0);
+    assert(attemptRecords[0].usage.prompt_tokens === expectedPrompt,
+      `expected summed prompt tokens across both samples (${expectedPrompt}), got ${attemptRecords[0].usage.prompt_tokens}`);
+  } finally {
+    await mock.close();
+  }
+});
+
+checkAsync("ADVERSARIAL sampling.parallelSamples: 1 (the default) issues exactly one request per attempt, unchanged", async () => {
+  const dir = gitRepoWith({ "tests/n01.test.mjs":
+    "import assert from 'node:assert';\nimport { n01 } from '../src/n01.mjs';\nassert.strictEqual(n01(), 1);\n" });
+  const mock = await startMockServer({
+    responses: { n01: [{ content: "### FILE: src/n01.mjs\n```js\nexport const n01 = () => 1;\n```\n" }] },
+  });
+  const cfg = {
+    tiers: [{ name: "cheap", baseUrl: mock.url, model: "mock/cheap", maxAttempts: 1, maxTokens: 8000, temperature: 0.1 }],
+    boundaries: { denyWrite: [] },
+    worker: { requestTimeoutMs: 5000, maxContextFileBytes: 40000 },
+    gate: { timeoutMs: 20000, feedbackChars: 4000 },
+    // No `sampling` key at all -- config.mjs's default (parallelSamples: 1) must apply.
+  };
+  const node = { id: "n01", role: "implementer", title: "n01", goal: "g",
+    write: ["src/n01.mjs"], tests: ["tests/n01.test.mjs"], gate: "node tests/n01.test.mjs" };
+  try {
+    const result = await runNode(cfg, node, dir, {});
+    assert(result.status === "passed");
+    assert(mock.calls.filter((c) => c.node === "n01").length === 1, "expected exactly 1 call with no sampling configured");
   } finally {
     await mock.close();
   }
