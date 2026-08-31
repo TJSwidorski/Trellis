@@ -13,6 +13,7 @@ import * as st from "../lib/state.mjs";
 import * as log from "../lib/log.mjs";
 import { run } from "../lib/runner.mjs";
 import { writeReport } from "../lib/report.mjs";
+import { watchModel, watchHtml } from "../lib/watchview.mjs";
 import { verifyTests, SOFT_FINDINGS } from "../lib/verify.mjs";
 import { normalizeNode } from "../lib/graph.mjs";
 import * as ledger from "../lib/ledger.mjs";
@@ -836,6 +837,78 @@ function cmdStatus() {
   const { done, total, stuck } = st.rollup(state);
   log.info("");
   log.info(`${done}/${total} landed${stuck ? `, ${stuck} need attention` : ""}`);
+}
+
+// ------------------------------------------------------------------- watch
+
+/**
+ * A live view of a run: the `trellis validate` level printout, re-rendered
+ * from .trellis/state.json every time it changes, plus a self-contained HTML
+ * snapshot beside it. No server, no dependency — fs.watch and a string.
+ *
+ *   trellis watch            follow until Ctrl-C
+ *   trellis watch --once     render once (print + write the snapshot) and exit
+ *   trellis watch --html <p> where to write the snapshot
+ *                            (default <state>/watch.html)
+ */
+async function cmdWatch() {
+  const { root, cfg } = ctx();
+  const graph = loadGraph(root, flagVal("graph") || cfg.paths.graph);
+  const stateFile = st.statePath(root, cfg);
+  const htmlFile = path.resolve(root, flagVal("html") || path.join(cfg.paths.state, "watch.html"));
+  const follow = !flags.has("--once");
+
+  const GLYPH = {
+    [st.STATUS.MERGED]: ["✓", log.green], [st.STATUS.AUDIT]: ["✓", log.green],
+    [st.STATUS.WEAK_TESTS]: ["✓", log.yellow], [st.STATUS.REVIEW]: ["●", log.yellow],
+    [st.STATUS.RUNNING]: ["…", log.blue],
+    [st.STATUS.EXHAUSTED]: ["✗", log.red], [st.STATUS.CONFLICT]: ["✗", log.red],
+    [st.STATUS.BUDGET]: ["✗", log.red],
+    [st.STATUS.BLOCKED]: ["·", log.dim], [st.STATUS.PENDING]: ["·", log.dim],
+  };
+
+  const render = () => {
+    const model = watchModel(graph, st.loadState(root, cfg));
+    const out = [log.bold(model.head), ""];
+    for (const lv of model.levels) {
+      out.push(log.bold(`  level ${lv.depth}`));
+      for (const n of lv.nodes) {
+        const [g, col] = GLYPH[n.status] ?? ["?", (x) => x];
+        const tier = n.tier ? log.dim(` ${n.tier}`) : "";
+        const tries = n.attempts ? log.dim(` ${n.attempts}×`) : "";
+        out.push(`    ${col(g)} ${log.blue(n.id.padEnd(10))} ${col(n.status.padEnd(14))} ${n.title}${tier}${tries}`);
+      }
+    }
+    if (model.summary) {
+      out.push("");
+      out.push(`${model.summary.done}/${model.summary.total} landed` +
+        (model.summary.stuck ? `, ${model.summary.stuck} need attention` : ""));
+    }
+    if (follow) process.stdout.write(String.fromCharCode(27) + "[2J" + String.fromCharCode(27) + "[H");
+    log.info(out.join("\n"));
+
+    fs.mkdirSync(path.dirname(htmlFile), { recursive: true });
+    fs.writeFileSync(htmlFile, watchHtml(model, { project: graph.project || cfg.project }));
+  };
+
+  render();
+  log.info(log.dim(`snapshot: ${path.relative(root, htmlFile)}`));
+  if (!follow) return;
+
+  log.info(log.dim(`watching ${path.relative(root, stateFile)} — Ctrl-C to stop`));
+  fs.mkdirSync(path.dirname(stateFile), { recursive: true });
+  let timer = null;
+  const schedule = () => { clearTimeout(timer); timer = setTimeout(render, 120); };
+  // Watch the directory, not the file: saveState writes state.json atomically
+  // via rename (dropping any inode fs.watch held), and the file may not exist
+  // yet when a watch is started before the first run.
+  const base = path.basename(stateFile);
+  const watcher = fs.watch(path.dirname(stateFile), (_e, fn) => {
+    if (!fn || fn === base || fn === `${base}.tmp`) schedule();
+  });
+  await new Promise((resolve) => {
+    process.on("SIGINT", () => { watcher.close(); clearTimeout(timer); log.info(""); resolve(); });
+  });
 }
 
 // ------------------------------------------------------------------- clean
@@ -1901,6 +1974,9 @@ trellis — Claude Code orchestrates, open-source models do the work.
   trellis apply-triage        Mechanise the reversible verdicts in triage.json
     --apply                      Write changes (default is a dry run)
   trellis status              Per-node status of the last run
+  trellis watch               Live level view from state.json + an HTML snapshot beside it
+    --once                      Render once and exit (no fs.watch)
+    --html <path>               Where to write the snapshot (default <state>/watch.html)
   trellis clean [--branches]  Remove worktrees (and optionally trellis/* branches)
 
 Product graph — authored outside Trellis, handed in complete:
@@ -1957,6 +2033,7 @@ const table = {
   reject: cmdReject,
   "apply-triage": cmdApplyTriage,
   status: cmdStatus,
+  watch: cmdWatch,
   clean: cmdClean,
   built: cmdBuilt,
   cycle: cmdCycle,

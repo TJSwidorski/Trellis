@@ -3773,6 +3773,55 @@ check("ADVERSARIAL slice --max reports an oversized level loudly instead of sile
   assert(plan.nodes.every((n) => !("level" in n)), "plan.json's node entries must not carry a persisted level field");
 });
 
+// ------------------------------------------------------------ trellis watch
+//
+// Item 29: a live level view rendered from state.json, plus a self-contained
+// HTML snapshot. --once must render the overlay and write the file without
+// blocking on fs.watch.
+
+check("ADVERSARIAL watch --once overlays live status on the level view and writes a self-contained snapshot", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-watch-"));
+  const g = (...a) => spawnSync("git", a, { cwd: dir, encoding: "utf8" });
+  g("init", "-q", "-b", "main"); g("config", "user.email", "a@b.c"); g("config", "user.name", "t");
+  fs.mkdirSync(path.join(dir, ".trellis"), { recursive: true });
+  fs.writeFileSync(path.join(dir, ".trellis/graph.json"), JSON.stringify({
+    version: 1, project: "watchdemo", nodes: [
+      { id: "root", title: "the root", role: "implementer", deps: [], write: ["a"], tests: [], gate: "x" },
+      { id: "leaf", title: "the leaf", role: "implementer", deps: ["root"], write: ["b"], tests: [], gate: "x" },
+    ],
+  }));
+  fs.writeFileSync(path.join(dir, ".trellis/state.json"), JSON.stringify({
+    runId: "feedfacecafe", project: "watchdemo", finishedAt: null, nodes: {
+      root: { status: "merged", tier: "cheap", attempts: [{}, {}] },
+      leaf: { status: "running", tier: "cheap", attempts: [{}] },
+    },
+  }));
+  fs.writeFileSync(path.join(dir, "trellis.config.json"), JSON.stringify({
+    project: "watchdemo", baseBranch: "main",
+    paths: { state: ".trellis", worktrees: ".worktrees", graph: ".trellis/graph.json" },
+    tiers: [{ name: "cheap", baseUrl: "http://127.0.0.1:1", model: "m", apiKeyEnv: null, maxAttempts: 1, maxTokens: 100 }],
+  }));
+  g("add", "-A"); g("commit", "-qm", "init");
+
+  const cli = path.resolve(kitRoot, "kit/bin/cli.mjs");
+  const r = spawnSync(process.execPath, [cli, "watch", "--once"], {
+    cwd: dir, encoding: "utf8", timeout: 15000, env: { ...process.env, NO_COLOR: "1" },
+  });
+  assert(r.status === 0, `watch --once should exit 0, got ${r.status}: ${r.stderr}`);
+  assert(/run feedface — in progress/.test(r.stdout), `expected the run head line, got:\n${r.stdout}`);
+  assert(/level 0/.test(r.stdout) && /level 1/.test(r.stdout), "both levels must be printed");
+  assert(/root\s+merged/.test(r.stdout), `root's live status must be overlaid, got:\n${r.stdout}`);
+  assert(/leaf\s+running/.test(r.stdout), `leaf's live status must be overlaid, got:\n${r.stdout}`);
+  assert(/1\/2 landed/.test(r.stdout), `expected the rollup summary line, got:\n${r.stdout}`);
+
+  const htmlPath = path.join(dir, ".trellis/watch.html");
+  assert(fs.existsSync(htmlPath), "watch --once must write the HTML snapshot");
+  const html = fs.readFileSync(htmlPath, "utf8");
+  assert(html.startsWith("<!doctype html>"), "snapshot must be a whole document");
+  assert(!/src=|href=|https?:\/\//.test(html), "snapshot must make no external request");
+  assert(/"status":"merged"/.test(html) && /"status":"running"/.test(html), "the model JSON must be inlined in the snapshot");
+});
+
 // -------------------------------------------------- decomposition ceiling
 //
 // Item 16: a task-graph level far wider than any real build wave is a

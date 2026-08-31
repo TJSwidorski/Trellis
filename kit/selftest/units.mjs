@@ -16,6 +16,7 @@ import { exec } from "../lib/gate.mjs";
 import { sandboxSupported, wrapForSandbox } from "../lib/sandbox.mjs";
 import { structurallyMutable, generateStructuralMutants } from "../lib/structuralMutants.mjs";
 import { buildPrompt, buildPromptParts, promptContent, nodeSessionId, pickBestSample } from "../lib/worker.mjs";
+import { watchModel, watchHtml } from "../lib/watchview.mjs";
 import http from "node:http";
 import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
@@ -501,6 +502,40 @@ check("ADVERSARIAL levels terminates and covers every node on a cyclic graph", (
   assert.strictEqual(depth.get("d"), 0);
   assert.strictEqual(typeof depth.get("a"), "number");
   assert.strictEqual(typeof depth.get("b"), "number");
+});
+
+// ---------- unit: watch view (trellis watch) ----------
+
+check("watchModel folds live status onto the level structure; a node with no state entry is pending", () => {
+  const graph = { project: "demo", nodes: [
+    { id: "a", title: "root", deps: [] },
+    { id: "b", title: "mid", deps: ["a"] },
+    { id: "c", title: "leaf", deps: ["b"] },
+  ] };
+  const state = { project: "demo", runId: "abcd1234ef", finishedAt: null, nodes: {
+    a: { status: "merged", tier: "cheap", attempts: [{}, {}] },
+    b: { status: "running", tier: "mid", attempts: [{}] },
+  } };
+  const m = watchModel(graph, state);
+  assert.deepStrictEqual(m.levels.map((l) => l.depth), [0, 1, 2], "levels come from the graph, in longest-path order");
+  assert.strictEqual(m.levels[0].nodes[0].status, "merged");
+  assert.strictEqual(m.levels[0].nodes[0].attempts, 2, "attempts is a count, not the array");
+  assert.strictEqual(m.levels[1].nodes[0].status, "running");
+  assert.strictEqual(m.levels[2].nodes[0].status, "pending", "c has no state entry — pending, never dropped");
+  assert.match(m.head, /run abcd1234 — in progress/);
+  assert.strictEqual(watchModel(graph, null).head, "demo — no run yet");
+});
+
+check("ADVERSARIAL watchHtml is self-contained and cannot be closed out of its data island", () => {
+  const graph = { project: "demo", nodes: [{ id: "a", title: "x </script><img> & y", deps: [] }] };
+  const html = watchHtml(watchModel(graph, { project: "demo", runId: "r1", nodes: { a: { status: "merged" } } }), { project: "demo" });
+  assert.ok(html.startsWith("<!doctype html>"), "must be a whole document");
+  assert.ok(!/src=|href=|https?:\/\//.test(html), "no external request of any kind");
+  // The one interpolation point is the JSON island; "<" in it must be escaped
+  // so a node title can never open a tag.
+  assert.ok(!html.includes("</script><img>"), "a raw </script> in the payload would end the script early");
+  assert.ok(html.includes("\\u003c/script>\\u003cimg>"), "angle brackets in the payload must be unicode-escaped");
+  assert.strictEqual(html.indexOf("</script>"), html.lastIndexOf("</script>"), "exactly one real </script>, at the end");
 });
 
 // ---------- unit: provider.mjs times out and caps a stalled/oversized body ----------
