@@ -1,0 +1,1396 @@
+{
+  "repro/rep-clean": {
+    "path": "calib_raw\\_fixtures\\rep-clean",
+    "static": {
+      "score": 0,
+      "severity": "LOW",
+      "recommendation": "SAFE",
+      "n_issues": 0,
+      "llm_requested": false,
+      "llm_available": false,
+      "llm_calls": "None/None",
+      "llm_ran": false,
+      "is_complete": true,
+      "status": "complete",
+      "coverage_percent": 100.0,
+      "total_components": 1,
+      "fully_inspected_files": 1,
+      "partially_inspected_files": 0,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 19,
+        "not_applicable": 5
+      },
+      "non_completed_analyzers": [],
+      "degraded_analyzer_count": 0,
+      "ledger_exception_reasons": [],
+      "ledger_exception_outcomes": [],
+      "rules": {},
+      "tok_in": 0,
+      "tok_out": 0,
+      "cost_usd": 0.0,
+      "secs": 8.0
+    }
+  },
+  "repro/rep-token": {
+    "path": "calib_raw\\_fixtures\\rep-token",
+    "static": {
+      "score": 0,
+      "severity": "LOW",
+      "recommendation": "CAUTION",
+      "n_issues": 0,
+      "llm_requested": false,
+      "llm_available": false,
+      "llm_calls": "None/None",
+      "llm_ran": false,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 0.0,
+      "total_components": 1,
+      "fully_inspected_files": 0,
+      "partially_inspected_files": 1,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 18,
+        "not_applicable": 5,
+        "degraded": 1
+      },
+      "non_completed_analyzers": [
+        "static_patterns_tool_misuse"
+      ],
+      "degraded_analyzer_count": 1,
+      "ledger_exception_reasons": [
+        "reference_unresolved",
+        "static_parse_limit"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {},
+      "tok_in": 0,
+      "tok_out": 0,
+      "cost_usd": 0.0,
+      "secs": 6.7
+    }
+  },
+  "nvidia-ref/api-caller": {
+    "path": "C:\\Users\\tswid\\AppData\\Roaming\\uv\\tools\\skillevaluator\\Lib\\site-packages\\skillevaluator\\tier3\\reference_skills\\api-caller",
+    "static": {
+      "score": 15,
+      "severity": "LOW",
+      "recommendation": "CAUTION",
+      "n_issues": 15,
+      "llm_requested": false,
+      "llm_available": false,
+      "llm_calls": "None/None",
+      "llm_ran": false,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 100.0,
+      "total_components": 5,
+      "fully_inspected_files": 5,
+      "partially_inspected_files": 0,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 22,
+        "not_applicable": 1,
+        "disabled": 1
+      },
+      "non_completed_analyzers": [],
+      "degraded_analyzer_count": 0,
+      "ledger_exception_reasons": [
+        "reference_unresolved"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {
+        "E1 Data Exfiltration": 14,
+        "LP3 MCP Least Privilege": 1
+      },
+      "tok_in": 0,
+      "tok_out": 0,
+      "cost_usd": 0.0,
+      "secs": 7.6
+    },
+    "static_baselined": {
+      "score": 15,
+      "severity": "LOW",
+      "recommendation": "CAUTION",
+      "n_issues": 15,
+      "llm_requested": false,
+      "llm_available": false,
+      "llm_calls": "None/None",
+      "llm_ran": false,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 100.0,
+      "total_components": 5,
+      "fully_inspected_files": 5,
+      "partially_inspected_files": 0,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 22,
+        "not_applicable": 1,
+        "disabled": 1
+      },
+      "non_completed_analyzers": [],
+      "degraded_analyzer_count": 0,
+      "ledger_exception_reasons": [
+        "reference_unresolved"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {
+        "E1 Data Exfiltration": 14,
+        "LP3 MCP Least Privilege": 1
+      },
+      "tok_in": 0,
+      "tok_out": 0,
+      "cost_usd": 0.0,
+      "secs": 8.0
+    },
+    "llm": {
+      "score": 42,
+      "severity": "MEDIUM",
+      "recommendation": "CAUTION",
+      "n_issues": 16,
+      "llm_requested": true,
+      "llm_available": true,
+      "llm_calls": "5/5",
+      "llm_ran": true,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 100.0,
+      "total_components": 5,
+      "fully_inspected_files": 5,
+      "partially_inspected_files": 0,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 26,
+        "not_applicable": 1
+      },
+      "non_completed_analyzers": [],
+      "degraded_analyzer_count": 0,
+      "ledger_exception_reasons": [
+        "reference_unresolved"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {
+        "E1 Data Exfiltration": 14,
+        "TP4 MCP Tool Poisoning": 1,
+        "LP3 MCP Least Privilege": 1
+      },
+      "tok_in": 56890,
+      "tok_out": 10252,
+      "cost_usd": 0.02664,
+      "secs": 144.3
+    }
+  },
+  "nvidia-ref/calculator": {
+    "path": "C:\\Users\\tswid\\AppData\\Roaming\\uv\\tools\\skillevaluator\\Lib\\site-packages\\skillevaluator\\tier3\\reference_skills\\calculator",
+    "static": {
+      "score": 0,
+      "severity": "LOW",
+      "recommendation": "CAUTION",
+      "n_issues": 0,
+      "llm_requested": false,
+      "llm_available": false,
+      "llm_calls": "None/None",
+      "llm_ran": false,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 100.0,
+      "total_components": 3,
+      "fully_inspected_files": 3,
+      "partially_inspected_files": 0,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 22,
+        "not_applicable": 2
+      },
+      "non_completed_analyzers": [],
+      "degraded_analyzer_count": 0,
+      "ledger_exception_reasons": [
+        "reference_unresolved"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {},
+      "tok_in": 0,
+      "tok_out": 0,
+      "cost_usd": 0.0,
+      "secs": 7.2
+    },
+    "static_baselined": {
+      "score": 0,
+      "severity": "LOW",
+      "recommendation": "CAUTION",
+      "n_issues": 0,
+      "llm_requested": false,
+      "llm_available": false,
+      "llm_calls": "None/None",
+      "llm_ran": false,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 100.0,
+      "total_components": 3,
+      "fully_inspected_files": 3,
+      "partially_inspected_files": 0,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 22,
+        "not_applicable": 2
+      },
+      "non_completed_analyzers": [],
+      "degraded_analyzer_count": 0,
+      "ledger_exception_reasons": [
+        "reference_unresolved"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {},
+      "tok_in": 0,
+      "tok_out": 0,
+      "cost_usd": 0.0,
+      "secs": 6.6
+    },
+    "llm": {
+      "score": 0,
+      "severity": "LOW",
+      "recommendation": "CAUTION",
+      "n_issues": 0,
+      "llm_requested": true,
+      "llm_available": true,
+      "llm_calls": "4/4",
+      "llm_ran": true,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 100.0,
+      "total_components": 3,
+      "fully_inspected_files": 3,
+      "partially_inspected_files": 0,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 25,
+        "not_applicable": 2
+      },
+      "non_completed_analyzers": [],
+      "degraded_analyzer_count": 0,
+      "ledger_exception_reasons": [
+        "reference_unresolved"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {},
+      "tok_in": 16368,
+      "tok_out": 2592,
+      "cost_usd": 0.00727,
+      "secs": 49.3
+    }
+  },
+  "nvidia-ref/create-custom-grader": {
+    "path": "C:\\Users\\tswid\\AppData\\Roaming\\uv\\tools\\skillevaluator\\Lib\\site-packages\\skillevaluator\\tier3\\reference_skills\\create-custom-grader",
+    "static": {
+      "score": 37,
+      "severity": "MEDIUM",
+      "recommendation": "CAUTION",
+      "n_issues": 2,
+      "llm_requested": false,
+      "llm_available": false,
+      "llm_calls": "None/None",
+      "llm_ran": false,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 100.0,
+      "total_components": 2,
+      "fully_inspected_files": 2,
+      "partially_inspected_files": 0,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 20,
+        "not_applicable": 5
+      },
+      "non_completed_analyzers": [],
+      "degraded_analyzer_count": 0,
+      "ledger_exception_reasons": [
+        "reference_unresolved"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {
+        "AE1 analysis-evasion": 2
+      },
+      "tok_in": 0,
+      "tok_out": 0,
+      "cost_usd": 0.0,
+      "secs": 7.9
+    },
+    "static_baselined": {
+      "score": 37,
+      "severity": "MEDIUM",
+      "recommendation": "CAUTION",
+      "n_issues": 2,
+      "llm_requested": false,
+      "llm_available": false,
+      "llm_calls": "None/None",
+      "llm_ran": false,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 100.0,
+      "total_components": 2,
+      "fully_inspected_files": 2,
+      "partially_inspected_files": 0,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 20,
+        "not_applicable": 5
+      },
+      "non_completed_analyzers": [],
+      "degraded_analyzer_count": 0,
+      "ledger_exception_reasons": [
+        "reference_unresolved"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {
+        "AE1 analysis-evasion": 2
+      },
+      "tok_in": 0,
+      "tok_out": 0,
+      "cost_usd": 0.0,
+      "secs": 6.9
+    },
+    "llm": {
+      "score": 37,
+      "severity": "MEDIUM",
+      "recommendation": "CAUTION",
+      "n_issues": 2,
+      "llm_requested": true,
+      "llm_available": true,
+      "llm_calls": "3/3",
+      "llm_ran": true,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 100.0,
+      "total_components": 2,
+      "fully_inspected_files": 2,
+      "partially_inspected_files": 0,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 23,
+        "not_applicable": 5
+      },
+      "non_completed_analyzers": [],
+      "degraded_analyzer_count": 0,
+      "ledger_exception_reasons": [
+        "reference_unresolved"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {
+        "AE1 analysis-evasion": 2
+      },
+      "tok_in": 16566,
+      "tok_out": 1584,
+      "cost_usd": 0.00622,
+      "secs": 34.7
+    }
+  },
+  "nvidia-ref/text-analyzer": {
+    "path": "C:\\Users\\tswid\\AppData\\Roaming\\uv\\tools\\skillevaluator\\Lib\\site-packages\\skillevaluator\\tier3\\reference_skills\\text-analyzer",
+    "static": {
+      "score": 7,
+      "severity": "LOW",
+      "recommendation": "CAUTION",
+      "n_issues": 1,
+      "llm_requested": false,
+      "llm_available": false,
+      "llm_calls": "None/None",
+      "llm_ran": false,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 100.0,
+      "total_components": 4,
+      "fully_inspected_files": 4,
+      "partially_inspected_files": 0,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 22,
+        "not_applicable": 1,
+        "disabled": 1
+      },
+      "non_completed_analyzers": [],
+      "degraded_analyzer_count": 0,
+      "ledger_exception_reasons": [
+        "reference_unresolved"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {
+        "LP3 MCP Least Privilege": 1
+      },
+      "tok_in": 0,
+      "tok_out": 0,
+      "cost_usd": 0.0,
+      "secs": 8.2
+    },
+    "static_baselined": {
+      "score": 7,
+      "severity": "LOW",
+      "recommendation": "CAUTION",
+      "n_issues": 1,
+      "llm_requested": false,
+      "llm_available": false,
+      "llm_calls": "None/None",
+      "llm_ran": false,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 100.0,
+      "total_components": 4,
+      "fully_inspected_files": 4,
+      "partially_inspected_files": 0,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 22,
+        "not_applicable": 1,
+        "disabled": 1
+      },
+      "non_completed_analyzers": [],
+      "degraded_analyzer_count": 0,
+      "ledger_exception_reasons": [
+        "reference_unresolved"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {
+        "LP3 MCP Least Privilege": 1
+      },
+      "tok_in": 0,
+      "tok_out": 0,
+      "cost_usd": 0.0,
+      "secs": 7.2
+    },
+    "llm": {
+      "score": 7,
+      "severity": "LOW",
+      "recommendation": "CAUTION",
+      "n_issues": 1,
+      "llm_requested": true,
+      "llm_available": false,
+      "llm_calls": "4/5",
+      "llm_ran": false,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 100.0,
+      "total_components": 4,
+      "fully_inspected_files": 4,
+      "partially_inspected_files": 0,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 25,
+        "not_applicable": 1,
+        "degraded": 1
+      },
+      "non_completed_analyzers": [
+        "meta_analyzer"
+      ],
+      "degraded_analyzer_count": 1,
+      "ledger_exception_reasons": [
+        "reference_unresolved",
+        "runtime_limit"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {
+        "LP3 MCP Least Privilege": 1
+      },
+      "tok_in": 21962,
+      "tok_out": 4960,
+      "cost_usd": 0.01139,
+      "secs": 81.0
+    }
+  },
+  "community/anthropic-pdf": {
+    "path": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\280879be-5b75-4cbc-a3e3-5c82efe09868\\scratchpad\\anthropics-skills\\skills\\pdf",
+    "static": {
+      "score": 7,
+      "severity": "LOW",
+      "recommendation": "CAUTION",
+      "n_issues": 1,
+      "llm_requested": false,
+      "llm_available": false,
+      "llm_calls": "None/None",
+      "llm_ran": false,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 91.7,
+      "total_components": 12,
+      "fully_inspected_files": 11,
+      "partially_inspected_files": 1,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 21,
+        "not_applicable": 1,
+        "disabled": 1,
+        "degraded": 1
+      },
+      "non_completed_analyzers": [
+        "static_patterns_tool_misuse"
+      ],
+      "degraded_analyzer_count": 1,
+      "ledger_exception_reasons": [
+        "reference_unresolved",
+        "static_parse_limit"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {
+        "LP3 MCP Least Privilege": 1
+      },
+      "tok_in": 0,
+      "tok_out": 0,
+      "cost_usd": 0.0,
+      "secs": 9.7
+    },
+    "static_baselined": {
+      "score": 7,
+      "severity": "LOW",
+      "recommendation": "CAUTION",
+      "n_issues": 1,
+      "llm_requested": false,
+      "llm_available": false,
+      "llm_calls": "None/None",
+      "llm_ran": false,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 91.7,
+      "total_components": 12,
+      "fully_inspected_files": 11,
+      "partially_inspected_files": 1,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 21,
+        "not_applicable": 1,
+        "disabled": 1,
+        "degraded": 1
+      },
+      "non_completed_analyzers": [
+        "static_patterns_tool_misuse"
+      ],
+      "degraded_analyzer_count": 1,
+      "ledger_exception_reasons": [
+        "reference_unresolved",
+        "static_parse_limit"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {
+        "LP3 MCP Least Privilege": 1
+      },
+      "tok_in": 0,
+      "tok_out": 0,
+      "cost_usd": 0.0,
+      "secs": 8.5
+    },
+    "llm": {
+      "score": 50,
+      "severity": "MEDIUM",
+      "recommendation": "CAUTION",
+      "n_issues": 5,
+      "llm_requested": true,
+      "llm_available": false,
+      "llm_calls": "0/5",
+      "llm_ran": false,
+      "is_complete": false,
+      "status": "failed",
+      "coverage_percent": 0.0,
+      "total_components": 12,
+      "fully_inspected_files": 0,
+      "partially_inspected_files": 12,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 20,
+        "not_applicable": 1,
+        "failed": 4,
+        "degraded": 2
+      },
+      "non_completed_analyzers": [
+        "mcp_tool_poisoning",
+        "meta_analyzer",
+        "semantic_developer_intent",
+        "semantic_quality_policy",
+        "semantic_security_discovery",
+        "static_patterns_tool_misuse"
+      ],
+      "degraded_analyzer_count": 6,
+      "ledger_exception_reasons": [
+        "llm_batch_failed",
+        "reference_unresolved",
+        "runtime_limit",
+        "static_parse_limit"
+      ],
+      "ledger_exception_outcomes": [
+        "failed",
+        "partial"
+      ],
+      "rules": {
+        "TP4 MCP Tool Poisoning": 4,
+        "LP3 MCP Least Privilege": 1
+      },
+      "tok_in": 49107,
+      "tok_out": 9993,
+      "cost_usd": 0.02425,
+      "secs": 71.8
+    }
+  },
+  "community/anthropic-docx": {
+    "path": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\280879be-5b75-4cbc-a3e3-5c82efe09868\\scratchpad\\anthropics-skills\\skills\\docx",
+    "static": {
+      "score": 100,
+      "severity": "CRITICAL",
+      "recommendation": "DO_NOT_INSTALL",
+      "n_issues": 26,
+      "llm_requested": false,
+      "llm_available": false,
+      "llm_calls": "None/None",
+      "llm_ran": false,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 78.7,
+      "total_components": 61,
+      "fully_inspected_files": 48,
+      "partially_inspected_files": 13,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 9,
+        "not_applicable": 1,
+        "disabled": 1,
+        "degraded": 13
+      },
+      "non_completed_analyzers": [
+        "static_patterns_agent_snooping",
+        "static_patterns_anti_refusal",
+        "static_patterns_deserialization",
+        "static_patterns_excessive_agency",
+        "static_patterns_harmful_content",
+        "static_patterns_memory_poisoning",
+        "static_patterns_privilege_escalation",
+        "static_patterns_prompt_injection",
+        "static_patterns_rogue_agent",
+        "static_patterns_ssrf",
+        "static_patterns_supply_chain",
+        "static_patterns_system_prompt_leakage",
+        "static_patterns_tool_misuse"
+      ],
+      "degraded_analyzer_count": 13,
+      "ledger_exception_reasons": [
+        "obfuscated_instruction_text",
+        "reference_unresolved",
+        "runtime_limit",
+        "static_parse_limit"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {
+        "RA2 Rogue Agent": 12,
+        "AST4 Dangerous Code Execution": 6,
+        "P2 Prompt Injection": 3,
+        "TM1 Tool Misuse": 1,
+        "TM2 Tool Misuse": 1,
+        "E2 Data Exfiltration": 1,
+        "LP3 MCP Least Privilege": 1,
+        "TM3 Tool Misuse": 1
+      },
+      "tok_in": 0,
+      "tok_out": 0,
+      "cost_usd": 0.0,
+      "secs": 34.5
+    },
+    "static_baselined": {
+      "score": 100,
+      "severity": "CRITICAL",
+      "recommendation": "DO_NOT_INSTALL",
+      "n_issues": 26,
+      "llm_requested": false,
+      "llm_available": false,
+      "llm_calls": "None/None",
+      "llm_ran": false,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 78.7,
+      "total_components": 61,
+      "fully_inspected_files": 48,
+      "partially_inspected_files": 13,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 9,
+        "not_applicable": 1,
+        "disabled": 1,
+        "degraded": 13
+      },
+      "non_completed_analyzers": [
+        "static_patterns_agent_snooping",
+        "static_patterns_anti_refusal",
+        "static_patterns_deserialization",
+        "static_patterns_excessive_agency",
+        "static_patterns_harmful_content",
+        "static_patterns_memory_poisoning",
+        "static_patterns_privilege_escalation",
+        "static_patterns_prompt_injection",
+        "static_patterns_rogue_agent",
+        "static_patterns_ssrf",
+        "static_patterns_supply_chain",
+        "static_patterns_system_prompt_leakage",
+        "static_patterns_tool_misuse"
+      ],
+      "degraded_analyzer_count": 13,
+      "ledger_exception_reasons": [
+        "obfuscated_instruction_text",
+        "reference_unresolved",
+        "static_parse_limit"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {
+        "RA2 Rogue Agent": 12,
+        "AST4 Dangerous Code Execution": 6,
+        "P2 Prompt Injection": 3,
+        "TM1 Tool Misuse": 1,
+        "TM2 Tool Misuse": 1,
+        "E2 Data Exfiltration": 1,
+        "LP3 MCP Least Privilege": 1,
+        "TM3 Tool Misuse": 1
+      },
+      "tok_in": 0,
+      "tok_out": 0,
+      "cost_usd": 0.0,
+      "secs": 33.6
+    },
+    "llm": {
+      "score": 100,
+      "severity": "CRITICAL",
+      "recommendation": "DO_NOT_INSTALL",
+      "n_issues": 42,
+      "llm_requested": true,
+      "llm_available": false,
+      "llm_calls": "0/5",
+      "llm_ran": false,
+      "is_complete": false,
+      "status": "failed",
+      "coverage_percent": 1.6,
+      "total_components": 61,
+      "fully_inspected_files": 1,
+      "partially_inspected_files": 60,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 9,
+        "not_applicable": 1,
+        "degraded": 18
+      },
+      "non_completed_analyzers": [
+        "mcp_tool_poisoning",
+        "meta_analyzer",
+        "semantic_developer_intent",
+        "semantic_quality_policy",
+        "semantic_security_discovery",
+        "static_patterns_agent_snooping",
+        "static_patterns_anti_refusal",
+        "static_patterns_deserialization",
+        "static_patterns_excessive_agency",
+        "static_patterns_harmful_content",
+        "static_patterns_memory_poisoning",
+        "static_patterns_privilege_escalation",
+        "static_patterns_prompt_injection",
+        "static_patterns_rogue_agent",
+        "static_patterns_ssrf",
+        "static_patterns_supply_chain",
+        "static_patterns_system_prompt_leakage",
+        "static_patterns_tool_misuse"
+      ],
+      "degraded_analyzer_count": 18,
+      "ledger_exception_reasons": [
+        "obfuscated_instruction_text",
+        "reference_unresolved",
+        "runtime_limit",
+        "static_parse_limit",
+        "unaccounted_work"
+      ],
+      "ledger_exception_outcomes": [
+        "failed",
+        "partial"
+      ],
+      "rules": {
+        "AE1 analysis-evasion": 15,
+        "RA2 Rogue Agent": 12,
+        "AST4 Dangerous Code Execution": 6,
+        "P2 Prompt Injection": 3,
+        "TP4 MCP Tool Poisoning": 1,
+        "TM1 Tool Misuse": 1,
+        "TM2 Tool Misuse": 1,
+        "E2 Data Exfiltration": 1,
+        "LP3 MCP Least Privilege": 1,
+        "TM3 Tool Misuse": 1
+      },
+      "tok_in": 493349,
+      "tok_out": 20634,
+      "cost_usd": 0.1559,
+      "secs": 76.1
+    }
+  },
+  "community/anthropic-mcp-builder": {
+    "path": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\280879be-5b75-4cbc-a3e3-5c82efe09868\\scratchpad\\anthropics-skills\\skills\\mcp-builder",
+    "static": {
+      "score": 100,
+      "severity": "CRITICAL",
+      "recommendation": "DO_NOT_INSTALL",
+      "n_issues": 14,
+      "llm_requested": false,
+      "llm_available": false,
+      "llm_calls": "None/None",
+      "llm_ran": false,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 90.0,
+      "total_components": 10,
+      "fully_inspected_files": 9,
+      "partially_inspected_files": 1,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 10,
+        "not_applicable": 1,
+        "disabled": 1,
+        "degraded": 13
+      },
+      "non_completed_analyzers": [
+        "static_patterns_agent_snooping",
+        "static_patterns_anti_refusal",
+        "static_patterns_deserialization",
+        "static_patterns_excessive_agency",
+        "static_patterns_harmful_content",
+        "static_patterns_memory_poisoning",
+        "static_patterns_privilege_escalation",
+        "static_patterns_prompt_injection",
+        "static_patterns_rogue_agent",
+        "static_patterns_ssrf",
+        "static_patterns_supply_chain",
+        "static_patterns_system_prompt_leakage",
+        "static_patterns_tool_misuse"
+      ],
+      "degraded_analyzer_count": 13,
+      "ledger_exception_reasons": [
+        "obfuscated_instruction_text",
+        "reference_unresolved",
+        "static_parse_limit"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {
+        "AE1 analysis-evasion": 3,
+        "E1 Data Exfiltration": 2,
+        "SC1 Supply Chain": 2,
+        "SC4 Supply Chain": 2,
+        "EA5 Excessive Agency": 1,
+        "PE3 Privilege Escalation": 1,
+        "LP3 MCP Least Privilege": 1,
+        "RP1 MCP Rug Pull": 1,
+        "EA1 Excessive Agency": 1
+      },
+      "tok_in": 0,
+      "tok_out": 0,
+      "cost_usd": 0.0,
+      "secs": 21.7
+    },
+    "static_baselined": {
+      "score": 100,
+      "severity": "CRITICAL",
+      "recommendation": "DO_NOT_INSTALL",
+      "n_issues": 14,
+      "llm_requested": false,
+      "llm_available": false,
+      "llm_calls": "None/None",
+      "llm_ran": false,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 90.0,
+      "total_components": 10,
+      "fully_inspected_files": 9,
+      "partially_inspected_files": 1,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 10,
+        "not_applicable": 1,
+        "disabled": 1,
+        "degraded": 13
+      },
+      "non_completed_analyzers": [
+        "static_patterns_agent_snooping",
+        "static_patterns_anti_refusal",
+        "static_patterns_deserialization",
+        "static_patterns_excessive_agency",
+        "static_patterns_harmful_content",
+        "static_patterns_memory_poisoning",
+        "static_patterns_privilege_escalation",
+        "static_patterns_prompt_injection",
+        "static_patterns_rogue_agent",
+        "static_patterns_ssrf",
+        "static_patterns_supply_chain",
+        "static_patterns_system_prompt_leakage",
+        "static_patterns_tool_misuse"
+      ],
+      "degraded_analyzer_count": 13,
+      "ledger_exception_reasons": [
+        "obfuscated_instruction_text",
+        "reference_unresolved",
+        "static_parse_limit"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {
+        "AE1 analysis-evasion": 3,
+        "E1 Data Exfiltration": 2,
+        "SC1 Supply Chain": 2,
+        "SC4 Supply Chain": 2,
+        "EA5 Excessive Agency": 1,
+        "PE3 Privilege Escalation": 1,
+        "LP3 MCP Least Privilege": 1,
+        "RP1 MCP Rug Pull": 1,
+        "EA1 Excessive Agency": 1
+      },
+      "tok_in": 0,
+      "tok_out": 0,
+      "cost_usd": 0.0,
+      "secs": 22.5
+    },
+    "llm": {
+      "score": 100,
+      "severity": "CRITICAL",
+      "recommendation": "DO_NOT_INSTALL",
+      "n_issues": 25,
+      "llm_requested": true,
+      "llm_available": false,
+      "llm_calls": "3/5",
+      "llm_ran": false,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 30.0,
+      "total_components": 10,
+      "fully_inspected_files": 3,
+      "partially_inspected_files": 7,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 12,
+        "not_applicable": 1,
+        "degraded": 15
+      },
+      "non_completed_analyzers": [
+        "meta_analyzer",
+        "semantic_security_discovery",
+        "static_patterns_agent_snooping",
+        "static_patterns_anti_refusal",
+        "static_patterns_deserialization",
+        "static_patterns_excessive_agency",
+        "static_patterns_harmful_content",
+        "static_patterns_memory_poisoning",
+        "static_patterns_privilege_escalation",
+        "static_patterns_prompt_injection",
+        "static_patterns_rogue_agent",
+        "static_patterns_ssrf",
+        "static_patterns_supply_chain",
+        "static_patterns_system_prompt_leakage",
+        "static_patterns_tool_misuse"
+      ],
+      "degraded_analyzer_count": 15,
+      "ledger_exception_reasons": [
+        "obfuscated_instruction_text",
+        "reference_unresolved",
+        "runtime_limit",
+        "static_parse_limit"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {
+        "AE1 analysis-evasion": 10,
+        "SDI-1 None": 2,
+        "E1 Data Exfiltration": 2,
+        "SC1 Supply Chain": 2,
+        "SC4 Supply Chain": 2,
+        "TP4 MCP Tool Poisoning": 1,
+        "EA5 Excessive Agency": 1,
+        "PE3 Privilege Escalation": 1,
+        "SDI-2 None": 1,
+        "LP3 MCP Least Privilege": 1,
+        "RP1 MCP Rug Pull": 1,
+        "EA1 Excessive Agency": 1
+      },
+      "tok_in": 121288,
+      "tok_out": 14657,
+      "cost_usd": 0.04887,
+      "secs": 97.8
+    }
+  },
+  "trellis/trellis-plan": {
+    "path": "C:\\Users\\tswid\\PersonalPrograms\\Trellis\\SKILLS\\skills\\trellis-plan",
+    "static": {
+      "score": 9,
+      "severity": "LOW",
+      "recommendation": "CAUTION",
+      "n_issues": 1,
+      "llm_requested": false,
+      "llm_available": false,
+      "llm_calls": "None/None",
+      "llm_ran": false,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 0.0,
+      "total_components": 1,
+      "fully_inspected_files": 0,
+      "partially_inspected_files": 1,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 18,
+        "not_applicable": 4,
+        "disabled": 1,
+        "degraded": 1
+      },
+      "non_completed_analyzers": [
+        "static_patterns_tool_misuse"
+      ],
+      "degraded_analyzer_count": 1,
+      "ledger_exception_reasons": [
+        "reference_unresolved",
+        "static_parse_limit"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {
+        "EA5 Excessive Agency": 1
+      },
+      "tok_in": 0,
+      "tok_out": 0,
+      "cost_usd": 0.0,
+      "secs": 10.1
+    },
+    "static_baselined": {
+      "score": 0,
+      "severity": "LOW",
+      "recommendation": "CAUTION",
+      "n_issues": 0,
+      "llm_requested": false,
+      "llm_available": false,
+      "llm_calls": "None/None",
+      "llm_ran": false,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 0.0,
+      "total_components": 1,
+      "fully_inspected_files": 0,
+      "partially_inspected_files": 1,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 18,
+        "not_applicable": 4,
+        "disabled": 1,
+        "degraded": 1
+      },
+      "non_completed_analyzers": [
+        "static_patterns_tool_misuse"
+      ],
+      "degraded_analyzer_count": 1,
+      "ledger_exception_reasons": [
+        "reference_unresolved",
+        "static_parse_limit"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {},
+      "tok_in": 0,
+      "tok_out": 0,
+      "cost_usd": 0.0,
+      "secs": 9.2
+    },
+    "llm": {
+      "score": 9,
+      "severity": "LOW",
+      "recommendation": "CAUTION",
+      "n_issues": 1,
+      "llm_requested": true,
+      "llm_available": true,
+      "llm_calls": "4/4",
+      "llm_ran": true,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 0.0,
+      "total_components": 1,
+      "fully_inspected_files": 0,
+      "partially_inspected_files": 1,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 22,
+        "not_applicable": 4,
+        "degraded": 1
+      },
+      "non_completed_analyzers": [
+        "static_patterns_tool_misuse"
+      ],
+      "degraded_analyzer_count": 1,
+      "ledger_exception_reasons": [
+        "reference_unresolved",
+        "static_parse_limit"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {
+        "EA5 Excessive Agency": 1
+      },
+      "tok_in": 13153,
+      "tok_out": 2023,
+      "cost_usd": 0.00578,
+      "secs": 29.6
+    }
+  },
+  "trellis/trellis-review": {
+    "path": "C:\\Users\\tswid\\PersonalPrograms\\Trellis\\SKILLS\\skills\\trellis-review",
+    "static": {
+      "score": 9,
+      "severity": "LOW",
+      "recommendation": "CAUTION",
+      "n_issues": 1,
+      "llm_requested": false,
+      "llm_available": false,
+      "llm_calls": "None/None",
+      "llm_ran": false,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 100.0,
+      "total_components": 1,
+      "fully_inspected_files": 1,
+      "partially_inspected_files": 0,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 19,
+        "not_applicable": 4,
+        "disabled": 1
+      },
+      "non_completed_analyzers": [],
+      "degraded_analyzer_count": 0,
+      "ledger_exception_reasons": [
+        "reference_unresolved"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {
+        "EA5 Excessive Agency": 1
+      },
+      "tok_in": 0,
+      "tok_out": 0,
+      "cost_usd": 0.0,
+      "secs": 10.1
+    },
+    "static_baselined": {
+      "score": 0,
+      "severity": "LOW",
+      "recommendation": "CAUTION",
+      "n_issues": 0,
+      "llm_requested": false,
+      "llm_available": false,
+      "llm_calls": "None/None",
+      "llm_ran": false,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 100.0,
+      "total_components": 1,
+      "fully_inspected_files": 1,
+      "partially_inspected_files": 0,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 19,
+        "not_applicable": 4,
+        "disabled": 1
+      },
+      "non_completed_analyzers": [],
+      "degraded_analyzer_count": 0,
+      "ledger_exception_reasons": [
+        "reference_unresolved"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {},
+      "tok_in": 0,
+      "tok_out": 0,
+      "cost_usd": 0.0,
+      "secs": 7.7
+    },
+    "llm": {
+      "score": 9,
+      "severity": "LOW",
+      "recommendation": "CAUTION",
+      "n_issues": 1,
+      "llm_requested": true,
+      "llm_available": true,
+      "llm_calls": "4/4",
+      "llm_ran": true,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 100.0,
+      "total_components": 1,
+      "fully_inspected_files": 1,
+      "partially_inspected_files": 0,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 23,
+        "not_applicable": 4
+      },
+      "non_completed_analyzers": [],
+      "degraded_analyzer_count": 0,
+      "ledger_exception_reasons": [
+        "reference_unresolved"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {
+        "EA5 Excessive Agency": 1
+      },
+      "tok_in": 7521,
+      "tok_out": 2984,
+      "cost_usd": 0.00531,
+      "secs": 78.1
+    }
+  },
+  "trellis/trellis-tests": {
+    "path": "C:\\Users\\tswid\\PersonalPrograms\\Trellis\\SKILLS\\skills\\trellis-tests",
+    "static": {
+      "score": 9,
+      "severity": "LOW",
+      "recommendation": "CAUTION",
+      "n_issues": 1,
+      "llm_requested": false,
+      "llm_available": false,
+      "llm_calls": "None/None",
+      "llm_ran": false,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 100.0,
+      "total_components": 1,
+      "fully_inspected_files": 1,
+      "partially_inspected_files": 0,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 19,
+        "not_applicable": 4,
+        "disabled": 1
+      },
+      "non_completed_analyzers": [],
+      "degraded_analyzer_count": 0,
+      "ledger_exception_reasons": [
+        "reference_unresolved"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {
+        "EA5 Excessive Agency": 1
+      },
+      "tok_in": 0,
+      "tok_out": 0,
+      "cost_usd": 0.0,
+      "secs": 10.2
+    },
+    "static_baselined": {
+      "score": 0,
+      "severity": "LOW",
+      "recommendation": "CAUTION",
+      "n_issues": 0,
+      "llm_requested": false,
+      "llm_available": false,
+      "llm_calls": "None/None",
+      "llm_ran": false,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 100.0,
+      "total_components": 1,
+      "fully_inspected_files": 1,
+      "partially_inspected_files": 0,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 19,
+        "not_applicable": 4,
+        "disabled": 1
+      },
+      "non_completed_analyzers": [],
+      "degraded_analyzer_count": 0,
+      "ledger_exception_reasons": [
+        "reference_unresolved"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {},
+      "tok_in": 0,
+      "tok_out": 0,
+      "cost_usd": 0.0,
+      "secs": 8.8
+    },
+    "llm": {
+      "score": 9,
+      "severity": "LOW",
+      "recommendation": "CAUTION",
+      "n_issues": 1,
+      "llm_requested": true,
+      "llm_available": true,
+      "llm_calls": "4/4",
+      "llm_ran": true,
+      "is_complete": false,
+      "status": "partial",
+      "coverage_percent": 100.0,
+      "total_components": 1,
+      "fully_inspected_files": 1,
+      "partially_inspected_files": 0,
+      "entirely_uninspected_files": 0,
+      "analyzers_by_status": {
+        "completed": 23,
+        "not_applicable": 4
+      },
+      "non_completed_analyzers": [],
+      "degraded_analyzer_count": 0,
+      "ledger_exception_reasons": [
+        "reference_unresolved"
+      ],
+      "ledger_exception_outcomes": [
+        "partial"
+      ],
+      "rules": {
+        "EA5 Excessive Agency": 1
+      },
+      "tok_in": 8983,
+      "tok_out": 3094,
+      "cost_usd": 0.00583,
+      "secs": 75.3
+    }
+  }
+}

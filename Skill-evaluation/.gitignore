@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+# Bulk raw scan JSON — reproducible by re-running raw-captures/calibrate.py and
+# raw-captures/retry_check.py. calibration.json (the summary) IS tracked.
+raw-captures/calib_raw/
+raw-captures/retry_raw/
+raw-captures/*.stderr
+raw-captures/*.stderr.txt
+raw-captures/triage_raw/

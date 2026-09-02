@@ -1,0 +1,114 @@
+{
+  "schema_version": 2,
+  "updated_at": "2026-09-02T00:34:03.985230+00:00",
+  "entries": {
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-designmd-tdd": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-designmd-tdd",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-designmd-tdd",
+      "source": {
+        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/b98a898c-43d0-482a-8a88-6c8bb5c05011/scratchpad/skillrepos/designmd-tdd",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T00:33:46.481083+00:00",
+      "content_hash": null,
+      "state": "rejected",
+      "history": [
+        {
+          "at": "2026-09-02T00:33:46.481094+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T00:33:59.604345+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "CAUTION score=0 mode=static"
+        },
+        {
+          "at": "2026-09-02T00:34:03.973687+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "reject: failed tier 1 (hard): Schema & Repository Governance: name_consistency"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T00:33:59.604313+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static",
+        "score": 0,
+        "severity": "LOW",
+        "recommendation": "CAUTION",
+        "has_executable_scripts": false,
+        "findings": [],
+        "baseline_applied": "C:\\Users\\tswid\\PersonalPrograms\\Trellis\\Skill-evaluation\\skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": null,
+        "llm_provider": null,
+        "llm_seed": null,
+        "llm_temperature": null,
+        "llm_requested": false,
+        "llm_ran": false,
+        "llm_attempts": 0,
+        "llm_last_error": null,
+        "llm_attempt_log": [],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 100.0,
+        "fully_inspected_files": 2,
+        "partially_inspected_files": 0,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [],
+        "ledger_exception_reasons": [
+          "reference_unresolved"
+        ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T00:34:00.634230+00:00",
+        "target": "general@day-to-day",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
+        ],
+        "relevance": {
+          "score": 0.286,
+          "matched_needs": [
+            "animation-motion",
+            "dev-workflow-discipline"
+          ],
+          "method": "keyword"
+        },
+        "redundancy": {
+          "max_similarity": 0.0,
+          "closest_existing": null,
+          "verdict": "partial_overlap",
+          "note": "similarity unavailable: No provider is configured (SKILL_EVAL_EMBEDDING_PROVIDER unset and no credential found). Set one of: NVIDIA_API_KEY for NVIDIA Build (build.nvidia.com) or OPENAI_API_KEY (auto-"
+        },
+        "provenance_flags": [
+          "Schema & Repository Governance/folder_hierarchy: Skill not in standard location (skills/ or team-skills/)",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Instructions'",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Examples'",
+          "Schema & Repository Governance/author_missing: Author not specified in metadata",
+          "QUALITY score 86.0/100 (grade B)",
+          "QUALITY: SKILL_SPEC recommended field missing: 'version'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.author'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
+          "QUALITY: Description very long (206 chars, recommend 50-150)",
+          "QUALITY: No '## Purpose' section",
+          "QUALITY: Skill name very short: 'src'",
+          "QUALITY: No prerequisites/requirements documented",
+          "QUALITY: No limitations documented",
+          "QUALITY: No troubleshooting section documented"
+        ],
+        "validation": {
+          "passed": false,
+          "failed_checks": [
+            "Schema & Repository Governance: name_consistency"
+          ]
+        },
+        "verdict": "reject",
+        "rationale": "failed tier 1 (hard): Schema & Repository Governance: name_consistency"
+      }
+    }
+  }
+}

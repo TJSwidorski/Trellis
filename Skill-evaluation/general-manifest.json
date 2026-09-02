@@ -1,0 +1,34 @@
+{
+  "$comment": "A general 'what would I want a skill for day to day' manifest, distinct from trellis-manifest.json (Trellis's specific gaps). Point pipeline 2 at it with --ledger <second file> --manifest general-manifest.json. Kept to 4 broad needs on purpose: with RELEVANCE_FLOOR=0.25, a single-purpose skill matching one need lands exactly at the floor (0.25) and proceeds; a finer split (7 needs -> 1/7 = 0.14) rejects every single-purpose skill at gate A and produces no shortlist. Terms are matched \\b-prefixed, case-insensitive, against the first 4000 chars of each SKILL.md.",
+  "target": "general@day-to-day",
+  "needs": {
+    "design-and-frontend": [
+      "design", "frontend", "ui", "visual", "landing page", "animation", "motion",
+      "transition", "easing", "typography", "layout", "aesthetic", "css",
+      "framer motion", "gsap", "lottie", "shaders", "design tokens", "design system",
+      "redesign", "anti-ai-slop"
+    ],
+    "dev-discipline-and-architecture": [
+      "tdd", "test-driven", "red-green-refactor", "refactor", "type-safe",
+      "typescript", "spec and handler", "result pattern", "vertical slice",
+      "design by contract", "architecture", "characterization test"
+    ],
+    "cli-and-agent-tooling": [
+      "cli", "command-line", "agent dx", "agent-first", "machine-readable",
+      "structured output", "terminal ui", "json spec", "ink", "for ai agents"
+    ],
+    "output-and-productivity": [
+      "output style", "response format", "formatting", "readability", "concise",
+      "adhd", "productivity", "brevity", "next action"
+    ]
+  },
+  "installed_skills_dir": "../SKILLS/skills",
+  "adopt_threshold": { "correctness": 0.05, "efficiency": 0.0 },
+  "dimension_map": {
+    "security": "security",
+    "correctness": "correctness",
+    "discoverability": "discoverability",
+    "effectiveness": "effectiveness",
+    "efficiency": "efficiency"
+  }
+}

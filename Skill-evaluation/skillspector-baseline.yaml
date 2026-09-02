@@ -1,0 +1,26 @@
+# SkillSpector baseline for the triage pipeline.
+#
+# Same discipline as the benign-incompleteness allowlist in skillfit.py: only
+# rules we have actually characterised as noise on the evidence in
+# raw-captures/, scoped to the construct that triggers them (not the rule id
+# wholesale), one comment per entry with the evidence.
+#
+# Pass with:  skillfinder.py --baseline Skill-evaluation/skillspector-baseline.yaml
+version: 2
+scanner_version: "2.11.0"
+fingerprints: []
+rules:
+  - id: EA5
+    path: "*SKILL.md"
+    message: "model:*"
+    reason: >-
+      EA5 ("External Model or Provider Selection") flags the `model:` frontmatter
+      key as an undisclosed external-provider switch. In a Claude Agent Skill
+      that key is the documented way to pin which model the skill runs under: it
+      is disclosed by definition (it is in the manifest the operator reads) and
+      does not move the billing account. Characterised on EA5 / matched_text
+      "model: opus" in trellis-plan, trellis-review and trellis-tests -- all
+      three carry this one MEDIUM finding and nothing else, each contributing 9
+      to the score. Scope: SKILL.md only, matched_text beginning "model:". Still
+      fires on `provider:` / `model_id:` keys, on the HIGH-severity
+      command-surface variant of EA5, and on EA5 in bundled scripts.

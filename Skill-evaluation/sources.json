@@ -1,0 +1,37 @@
+{
+  "$comment": "Discovery inputs for `skillfinder.py` (no --add). `manual` and `github_topics` are consumed by load_sources() today. `lists` is inert until a list-crawler exists -- it records the awesome-lists / registries from the triage so the crawl is ready to point at them; each is a README of links, so treat every link it yields as attacker-chosen and scan accordingly (freestylefly/awesome-gpt-image-2 was flagged likely-malicious as a repo -- as a source it is usable, its links are not trusted).",
+
+  "manual": [],
+
+  "github_topics": [
+    { "topic": "agent-skills", "limit": 60, "since_days": 14 },
+    { "topic": "claude-skills", "limit": 60, "since_days": 14 },
+    { "topic": "claude-code", "limit": 40, "since_days": 7 }
+  ],
+
+  "lists": [
+    { "url": "https://github.com/hesreallyhim/awesome-claude-code", "note": "broad awesome-list" },
+    { "url": "https://github.com/anthropics/claude-plugins-community", "note": "plugin registry (community)" },
+    { "url": "https://github.com/anthropics/claude-plugins-official", "note": "plugin registry (official)" },
+    { "url": "https://github.com/rohitg00/awesome-claude-code-toolkit", "note": "tooling list" },
+    { "url": "https://github.com/voltagent/awesome-design-md", "note": "design.md skills list" },
+    { "url": "https://github.com/Shubhamsaboo/awesome-llm-apps", "note": "LLM apps list -- mostly apps, low skill yield" },
+    { "url": "https://github.com/anthropics/claude-cookbooks", "note": "cookbook repo, not a list -- kept here as a scan-later index" },
+    { "url": "https://github.com/freestylefly/awesome-gpt-image-2", "note": "FLAGGED likely-malicious as a repo; usable only as a link source, links are attacker-chosen" }
+  ],
+
+  "collections_pending_enumeration": [
+    { "url": "https://github.com/anthropics/skills", "note": "20 skills" },
+    { "url": "https://github.com/addyosmani/agent-skills" },
+    { "url": "https://github.com/mattpocock/skills" },
+    { "url": "https://github.com/slavingia/skills" },
+    { "url": "https://github.com/phauryn/pm-skills" },
+    { "url": "https://github.com/coreyhaines31/marketingskills" },
+    { "url": "https://github.com/tt-a1i/archify", "note": "(?) collection vs single" },
+    { "url": "https://github.com/CloudAI-X/threejs-skills", "note": "10 skills: threejs-{animation,fundamentals,geometry,interaction,lighting,loaders,materials,postprocessing,shaders,textures}" },
+    { "url": "https://github.com/JuliusBrussee/caveman", "note": "17 unique skills under skills/ (also duplicated under plugins/caveman/skills/)" },
+    { "url": "https://github.com/AThevon/genjutsu", "note": "17 skills: skills/{cast,paint} + skills/_jutsu/*" },
+    { "url": "https://github.com/DietrichGebert/ponytail", "note": "6 unique: ponytail{,-audit,-debt,-gain,-help,-review} (also under .openclaw/skills/)" },
+    { "url": "https://github.com/google-labs-code/design.md", "note": "4 dev-workflow skills: tdd, ink, typed-service-contracts, agent-dx-cli-scale -- SCANNED individually this pass" }
+  ]
+}

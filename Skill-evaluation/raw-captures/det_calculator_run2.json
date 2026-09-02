@@ -1,0 +1,615 @@
+{
+  "skill": {
+    "name": "calculator",
+    "source": "C:\\Users\\tswid\\AppData\\Roaming\\uv\\tools\\skillevaluator\\Lib\\site-packages\\skillevaluator\\tier3\\reference_skills\\calculator",
+    "scanned_at": "2026-09-01T01:21:56.503748+00:00"
+  },
+  "risk_assessment": {
+    "score": 0,
+    "severity": "LOW",
+    "recommendation": "CAUTION",
+    "max_issue_severity": "NONE"
+  },
+  "components": [
+    {
+      "path": "SKILL.md",
+      "type": "markdown",
+      "lines": 66,
+      "executable": false,
+      "size_bytes": 1831,
+      "source_url": null,
+      "source_identity": null,
+      "source_digest": null
+    },
+    {
+      "path": "evals/evals.json",
+      "type": "json",
+      "lines": 26,
+      "executable": false,
+      "size_bytes": 1351,
+      "source_url": null,
+      "source_identity": null,
+      "source_digest": null
+    },
+    {
+      "path": "scripts/calc.py",
+      "type": "python",
+      "lines": 117,
+      "executable": true,
+      "size_bytes": 3349,
+      "source_url": null,
+      "source_identity": null,
+      "source_digest": null
+    }
+  ],
+  "structured_summaries": [],
+  "issues": [],
+  "suppressed_count": 0,
+  "suppressed": [],
+  "metadata": {
+    "has_executable_scripts": true,
+    "skillspector_version": "2.11.0",
+    "llm_requested": true,
+    "llm_available": true,
+    "meta_analysis_applied": false,
+    "inference_usage": [
+      {
+        "node": "mcp_tool_poisoning",
+        "request_kind": "structured_output",
+        "provider": "openai",
+        "model": "deepseek/deepseek-v4-flash",
+        "model_source": "requested_model",
+        "usage_source": "provider_response",
+        "prompt_tokens": 1383,
+        "completion_tokens": 327,
+        "cached_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 185,
+        "total_tokens": 1710
+      },
+      {
+        "node": "semantic_developer_intent",
+        "request_kind": "structured_output",
+        "provider": "openai",
+        "model": "deepseek/deepseek-v4-flash",
+        "model_source": "requested_model",
+        "usage_source": "provider_response",
+        "prompt_tokens": 2842,
+        "completion_tokens": 9,
+        "cached_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0,
+        "total_tokens": 2851
+      },
+      {
+        "node": "semantic_developer_intent",
+        "request_kind": "structured_output",
+        "provider": "openai",
+        "model": "deepseek/deepseek-v4-flash",
+        "model_source": "requested_model",
+        "usage_source": "provider_response",
+        "prompt_tokens": 1621,
+        "completion_tokens": 356,
+        "cached_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 348,
+        "total_tokens": 1977
+      },
+      {
+        "node": "semantic_developer_intent",
+        "request_kind": "structured_output",
+        "provider": "openai",
+        "model": "deepseek/deepseek-v4-flash",
+        "model_source": "requested_model",
+        "usage_source": "provider_response",
+        "prompt_tokens": 1385,
+        "completion_tokens": 275,
+        "cached_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 315,
+        "total_tokens": 1660
+      },
+      {
+        "node": "semantic_quality_policy",
+        "request_kind": "structured_output",
+        "provider": "openai",
+        "model": "deepseek/deepseek-v4-flash",
+        "model_source": "requested_model",
+        "usage_source": "provider_response",
+        "prompt_tokens": 2391,
+        "completion_tokens": 8,
+        "cached_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 0,
+        "total_tokens": 2399
+      },
+      {
+        "node": "semantic_quality_policy",
+        "request_kind": "structured_output",
+        "provider": "openai",
+        "model": "deepseek/deepseek-v4-flash",
+        "model_source": "requested_model",
+        "usage_source": "provider_response",
+        "prompt_tokens": 1464,
+        "completion_tokens": 334,
+        "cached_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 324,
+        "total_tokens": 1798
+      },
+      {
+        "node": "semantic_quality_policy",
+        "request_kind": "structured_output",
+        "provider": "openai",
+        "model": "deepseek/deepseek-v4-flash",
+        "model_source": "requested_model",
+        "usage_source": "provider_response",
+        "prompt_tokens": 1690,
+        "completion_tokens": 843,
+        "cached_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 834,
+        "total_tokens": 2533
+      },
+      {
+        "node": "semantic_security_discovery",
+        "request_kind": "structured_output",
+        "provider": "openai",
+        "model": "deepseek/deepseek-v4-flash",
+        "model_source": "requested_model",
+        "usage_source": "provider_response",
+        "prompt_tokens": 1219,
+        "completion_tokens": 114,
+        "cached_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 105,
+        "total_tokens": 1333
+      },
+      {
+        "node": "semantic_security_discovery",
+        "request_kind": "structured_output",
+        "provider": "openai",
+        "model": "deepseek/deepseek-v4-flash",
+        "model_source": "requested_model",
+        "usage_source": "provider_response",
+        "prompt_tokens": 983,
+        "completion_tokens": 115,
+        "cached_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 135,
+        "total_tokens": 1098
+      },
+      {
+        "node": "semantic_security_discovery",
+        "request_kind": "structured_output",
+        "provider": "openai",
+        "model": "deepseek/deepseek-v4-flash",
+        "model_source": "requested_model",
+        "usage_source": "provider_response",
+        "prompt_tokens": 1918,
+        "completion_tokens": 260,
+        "cached_tokens": 256,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 303,
+        "total_tokens": 2178
+      }
+    ],
+    "filtering_mode": "heuristic",
+    "llm_calls_attempted": 4,
+    "llm_calls_succeeded": 4
+  },
+  "execution_successful": true,
+  "analysis_completeness": {
+    "total_components": 3,
+    "scanned_components": 3,
+    "coverage_percent": 100.0,
+    "is_complete": false,
+    "status": "partial",
+    "execution_successful": true,
+    "fully_inspected_files": 3,
+    "partially_inspected_files": 0,
+    "entirely_uninspected_files": 0,
+    "ledger_exceptions": [
+      {
+        "outcome": "partial",
+        "phase": "reference_resolution",
+        "reason_code": "reference_unresolved",
+        "message": "A local path-like reference could not be resolved unambiguously.",
+        "path": "SKILL.md",
+        "start_line": 59,
+        "end_line": 59,
+        "fatal": false
+      }
+    ],
+    "scope_exclusions": [],
+    "analyzer_statuses": [
+      {
+        "analyzer_id": "artifact_integrity",
+        "status": "completed",
+        "planned_work": 3,
+        "completed": 3,
+        "partial": 0,
+        "skipped": 0,
+        "failed": 0,
+        "unaccounted": 0
+      },
+      {
+        "analyzer_id": "behavioral_ast",
+        "status": "completed",
+        "planned_work": 1,
+        "completed": 1,
+        "partial": 0,
+        "skipped": 0,
+        "failed": 0,
+        "unaccounted": 0
+      },
+      {
+        "analyzer_id": "behavioral_taint_tracking",
+        "status": "completed",
+        "planned_work": 1,
+        "completed": 1,
+        "partial": 0,
+        "skipped": 0,
+        "failed": 0,
+        "unaccounted": 0
+      },
+      {
+        "analyzer_id": "bundled_execution_surface",
+        "status": "not_applicable",
+        "planned_work": 0,
+        "completed": 0,
+        "partial": 0,
+        "skipped": 0,
+        "failed": 0,
+        "unaccounted": 0,
+        "reason_code": "no_applicable_files",
+        "message": "No files matched this analyzer's applicability contract."
+      },
+      {
+        "analyzer_id": "mcp_least_privilege",
+        "status": "completed",
+        "planned_work": 2,
+        "completed": 2,
+        "partial": 0,
+        "skipped": 0,
+        "failed": 0,
+        "unaccounted": 0
+      },
+      {
+        "analyzer_id": "mcp_rug_pull",
+        "status": "completed",
+        "planned_work": 3,
+        "completed": 3,
+        "partial": 0,
+        "skipped": 0,
+        "failed": 0,
+        "unaccounted": 0
+      },
+      {
+        "analyzer_id": "mcp_tool_poisoning",
+        "status": "completed",
+        "planned_work": 2,
+        "completed": 2,
+        "partial": 0,
+        "skipped": 0,
+        "failed": 0,
+        "unaccounted": 0
+      },
+      {
+        "analyzer_id": "meta_analyzer",
+        "status": "not_applicable",
+        "planned_work": 0,
+        "completed": 0,
+        "partial": 0,
+        "skipped": 0,
+        "failed": 0,
+        "unaccounted": 0,
+        "reason_code": "no_applicable_files",
+        "message": "No files matched this analyzer's applicability contract."
+      },
+      {
+        "analyzer_id": "semantic_developer_intent",
+        "status": "completed",
+        "planned_work": 3,
+        "completed": 3,
+        "partial": 0,
+        "skipped": 0,
+        "failed": 0,
+        "unaccounted": 0
+      },
+      {
+        "analyzer_id": "semantic_quality_policy",
+        "status": "completed",
+        "planned_work": 3,
+        "completed": 3,
+        "partial": 0,
+        "skipped": 0,
+        "failed": 0,
+        "unaccounted": 0
+      },
+      {
+        "analyzer_id": "semantic_security_discovery",
+        "status": "completed",
+        "planned_work": 3,
+        "completed": 3,
+        "partial": 0,
+        "skipped": 0,
+        "failed": 0,
+        "unaccounted": 0
+      },
+      {
+        "analyzer_id": "static_patterns_agent_snooping",
+        "status": "completed",
+        "planned_work": 3,
+        "completed": 3,
+        "partial": 0,
+        "skipped": 0,
+        "failed": 0,
+        "unaccounted": 0
+      },
+      {
+        "analyzer_id": "static_patterns_anti_refusal",
+        "status": "completed",
+        "planned_work": 3,
+        "completed": 3,
+        "partial": 0,
+        "skipped": 0,
+        "failed": 0,
+        "unaccounted": 0
+      },
+      {
+        "analyzer_id": "static_patterns_data_exfiltration",
+        "status": "completed",
+        "planned_work": 3,
+        "completed": 3,
+        "partial": 0,
+        "skipped": 0,
+        "failed": 0,
+        "unaccounted": 0
+      },
+      {
+        "analyzer_id": "static_patterns_deserialization",
+        "status": "completed",
+        "planned_work": 3,
+        "completed": 3,
+        "partial": 0,
+        "skipped": 0,
+        "failed": 0,
+        "unaccounted": 0
+      },
+      {
+        "analyzer_id": "static_patterns_excessive_agency",
+        "status": "completed",
+        "planned_work": 3,
+        "completed": 3,
+        "partial": 0,
+        "skipped": 0,
+        "failed": 0,
+        "unaccounted": 0
+      },
+      {
+        "analyzer_id": "static_patterns_harmful_content",
+        "status": "completed",
+        "planned_work": 3,
+        "completed": 3,
+        "partial": 0,
+        "skipped": 0,
+        "failed": 0,
+        "unaccounted": 0
+      },
+      {
+        "analyzer_id": "static_patterns_memory_poisoning",
+        "status": "completed",
+        "planned_work": 3,
+        "completed": 3,
+        "partial": 0,
+        "skipped": 0,
+        "failed": 0,
+        "unaccounted": 0
+      },
+      {
+        "analyzer_id": "static_patterns_output_handling",
+        "status": "completed",
+        "planned_work": 3,
+        "completed": 3,
+        "partial": 0,
+        "skipped": 0,
+        "failed": 0,
+        "unaccounted": 0
+      },
+      {
+        "analyzer_id": "static_patterns_privilege_escalation",
+        "status": "completed",
+        "planned_work": 3,
+        "completed": 3,
+        "partial": 0,
+        "skipped": 0,
+        "failed": 0,
+        "unaccounted": 0
+      },
+      {
+        "analyzer_id": "static_patterns_prompt_injection",
+        "status": "completed",
+        "planned_work": 3,
+        "completed": 3,
+        "partial": 0,
+        "skipped": 0,
+        "failed": 0,
+        "unaccounted": 0
+      },
+      {
+        "analyzer_id": "static_patterns_rogue_agent",
+        "status": "completed",
+        "planned_work": 3,
+        "completed": 3,
+        "partial": 0,
+        "skipped": 0,
+        "failed": 0,
+        "unaccounted": 0
+      },
+      {
+        "analyzer_id": "static_patterns_ssrf",
+        "status": "completed",
+        "planned_work": 3,
+        "completed": 3,
+        "partial": 0,
+        "skipped": 0,
+        "failed": 0,
+        "unaccounted": 0
+      },
+      {
+        "analyzer_id": "static_patterns_supply_chain",
+        "status": "completed",
+        "planned_work": 3,
+        "completed": 3,
+        "partial": 0,
+        "skipped": 0,
+        "failed": 0,
+        "unaccounted": 0
+      },
+      {
+        "analyzer_id": "static_patterns_system_prompt_leakage",
+        "status": "completed",
+        "planned_work": 3,
+        "completed": 3,
+        "partial": 0,
+        "skipped": 0,
+        "failed": 0,
+        "unaccounted": 0
+      },
+      {
+        "analyzer_id": "static_patterns_tool_misuse",
+        "status": "completed",
+        "planned_work": 3,
+        "completed": 3,
+        "partial": 0,
+        "skipped": 0,
+        "failed": 0,
+        "unaccounted": 0
+      },
+      {
+        "analyzer_id": "static_yara",
+        "status": "completed",
+        "planned_work": 3,
+        "completed": 3,
+        "partial": 0,
+        "skipped": 0,
+        "failed": 0,
+        "unaccounted": 0
+      }
+    ],
+    "references": [
+      {
+        "source_path": "SKILL.md",
+        "line": 21,
+        "column": 9,
+        "evidence": "2. Run `scripts/calc.py` with the user's expression or conversion.",
+        "target_path": "scripts/calc.py",
+        "status": "resolved",
+        "disposition": "analyzed"
+      },
+      {
+        "source_path": "SKILL.md",
+        "line": 30,
+        "column": 8,
+        "evidence": "python scripts/calc.py \"2 + 3 * 4\"",
+        "target_path": "scripts/calc.py",
+        "status": "resolved",
+        "disposition": "analyzed"
+      },
+      {
+        "source_path": "SKILL.md",
+        "line": 31,
+        "column": 8,
+        "evidence": "python scripts/calc.py \"(100 - 25) / 3\"",
+        "target_path": "scripts/calc.py",
+        "status": "resolved",
+        "disposition": "analyzed"
+      },
+      {
+        "source_path": "SKILL.md",
+        "line": 32,
+        "column": 8,
+        "evidence": "python scripts/calc.py \"2 ** 10\"",
+        "target_path": "scripts/calc.py",
+        "status": "resolved",
+        "disposition": "analyzed"
+      },
+      {
+        "source_path": "SKILL.md",
+        "line": 35,
+        "column": 8,
+        "evidence": "python scripts/calc.py \"15% of 200\"",
+        "target_path": "scripts/calc.py",
+        "status": "resolved",
+        "disposition": "analyzed"
+      },
+      {
+        "source_path": "SKILL.md",
+        "line": 38,
+        "column": 8,
+        "evidence": "python scripts/calc.py \"100 celsius to fahrenheit\"",
+        "target_path": "scripts/calc.py",
+        "status": "resolved",
+        "disposition": "analyzed"
+      },
+      {
+        "source_path": "SKILL.md",
+        "line": 39,
+        "column": 8,
+        "evidence": "python scripts/calc.py \"5 miles to km\"",
+        "target_path": "scripts/calc.py",
+        "status": "resolved",
+        "disposition": "analyzed"
+      },
+      {
+        "source_path": "SKILL.md",
+        "line": 40,
+        "column": 8,
+        "evidence": "python scripts/calc.py \"10 kg to lbs\"",
+        "target_path": "scripts/calc.py",
+        "status": "resolved",
+        "disposition": "analyzed"
+      },
+      {
+        "source_path": "SKILL.md",
+        "line": 59,
+        "column": 36,
+        "evidence": "- Unit conversions are limited to: celsius/fahrenheit, miles/km, kg/lbs, meters/feet.",
+        "target_path": null,
+        "status": "missing",
+        "disposition": "partial"
+      },
+      {
+        "source_path": "SKILL.md",
+        "line": 59,
+        "column": 56,
+        "evidence": "- Unit conversions are limited to: celsius/fahrenheit, miles/km, kg/lbs, meters/feet.",
+        "target_path": null,
+        "status": "missing",
+        "disposition": "partial"
+      },
+      {
+        "source_path": "SKILL.md",
+        "line": 59,
+        "column": 66,
+        "evidence": "- Unit conversions are limited to: celsius/fahrenheit, miles/km, kg/lbs, meters/feet.",
+        "target_path": null,
+        "status": "missing",
+        "disposition": "partial"
+      },
+      {
+        "source_path": "SKILL.md",
+        "line": 59,
+        "column": 74,
+        "evidence": "- Unit conversions are limited to: celsius/fahrenheit, miles/km, kg/lbs, meters/feet.",
+        "target_path": null,
+        "status": "missing",
+        "disposition": "partial"
+      }
+    ],
+    "limitations": [],
+    "findings_before_filtering": 0,
+    "findings_after_filtering": 0
+  }
+}

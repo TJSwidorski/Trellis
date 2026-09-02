@@ -1,0 +1,44 @@
+{
+  "target": "trellis@2.10.2",
+  "needs": {
+    "ingest-artifact-security-scan": [
+      "prompt injection",
+      "excessive agency",
+      "malicious skill",
+      "security scan",
+      "supply chain",
+      "static analysis",
+      "skillspector"
+    ],
+    "dependency-cve-audit": [
+      "cve",
+      "vulnerability scan",
+      "dependency audit",
+      "sbom",
+      "advisory database"
+    ],
+    "repo-convention-capture": [
+      "repo conventions",
+      "codebase analysis",
+      "lint config",
+      "project layout",
+      "coding standards"
+    ],
+    "eval-harness-authoring": [
+      "eval dataset",
+      "task set",
+      "a/b evaluation",
+      "benchmark harness",
+      "regression fixtures"
+    ]
+  },
+  "installed_skills_dir": "../SKILLS/skills",
+  "adopt_threshold": { "correctness": 0.05, "efficiency": 0.0 },
+  "dimension_map": {
+    "security": "security",
+    "correctness": "correctness",
+    "discoverability": "discoverability",
+    "effectiveness": "effectiveness",
+    "efficiency": "efficiency"
+  }
+}

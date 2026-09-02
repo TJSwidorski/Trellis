@@ -1,0 +1,252 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/skill-ledger.schema.json",
+  "title": "Skill ledger",
+  "description": "Single source of truth shared by pipeline 1 (skill-finder) and pipeline 2 (Trellis fit). Pipeline 1 owns the 'security' block. Pipeline 2 owns the 'fit' block. Neither writes the other's block.",
+  "type": "object",
+  "required": ["schema_version", "updated_at", "entries"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "integer", "const": 2 },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "entries": {
+      "type": "object",
+      "description": "Keyed by entry id: a stable slug derived from the source URL.",
+      "additionalProperties": { "$ref": "#/$defs/entry" }
+    }
+  },
+  "$defs": {
+    "entry": {
+      "type": "object",
+      "required": ["id", "source", "discovered_at", "state"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*$",
+          "description": "Stable slug, e.g. 'github.com-acme-pdf-tools'."
+        },
+        "name": { "type": "string" },
+        "source": {
+          "type": "object",
+          "required": ["url", "origin"],
+          "additionalProperties": false,
+          "properties": {
+            "url": { "type": "string", "format": "uri" },
+            "origin": {
+              "type": "string",
+              "enum": ["manual", "github_topic", "catalog", "other"],
+              "description": "manual = you handed it to the app; the rest are crawled."
+            },
+            "ref": { "type": "string", "description": "Branch, tag, or commit if pinned." }
+          }
+        },
+        "discovered_at": { "type": "string", "format": "date-time" },
+        "content_hash": {
+          "type": ["string", "null"],
+          "description": "sha256 over the skill's file tree. Changes here invalidate both security and fit blocks."
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "discovered",
+            "awaiting_fit",
+            "quarantined",
+            "fit_evaluated",
+            "adopted",
+            "rejected"
+          ],
+          "description": "discovered -> (awaiting_fit | quarantined). awaiting_fit -> (fit_evaluated | adopted | rejected) via pipeline 2. 'awaiting_fit' is the pipeline 1 -> pipeline 2 handoff: pipeline 1 has written the security block (recommendation + raw completeness signals) and does NOT pre-judge fitness; pipeline 2 routes from those signals. 'quarantined' (DO_NOT_INSTALL) is terminal and never handed over. (v1 'cleared'/'scanned' both migrate to 'awaiting_fit'.)"
+        },
+        "security": { "$ref": "#/$defs/security" },
+        "fit": { "$ref": "#/$defs/fit" },
+        "history": {
+          "type": "array",
+          "description": "Append-only audit trail. Never rewritten.",
+          "items": {
+            "type": "object",
+            "required": ["at", "actor", "event"],
+            "additionalProperties": false,
+            "properties": {
+              "at": { "type": "string", "format": "date-time" },
+              "actor": { "type": "string", "enum": ["pipeline1", "pipeline2", "human"] },
+              "event": { "type": "string" },
+              "note": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+
+    "security": {
+      "type": "object",
+      "description": "Written only by pipeline 1.",
+      "required": ["scanned_at", "recommendation", "score", "scan_mode"],
+      "additionalProperties": false,
+      "properties": {
+        "scanned_at": { "type": "string", "format": "date-time" },
+        "scanner_version": { "type": "string" },
+        "scan_mode": {
+          "type": "string",
+          "enum": ["static", "static+llm"],
+          "description": "A low score from a static-only scan is not the same as a clean full scan. Record which one produced this verdict."
+        },
+        "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "severity": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+        "recommendation": { "type": "string", "enum": ["SAFE", "CAUTION", "DO_NOT_INSTALL"] },
+        "has_executable_scripts": { "type": "boolean" },
+        "llm_model": {
+          "type": ["string", "null"],
+          "description": "Model slug behind the LLM leg (from scan metadata.inference_usage); null for a static-only scan. Verdicts from different models are not comparable."
+        },
+        "llm_provider": {
+          "type": ["string", "null"],
+          "description": "Provider namespace reported by SkillSpector (e.g. 'openai' for an OpenAI-compatible endpoint). The actual serving backend behind an OpenRouter model is NOT observable through SkillSpector's JSON."
+        },
+        "llm_seed": {
+          "type": ["integer", "null"],
+          "description": "SKILLSPECTOR_SEED in effect for the scan. With no pinned backend, reproducibility of an LLM verdict rests on this plus llm_temperature."
+        },
+        "llm_temperature": { "type": ["number", "null"] },
+        "llm_requested": { "type": "boolean", "description": "Pipeline 1 ran (or tried to run) the LLM leg for this scan." },
+        "llm_ran": { "type": "boolean", "description": "The LLM leg produced a verdict (scan_mode == 'static+llm'). false under --no-llm or on provider failure." },
+        "llm_attempts": { "type": "integer", "minimum": 0, "description": "Whole-scan LLM invocations pipeline 1 made this run (1 = no retry needed; up to LLM_RETRY_ATTEMPTS)." },
+        "llm_last_error": { "type": ["string", "null"], "description": "Failure reason from the final LLM attempt, or null if the LLM leg succeeded / was not run." },
+        "llm_attempt_log": {
+          "type": "array",
+          "description": "One entry per whole-scan LLM attempt: when it ran and how it failed (null error = that attempt succeeded).",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "at": { "type": "string", "format": "date-time" },
+              "error": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "blind_spot_kind": {
+          "type": ["string", "null"],
+          "enum": ["structural", "provider_unavailable", "provider_persistent", null],
+          "description": "Set only when classify_incompleteness == blind_spot. 'structural' = the scanner cannot finish reading this skill and will fail identically every run (settled). 'provider_unavailable' = only the LLM leg failed and the static scan is benign/clean; needs_rescan() retries it next run. 'provider_persistent' = provider_unavailable that has recurred for LLM_PERSISTENT_FAILURE_RUNS consecutive runs; treated as settled (payload too large for the model), no longer retried."
+        },
+        "consecutive_provider_failures": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of consecutive runs the LLM leg came back provider_unavailable. Reset by any other outcome. Reaches LLM_PERSISTENT_FAILURE_RUNS -> blind_spot_kind becomes 'provider_persistent'."
+        },
+        "is_complete": { "type": ["boolean", "null"], "description": "SkillSpector's analysis_completeness.is_complete. Recorded raw; pipeline 2 classifies whether an incomplete scan is a real blind spot." },
+        "coverage_percent": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+        "fully_inspected_files": { "type": ["integer", "null"], "minimum": 0 },
+        "partially_inspected_files": { "type": ["integer", "null"], "minimum": 0 },
+        "entirely_uninspected_files": { "type": ["integer", "null"], "minimum": 0 },
+        "degraded_analyzers": { "type": "array", "items": { "type": "string" }, "description": "Analyzer ids that did not reach 'completed'. Count and membership both matter to pipeline 2's blind-spot classification." },
+        "ledger_exception_reasons": { "type": "array", "items": { "type": "string" } },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["rule_id", "severity"],
+            "additionalProperties": false,
+            "properties": {
+              "rule_id": { "type": "string" },
+              "category": { "type": "string" },
+              "severity": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+              "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+              "file": { "type": "string" },
+              "line": { "type": "integer" },
+              "message": { "type": "string" }
+            }
+          }
+        },
+        "baseline_applied": { "type": ["string", "null"] },
+        "error": { "type": ["string", "null"] }
+      }
+    },
+
+    "fit": {
+      "type": "object",
+      "description": "Written only by pipeline 2. Absent until the entry reaches state 'awaiting_fit'.",
+      "required": ["evaluated_at", "verdict"],
+      "additionalProperties": false,
+      "properties": {
+        "evaluated_at": { "type": "string", "format": "date-time" },
+        "target": {
+          "type": "string",
+          "description": "What it was evaluated as useful FOR, e.g. 'trellis@2.0.0'."
+        },
+        "relevance": {
+          "type": "object",
+          "description": "Gate A. Cheap filter against the capability manifest.",
+          "additionalProperties": false,
+          "properties": {
+            "score": { "type": "number", "minimum": 0, "maximum": 1 },
+            "matched_needs": { "type": "array", "items": { "type": "string" } },
+            "method": { "type": "string", "enum": ["keyword", "embedding", "llm"] }
+          }
+        },
+        "redundancy": {
+          "type": "object",
+          "description": "Gate B. Overlap against skills already installed.",
+          "additionalProperties": false,
+          "properties": {
+            "max_similarity": { "type": "number", "minimum": 0, "maximum": 1 },
+            "closest_existing": { "type": ["string", "null"] },
+            "verdict": { "type": "string", "enum": ["novel", "partial_overlap", "redundant"] },
+            "note": { "type": "string", "description": "Set when the signal was absent (e.g. no embeddings provider), explaining why the verdict is not 'novel'." }
+          }
+        },
+        "validation": {
+          "type": "object",
+          "description": "Gate C. SkillEvaluator tier 1 hygiene, hard failures only.",
+          "additionalProperties": false,
+          "properties": {
+            "passed": { "type": "boolean", "description": "False only when a hard (structural/unsafe) validator failed." },
+            "failed_checks": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "provenance_flags": {
+          "type": "array",
+          "description": "Gate C soft flags: publication-readiness gaps (no LICENSE, no author, missing sections, low quality score, lint advisories). Never reject; decide() uses them to cap the verdict at 'trial'.",
+          "items": { "type": "string" }
+        },
+        "scan_flags": {
+          "type": "array",
+          "description": "Pipeline 2's read of the security block's completeness signals: e.g. 'scan incomplete (blind_spot): LLM leg did not complete'. Same mechanism as provenance_flags -- never rejects, caps the verdict at 'trial'. Empty when the scan was complete.",
+          "items": { "type": "string" }
+        },
+        "live_eval": {
+          "type": "object",
+          "description": "Gate D. Tier 3 A/B: agent runs the task set with and without the skill.",
+          "additionalProperties": false,
+          "properties": {
+            "ran": { "type": "boolean" },
+            "agent": { "type": "string" },
+            "env_mode": { "type": "string", "enum": ["docker", "local"] },
+            "task_set": { "type": "string" },
+            "n_tasks": { "type": "integer", "minimum": 0 },
+            "deltas": {
+              "type": "object",
+              "description": "with_skill minus without_skill, per dimension. Positive is better.",
+              "additionalProperties": false,
+              "properties": {
+                "correctness": { "type": "number" },
+                "security": { "type": "number" },
+                "discoverability": { "type": "number" },
+                "effectiveness": { "type": "number" },
+                "efficiency": { "type": "number" }
+              }
+            },
+            "report_path": { "type": ["string", "null"] }
+          }
+        },
+        "verdict": {
+          "type": "string",
+          "enum": ["adopt", "trial", "reject", "deferred"],
+          "description": "deferred = passed the cheap gates but the expensive gate has not run yet."
+        },
+        "rationale": { "type": "string" },
+        "error": { "type": ["string", "null"] }
+      }
+    }
+  }
+}
