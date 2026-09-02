@@ -1,12 +1,12 @@
 {
   "schema_version": 2,
-  "updated_at": "2026-09-02T00:45:14.625082+00:00",
+  "updated_at": "2026-09-02T02:30:07.563176+00:00",
   "entries": {
     "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-design-dna": {
       "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-design-dna",
       "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-design-dna",
       "source": {
-        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/b98a898c-43d0-482a-8a88-6c8bb5c05011/scratchpad/skillrepos/design-dna",
+        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/50cd7a55-f3b9-4b56-aab3-e61463526ada/scratchpad/skillrepos/design-dna",
         "origin": "manual"
       },
       "discovered_at": "2026-09-02T00:30:30.726014+00:00",
@@ -513,12 +513,12 @@
       "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-motion-design",
       "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-motion-design",
       "source": {
-        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/b98a898c-43d0-482a-8a88-6c8bb5c05011/scratchpad/skillrepos/motion-design",
+        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/50cd7a55-f3b9-4b56-aab3-e61463526ada/scratchpad/skillrepos/motion-design",
         "origin": "manual"
       },
       "discovered_at": "2026-09-02T00:36:19.710170+00:00",
       "content_hash": null,
-      "state": "awaiting_fit",
+      "state": "rejected",
       "history": [
         {
           "at": "2026-09-02T00:36:19.710196+00:00",
@@ -531,6 +531,12 @@
           "actor": "pipeline1",
           "event": "scanned",
           "note": "CAUTION score=30 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T02:30:04.774942+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "reject: no overlap with declared needs (relevance 0.0)"
         }
       ],
       "security": {
@@ -588,13 +594,27 @@
         "ledger_exception_reasons": [
           "reference_unresolved"
         ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T02:30:04.739495+00:00",
+        "target": "trellis@2.10.2",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
+        ],
+        "relevance": {
+          "score": 0.0,
+          "matched_needs": [],
+          "method": "keyword"
+        },
+        "verdict": "reject",
+        "rationale": "no overlap with declared needs (relevance 0.0)"
       }
     },
     "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-hallmark": {
       "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-hallmark",
       "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-hallmark",
       "source": {
-        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/b98a898c-43d0-482a-8a88-6c8bb5c05011/scratchpad/skillrepos/hallmark",
+        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/50cd7a55-f3b9-4b56-aab3-e61463526ada/scratchpad/skillrepos/hallmark",
         "origin": "manual"
       },
       "discovered_at": "2026-09-02T00:37:18.005224+00:00",
@@ -655,12 +675,12 @@
       "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-i-have-adhd",
       "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-i-have-adhd",
       "source": {
-        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/b98a898c-43d0-482a-8a88-6c8bb5c05011/scratchpad/skillrepos/i-have-adhd",
+        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/50cd7a55-f3b9-4b56-aab3-e61463526ada/scratchpad/skillrepos/i-have-adhd",
         "origin": "manual"
       },
       "discovered_at": "2026-09-02T00:38:30.411938+00:00",
       "content_hash": null,
-      "state": "awaiting_fit",
+      "state": "rejected",
       "history": [
         {
           "at": "2026-09-02T00:38:30.411958+00:00",
@@ -673,6 +693,12 @@
           "actor": "pipeline1",
           "event": "scanned",
           "note": "CAUTION score=0 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T02:30:05.443446+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "reject: no overlap with declared needs (relevance 0.0)"
         }
       ],
       "security": {
@@ -711,18 +737,32 @@
         "ledger_exception_reasons": [
           "reference_unresolved"
         ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T02:30:05.435682+00:00",
+        "target": "trellis@2.10.2",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
+        ],
+        "relevance": {
+          "score": 0.0,
+          "matched_needs": [],
+          "method": "keyword"
+        },
+        "verdict": "reject",
+        "rationale": "no overlap with declared needs (relevance 0.0)"
       }
     },
     "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-designmd-tdd": {
       "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-designmd-tdd",
       "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-designmd-tdd",
       "source": {
-        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/b98a898c-43d0-482a-8a88-6c8bb5c05011/scratchpad/skillrepos/designmd-tdd",
+        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/50cd7a55-f3b9-4b56-aab3-e61463526ada/scratchpad/skillrepos/tdd",
         "origin": "manual"
       },
       "discovered_at": "2026-09-02T00:38:57.570112+00:00",
       "content_hash": null,
-      "state": "awaiting_fit",
+      "state": "rejected",
       "history": [
         {
           "at": "2026-09-02T00:38:57.570145+00:00",
@@ -735,6 +775,12 @@
           "actor": "pipeline1",
           "event": "scanned",
           "note": "CAUTION score=0 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T02:30:05.951422+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "reject: no overlap with declared needs (relevance 0.0)"
         }
       ],
       "security": {
@@ -773,18 +819,32 @@
         "ledger_exception_reasons": [
           "reference_unresolved"
         ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T02:30:05.946085+00:00",
+        "target": "trellis@2.10.2",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
+        ],
+        "relevance": {
+          "score": 0.0,
+          "matched_needs": [],
+          "method": "keyword"
+        },
+        "verdict": "reject",
+        "rationale": "no overlap with declared needs (relevance 0.0)"
       }
     },
     "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-designmd-ink": {
       "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-designmd-ink",
       "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-designmd-ink",
       "source": {
-        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/b98a898c-43d0-482a-8a88-6c8bb5c05011/scratchpad/skillrepos/designmd-ink",
+        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/50cd7a55-f3b9-4b56-aab3-e61463526ada/scratchpad/skillrepos/ink",
         "origin": "manual"
       },
       "discovered_at": "2026-09-02T00:39:28.937593+00:00",
       "content_hash": null,
-      "state": "awaiting_fit",
+      "state": "rejected",
       "history": [
         {
           "at": "2026-09-02T00:39:28.937631+00:00",
@@ -797,6 +857,12 @@
           "actor": "pipeline1",
           "event": "scanned",
           "note": "CAUTION score=7 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T02:30:06.465206+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "reject: no overlap with declared needs (relevance 0.0)"
         }
       ],
       "security": {
@@ -848,18 +914,32 @@
           "reference_unresolved",
           "static_parse_limit"
         ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T02:30:06.435449+00:00",
+        "target": "trellis@2.10.2",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved', 'static_parse_limit'])"
+        ],
+        "relevance": {
+          "score": 0.0,
+          "matched_needs": [],
+          "method": "keyword"
+        },
+        "verdict": "reject",
+        "rationale": "no overlap with declared needs (relevance 0.0)"
       }
     },
     "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-designmd-typed-contracts": {
       "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-designmd-typed-contracts",
       "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-designmd-typed-contracts",
       "source": {
-        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/b98a898c-43d0-482a-8a88-6c8bb5c05011/scratchpad/skillrepos/designmd-typed-contracts",
+        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/50cd7a55-f3b9-4b56-aab3-e61463526ada/scratchpad/skillrepos/typed-service-contracts",
         "origin": "manual"
       },
       "discovered_at": "2026-09-02T00:40:18.014383+00:00",
       "content_hash": null,
-      "state": "awaiting_fit",
+      "state": "rejected",
       "history": [
         {
           "at": "2026-09-02T00:40:18.014434+00:00",
@@ -872,6 +952,12 @@
           "actor": "pipeline1",
           "event": "scanned",
           "note": "CAUTION score=15 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T02:30:06.949629+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "reject: no overlap with declared needs (relevance 0.0)"
         }
       ],
       "security": {
@@ -920,18 +1006,32 @@
         "ledger_exception_reasons": [
           "reference_unresolved"
         ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T02:30:06.945045+00:00",
+        "target": "trellis@2.10.2",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
+        ],
+        "relevance": {
+          "score": 0.0,
+          "matched_needs": [],
+          "method": "keyword"
+        },
+        "verdict": "reject",
+        "rationale": "no overlap with declared needs (relevance 0.0)"
       }
     },
     "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-designmd-cli-scale": {
       "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-designmd-cli-scale",
       "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-designmd-cli-scale",
       "source": {
-        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/b98a898c-43d0-482a-8a88-6c8bb5c05011/scratchpad/skillrepos/designmd-cli-scale",
+        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/50cd7a55-f3b9-4b56-aab3-e61463526ada/scratchpad/skillrepos/agent-dx-cli-scale",
         "origin": "manual"
       },
       "discovered_at": "2026-09-02T00:41:27.357570+00:00",
       "content_hash": null,
-      "state": "awaiting_fit",
+      "state": "rejected",
       "history": [
         {
           "at": "2026-09-02T00:41:27.357613+00:00",
@@ -944,6 +1044,12 @@
           "actor": "pipeline1",
           "event": "scanned",
           "note": "CAUTION score=12 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T02:30:07.544495+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "reject: no overlap with declared needs (relevance 0.0)"
         }
       ],
       "security": {
@@ -1136,6 +1242,20 @@
         "ledger_exception_reasons": [
           "reference_unresolved"
         ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T02:30:07.514928+00:00",
+        "target": "trellis@2.10.2",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
+        ],
+        "relevance": {
+          "score": 0.0,
+          "matched_needs": [],
+          "method": "keyword"
+        },
+        "verdict": "reject",
+        "rationale": "no overlap with declared needs (relevance 0.0)"
       }
     }
   }

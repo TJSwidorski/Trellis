@@ -1,12 +1,12 @@
 {
   "schema_version": 2,
-  "updated_at": "2026-09-02T00:49:00.473598+00:00",
+  "updated_at": "2026-09-02T12:17:21.226239+00:00",
   "entries": {
     "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-design-dna": {
       "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-design-dna",
       "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-design-dna",
       "source": {
-        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/b98a898c-43d0-482a-8a88-6c8bb5c05011/scratchpad/skillrepos/design-dna",
+        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/50cd7a55-f3b9-4b56-aab3-e61463526ada/scratchpad/skillrepos/design-dna",
         "origin": "manual"
       },
       "discovered_at": "2026-09-02T00:30:30.726014+00:00",
@@ -513,12 +513,12 @@
       "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-motion-design",
       "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-motion-design",
       "source": {
-        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/b98a898c-43d0-482a-8a88-6c8bb5c05011/scratchpad/skillrepos/motion-design",
+        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/50cd7a55-f3b9-4b56-aab3-e61463526ada/scratchpad/skillrepos/motion-design",
         "origin": "manual"
       },
       "discovered_at": "2026-09-02T00:36:19.710170+00:00",
       "content_hash": null,
-      "state": "rejected",
+      "state": "fit_evaluated",
       "history": [
         {
           "at": "2026-09-02T00:36:19.710196+00:00",
@@ -537,6 +537,18 @@
           "actor": "pipeline2",
           "event": "fit_evaluated",
           "note": "reject: failed tier 1 (hard): Schema & Repository Governance: name_consistency"
+        },
+        {
+          "at": "2026-09-02T00:49:00.473598+00:00",
+          "actor": "pipeline2",
+          "event": "fit_reset",
+          "note": "cleared stale fit from pre-fetch_skill-fix run; re-evaluating"
+        },
+        {
+          "at": "2026-09-02T02:29:41.001622+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "deferred: passed cheap gates; live evaluation not yet run"
         }
       ],
       "security": {
@@ -596,7 +608,7 @@
         ]
       },
       "fit": {
-        "evaluated_at": "2026-09-02T00:48:35.773347+00:00",
+        "evaluated_at": "2026-09-02T02:29:35.995257+00:00",
         "target": "general@day-to-day",
         "scan_flags": [
           "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
@@ -622,31 +634,28 @@
           "Schema & Repository Governance/unexpected_file: Unexpected 'patterns' in skill root",
           "Schema & Repository Governance/unexpected_file: Unexpected 'reference' in skill root",
           "Schema & Repository Governance/author_format: Author must be of the form 'Name <email@host>'",
-          "QUALITY score 87.2/100 (grade B)",
+          "QUALITY score 89.8/100 (grade B)",
           "QUALITY: No examples provided",
           "QUALITY: SKILL_SPEC recommended field missing: 'version'",
           "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
           "QUALITY: Description very long (416 chars, recommend 50-150)",
           "QUALITY: No '## Purpose' section",
-          "QUALITY: Skill name very short: 'src'",
           "QUALITY: No prerequisites/requirements documented",
           "QUALITY: No limitations documented"
         ],
         "validation": {
-          "passed": false,
-          "failed_checks": [
-            "Schema & Repository Governance: name_consistency"
-          ]
+          "passed": true,
+          "failed_checks": []
         },
-        "verdict": "reject",
-        "rationale": "failed tier 1 (hard): Schema & Repository Governance: name_consistency"
+        "verdict": "deferred",
+        "rationale": "passed cheap gates; live evaluation not yet run"
       }
     },
     "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-hallmark": {
       "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-hallmark",
       "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-hallmark",
       "source": {
-        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/b98a898c-43d0-482a-8a88-6c8bb5c05011/scratchpad/skillrepos/hallmark",
+        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/50cd7a55-f3b9-4b56-aab3-e61463526ada/scratchpad/skillrepos/hallmark",
         "origin": "manual"
       },
       "discovered_at": "2026-09-02T00:37:18.005224+00:00",
@@ -707,12 +716,12 @@
       "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-i-have-adhd",
       "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-i-have-adhd",
       "source": {
-        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/b98a898c-43d0-482a-8a88-6c8bb5c05011/scratchpad/skillrepos/i-have-adhd",
+        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/50cd7a55-f3b9-4b56-aab3-e61463526ada/scratchpad/skillrepos/i-have-adhd",
         "origin": "manual"
       },
       "discovered_at": "2026-09-02T00:38:30.411938+00:00",
       "content_hash": null,
-      "state": "rejected",
+      "state": "fit_evaluated",
       "history": [
         {
           "at": "2026-09-02T00:38:30.411958+00:00",
@@ -731,6 +740,18 @@
           "actor": "pipeline2",
           "event": "fit_evaluated",
           "note": "reject: failed tier 1 (hard): Schema & Repository Governance: name_consistency"
+        },
+        {
+          "at": "2026-09-02T00:49:00.473598+00:00",
+          "actor": "pipeline2",
+          "event": "fit_reset",
+          "note": "cleared stale fit from pre-fetch_skill-fix run; re-evaluating"
+        },
+        {
+          "at": "2026-09-02T02:29:45.465814+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "deferred: passed cheap gates; live evaluation not yet run"
         }
       ],
       "security": {
@@ -771,7 +792,7 @@
         ]
       },
       "fit": {
-        "evaluated_at": "2026-09-02T00:48:40.890671+00:00",
+        "evaluated_at": "2026-09-02T02:29:41.514403+00:00",
         "target": "general@day-to-day",
         "scan_flags": [
           "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
@@ -794,31 +815,28 @@
           "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Instructions'",
           "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Examples'",
           "Schema & Repository Governance/author_missing: Author not specified in metadata",
-          "QUALITY score 87.8/100 (grade B)",
+          "QUALITY score 90.2/100 (grade A)",
           "QUALITY: SKILL_SPEC recommended field missing: 'version'",
           "QUALITY: SKILL_SPEC recommended field missing: 'metadata.author'",
           "QUALITY: Description very long (242 chars, recommend 50-150)",
           "QUALITY: No '## Purpose' section",
-          "QUALITY: Skill name very short: 'src'",
           "QUALITY: No prerequisites/requirements documented",
           "QUALITY: No limitations documented",
           "QUALITY: No troubleshooting section documented"
         ],
         "validation": {
-          "passed": false,
-          "failed_checks": [
-            "Schema & Repository Governance: name_consistency"
-          ]
+          "passed": true,
+          "failed_checks": []
         },
-        "verdict": "reject",
-        "rationale": "failed tier 1 (hard): Schema & Repository Governance: name_consistency"
+        "verdict": "deferred",
+        "rationale": "passed cheap gates; live evaluation not yet run"
       }
     },
     "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-designmd-tdd": {
       "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-designmd-tdd",
       "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-designmd-tdd",
       "source": {
-        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/b98a898c-43d0-482a-8a88-6c8bb5c05011/scratchpad/skillrepos/designmd-tdd",
+        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/50cd7a55-f3b9-4b56-aab3-e61463526ada/scratchpad/skillrepos/tdd",
         "origin": "manual"
       },
       "discovered_at": "2026-09-02T00:38:57.570112+00:00",
@@ -839,6 +857,18 @@
         },
         {
           "at": "2026-09-02T00:48:49.129184+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "reject: failed tier 1 (hard): Schema & Repository Governance: name_consistency"
+        },
+        {
+          "at": "2026-09-02T00:49:00.473598+00:00",
+          "actor": "pipeline2",
+          "event": "fit_reset",
+          "note": "cleared stale fit from pre-fetch_skill-fix run; re-evaluating"
+        },
+        {
+          "at": "2026-09-02T02:29:49.972484+00:00",
           "actor": "pipeline2",
           "event": "fit_evaluated",
           "note": "reject: failed tier 1 (hard): Schema & Repository Governance: name_consistency"
@@ -882,7 +912,7 @@
         ]
       },
       "fit": {
-        "evaluated_at": "2026-09-02T00:48:45.560020+00:00",
+        "evaluated_at": "2026-09-02T02:29:46.008096+00:00",
         "target": "general@day-to-day",
         "scan_flags": [
           "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
@@ -912,7 +942,7 @@
           "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
           "QUALITY: Description very long (206 chars, recommend 50-150)",
           "QUALITY: No '## Purpose' section",
-          "QUALITY: Skill name very short: 'src'",
+          "QUALITY: Skill name very short: 'tdd'",
           "QUALITY: No prerequisites/requirements documented",
           "QUALITY: No limitations documented",
           "QUALITY: No troubleshooting section documented"
@@ -931,12 +961,12 @@
       "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-designmd-ink",
       "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-designmd-ink",
       "source": {
-        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/b98a898c-43d0-482a-8a88-6c8bb5c05011/scratchpad/skillrepos/designmd-ink",
+        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/50cd7a55-f3b9-4b56-aab3-e61463526ada/scratchpad/skillrepos/ink",
         "origin": "manual"
       },
       "discovered_at": "2026-09-02T00:39:28.937593+00:00",
       "content_hash": null,
-      "state": "rejected",
+      "state": "fit_evaluated",
       "history": [
         {
           "at": "2026-09-02T00:39:28.937631+00:00",
@@ -955,6 +985,18 @@
           "actor": "pipeline2",
           "event": "fit_evaluated",
           "note": "reject: failed tier 1 (hard): Schema & Repository Governance: name_consistency"
+        },
+        {
+          "at": "2026-09-02T00:49:00.473598+00:00",
+          "actor": "pipeline2",
+          "event": "fit_reset",
+          "note": "cleared stale fit from pre-fetch_skill-fix run; re-evaluating"
+        },
+        {
+          "at": "2026-09-02T02:29:54.577403+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "deferred: passed cheap gates; live evaluation not yet run"
         }
       ],
       "security": {
@@ -1008,7 +1050,7 @@
         ]
       },
       "fit": {
-        "evaluated_at": "2026-09-02T00:48:49.441343+00:00",
+        "evaluated_at": "2026-09-02T02:29:50.443500+00:00",
         "target": "general@day-to-day",
         "scan_flags": [
           "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved', 'static_parse_limit'])"
@@ -1039,31 +1081,29 @@
           "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
           "QUALITY: Description very long (250 chars, recommend 50-150)",
           "QUALITY: No '## Purpose' section",
-          "QUALITY: Skill name very short: 'src'",
+          "QUALITY: Skill name very short: 'ink'",
           "QUALITY: No prerequisites/requirements documented",
           "QUALITY: No limitations documented",
           "QUALITY: No troubleshooting section documented"
         ],
         "validation": {
-          "passed": false,
-          "failed_checks": [
-            "Schema & Repository Governance: name_consistency"
-          ]
+          "passed": true,
+          "failed_checks": []
         },
-        "verdict": "reject",
-        "rationale": "failed tier 1 (hard): Schema & Repository Governance: name_consistency"
+        "verdict": "deferred",
+        "rationale": "passed cheap gates; live evaluation not yet run"
       }
     },
     "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-designmd-typed-contracts": {
       "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-designmd-typed-contracts",
       "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-designmd-typed-contracts",
       "source": {
-        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/b98a898c-43d0-482a-8a88-6c8bb5c05011/scratchpad/skillrepos/designmd-typed-contracts",
+        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/50cd7a55-f3b9-4b56-aab3-e61463526ada/scratchpad/skillrepos/typed-service-contracts",
         "origin": "manual"
       },
       "discovered_at": "2026-09-02T00:40:18.014383+00:00",
       "content_hash": null,
-      "state": "rejected",
+      "state": "fit_evaluated",
       "history": [
         {
           "at": "2026-09-02T00:40:18.014434+00:00",
@@ -1082,6 +1122,18 @@
           "actor": "pipeline2",
           "event": "fit_evaluated",
           "note": "reject: failed tier 1 (hard): Schema & Repository Governance: name_consistency"
+        },
+        {
+          "at": "2026-09-02T00:49:00.473598+00:00",
+          "actor": "pipeline2",
+          "event": "fit_reset",
+          "note": "cleared stale fit from pre-fetch_skill-fix run; re-evaluating"
+        },
+        {
+          "at": "2026-09-02T02:29:59.223780+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "deferred: passed cheap gates; live evaluation not yet run"
         }
       ],
       "security": {
@@ -1132,7 +1184,7 @@
         ]
       },
       "fit": {
-        "evaluated_at": "2026-09-02T00:48:52.482041+00:00",
+        "evaluated_at": "2026-09-02T02:29:55.046460+00:00",
         "target": "general@day-to-day",
         "scan_flags": [
           "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
@@ -1157,36 +1209,33 @@
           "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Instructions'",
           "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Examples'",
           "Schema & Repository Governance/author_missing: Author not specified in metadata",
-          "QUALITY score 87.2/100 (grade B)",
+          "QUALITY score 89.8/100 (grade B)",
           "QUALITY: SKILL_SPEC recommended field missing: 'version'",
           "QUALITY: SKILL_SPEC recommended field missing: 'metadata.author'",
           "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
           "QUALITY: No '## Purpose' section",
-          "QUALITY: Skill name very short: 'src'",
           "QUALITY: No prerequisites/requirements documented",
           "QUALITY: No limitations documented",
           "QUALITY: No troubleshooting section documented"
         ],
         "validation": {
-          "passed": false,
-          "failed_checks": [
-            "Schema & Repository Governance: name_consistency"
-          ]
+          "passed": true,
+          "failed_checks": []
         },
-        "verdict": "reject",
-        "rationale": "failed tier 1 (hard): Schema & Repository Governance: name_consistency"
+        "verdict": "deferred",
+        "rationale": "passed cheap gates; live evaluation not yet run"
       }
     },
     "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-designmd-cli-scale": {
       "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-designmd-cli-scale",
       "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-b98a898c-43d0-482a-8a88-6c8bb5c05011-scratchpad-skillrepos-designmd-cli-scale",
       "source": {
-        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/b98a898c-43d0-482a-8a88-6c8bb5c05011/scratchpad/skillrepos/designmd-cli-scale",
+        "url": "C:/Users/tswid/AppData/Local/Temp/claude/C--Users-tswid-PersonalPrograms-Trellis/50cd7a55-f3b9-4b56-aab3-e61463526ada/scratchpad/skillrepos/agent-dx-cli-scale",
         "origin": "manual"
       },
       "discovered_at": "2026-09-02T00:41:27.357570+00:00",
       "content_hash": null,
-      "state": "rejected",
+      "state": "fit_evaluated",
       "history": [
         {
           "at": "2026-09-02T00:41:27.357613+00:00",
@@ -1205,6 +1254,18 @@
           "actor": "pipeline2",
           "event": "fit_evaluated",
           "note": "reject: failed tier 1 (hard): Schema & Repository Governance: name_consistency"
+        },
+        {
+          "at": "2026-09-02T00:49:00.473598+00:00",
+          "actor": "pipeline2",
+          "event": "fit_reset",
+          "note": "cleared stale fit from pre-fetch_skill-fix run; re-evaluating"
+        },
+        {
+          "at": "2026-09-02T02:30:03.291274+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "deferred: passed cheap gates; live evaluation not yet run"
         }
       ],
       "security": {
@@ -1399,7 +1460,7 @@
         ]
       },
       "fit": {
-        "evaluated_at": "2026-09-02T00:48:56.450977+00:00",
+        "evaluated_at": "2026-09-02T02:29:59.717527+00:00",
         "target": "general@day-to-day",
         "scan_flags": [
           "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
@@ -1423,26 +1484,3648 @@
           "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Instructions'",
           "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Examples'",
           "Schema & Repository Governance/author_missing: Author not specified in metadata",
-          "QUALITY score 81.8/100 (grade B)",
+          "QUALITY score 84.2/100 (grade B)",
           "QUALITY: No examples provided",
           "QUALITY: SKILL_SPEC recommended field missing: 'version'",
           "QUALITY: SKILL_SPEC recommended field missing: 'metadata.author'",
           "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
           "QUALITY: Description uses first/second person",
           "QUALITY: No '## Purpose' section",
-          "QUALITY: Skill name very short: 'src'",
           "QUALITY: No prerequisites/requirements documented",
           "QUALITY: No limitations documented",
           "QUALITY: No troubleshooting section documented"
         ],
         "validation": {
-          "passed": false,
-          "failed_checks": [
-            "Schema & Repository Governance: name_consistency"
-          ]
+          "passed": true,
+          "failed_checks": []
+        },
+        "verdict": "deferred",
+        "rationale": "passed cheap gates; live evaluation not yet run"
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-archify": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-archify",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-archify",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\archify",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:35:58.623420+00:00",
+      "content_hash": "1870894259a750ca1e3c141ac3e93225e0408bb8e85b4e71a9b3c3d5d01c98d4",
+      "state": "discovered",
+      "history": [
+        {
+          "at": "2026-09-02T02:35:58.623443+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T02:38:15.815091+00:00",
+          "actor": "pipeline1",
+          "event": "scan_failed",
+          "note": "WARNING [skillspector.constants] Model 'deepseek/deepseek-v4-flash' (slot: default) not found in model_registry.yaml. Using fallback context length (128000). Token budgeting may be inaccurate \u2014 add the model to the registry or verify the model ID.\nWARNING [skillspector.constants] Model 'deepseek/deepseek-v4-flash' (slot: mcp_least_privilege) not found in model_registry.yaml. Using fallback context length (128000). Token budgeting may be inaccurate \u2014 add the model to the registry or verify the mo"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T02:38:15.815056+00:00",
+        "scanner_version": "",
+        "scan_mode": "static",
+        "score": 0,
+        "severity": "LOW",
+        "recommendation": "SAFE",
+        "has_executable_scripts": false,
+        "findings": [],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": "WARNING [skillspector.constants] Model 'deepseek/deepseek-v4-flash' (slot: default) not found in model_registry.yaml. Using fallback context length (128000). Token budgeting may be inaccurate \u2014 add the model to the registry or verify the model ID.\nWARNING [skillspector.constants] Model 'deepseek/deepseek-v4-flash' (slot: mcp_least_privilege) not found in model_registry.yaml. Using fallback context length (128000). Token budgeting may be inaccurate \u2014 add the model to the registry or verify the mo",
+        "llm_model": null,
+        "llm_provider": null,
+        "llm_seed": null,
+        "llm_temperature": null,
+        "llm_requested": false,
+        "llm_ran": false,
+        "llm_attempts": 0,
+        "llm_last_error": null,
+        "llm_attempt_log": [],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": null,
+        "coverage_percent": null,
+        "fully_inspected_files": null,
+        "partially_inspected_files": null,
+        "entirely_uninspected_files": null,
+        "degraded_analyzers": [],
+        "ledger_exception_reasons": []
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-canvas-generative": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-canvas-generative",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-canvas-generative",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\canvas-generative",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:36:11.113386+00:00",
+      "content_hash": "b454c9b1450f8e6164b93e2b8dc46068315d59a361802817eccac42ea3c3b72a",
+      "state": "fit_evaluated",
+      "history": [
+        {
+          "at": "2026-09-02T02:36:11.113414+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T02:38:46.928776+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "CAUTION score=0 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T12:16:17.774972+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "deferred: passed cheap gates; live evaluation not yet run"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T02:38:46.928734+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static+llm",
+        "score": 0,
+        "severity": "LOW",
+        "recommendation": "CAUTION",
+        "has_executable_scripts": false,
+        "findings": [],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": "deepseek/deepseek-v4-flash",
+        "llm_provider": "openai",
+        "llm_seed": 42,
+        "llm_temperature": 0.0,
+        "llm_requested": true,
+        "llm_ran": true,
+        "llm_attempts": 1,
+        "llm_last_error": null,
+        "llm_attempt_log": [
+          {
+            "at": "2026-09-02T02:38:46.928659+00:00",
+            "error": null
+          }
+        ],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 100.0,
+        "fully_inspected_files": 3,
+        "partially_inspected_files": 0,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [],
+        "ledger_exception_reasons": [
+          "reference_unresolved"
+        ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T12:16:14.631671+00:00",
+        "target": "general@day-to-day",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
+        ],
+        "relevance": {
+          "score": 0.5,
+          "matched_needs": [
+            "design-and-frontend",
+            "output-and-productivity"
+          ],
+          "method": "keyword"
+        },
+        "redundancy": {
+          "max_similarity": 0.0,
+          "closest_existing": null,
+          "verdict": "partial_overlap",
+          "note": "similarity unavailable: No provider is configured (SKILL_EVAL_EMBEDDING_PROVIDER unset and no credential found). Set one of: NVIDIA_API_KEY for NVIDIA Build (build.nvidia.com) or OPENAI_API_KEY (auto-"
+        },
+        "provenance_flags": [
+          "Schema & Repository Governance/folder_hierarchy: Skill not in standard location (skills/ or team-skills/)",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Instructions'",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Examples'",
+          "Schema & Repository Governance/author_missing: Author not specified in metadata",
+          "QUALITY score 84.8/100 (grade B)",
+          "QUALITY: SKILL_SPEC recommended field missing: 'version'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.author'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
+          "QUALITY: Description doesn't mention WHEN to use this skill",
+          "QUALITY: No '## Purpose' section",
+          "QUALITY: No mention of error handling or validation",
+          "QUALITY: No prerequisites/requirements documented",
+          "QUALITY: No limitations documented",
+          "QUALITY: No troubleshooting section documented"
+        ],
+        "validation": {
+          "passed": true,
+          "failed_checks": []
+        },
+        "verdict": "deferred",
+        "rationale": "passed cheap gates; live evaluation not yet run"
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-cast": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-cast",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-cast",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\cast",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:36:11.686468+00:00",
+      "content_hash": "9c3f61a2fdddf707765cec25a2fecc1beeb2ed26ad0303889fceca56a54ae242",
+      "state": "quarantined",
+      "history": [
+        {
+          "at": "2026-09-02T02:36:11.686503+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T02:40:04.537528+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "DO_NOT_INSTALL score=100 mode=static+llm"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T02:40:04.537499+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static+llm",
+        "score": 100,
+        "severity": "CRITICAL",
+        "recommendation": "DO_NOT_INSTALL",
+        "has_executable_scripts": false,
+        "findings": [
+          {
+            "rule_id": "P2",
+            "severity": "HIGH",
+            "category": "Prompt Injection",
+            "confidence": 0.7,
+            "file": "SKILL.md",
+            "line": 44,
+            "message": "<!-- genjutsu:shared:preview:start -->\r\n## Showing Your Work - The Preview Gate\r\n\r\nSome gates in this pipeline exist so the user can *look* at something before approving it: an interaction thesis, a s"
+          },
+          {
+            "rule_id": "AS1",
+            "severity": "HIGH",
+            "category": "Agent Snooping",
+            "confidence": 0.85,
+            "file": "SKILL.md",
+            "line": 78,
+            "message": "find /sessions -maxdepth 6 -type d -path '*/.claude/"
+          },
+          {
+            "rule_id": "P2",
+            "severity": "HIGH",
+            "category": "Prompt Injection",
+            "confidence": 0.7,
+            "file": "SKILL.md",
+            "line": 129,
+            "message": "<!-- genjutsu:shared:scan:start -->\r\n```bash\r\n# 1. Web (existing)\r\ncat package.json 2>/dev/null | grep -E '\"(gsap|framer-motion|three|@react-three/fiber|@react-three/drei|animejs|popmotion|lenis|locom"
+          },
+          {
+            "rule_id": "P2",
+            "severity": "HIGH",
+            "category": "Prompt Injection",
+            "confidence": 0.7,
+            "file": "SKILL.md",
+            "line": 241,
+            "message": "<!-- genjutsu:shared:skill-base:start -->\r\n```bash\r\n# Environment detection, most specific first:\r\n# - claude.ai: skills are uploaded individually to /mnt/skills/user/<name>/\r\n# - Claude Code: ${CLAUD"
+          },
+          {
+            "rule_id": "AS1",
+            "severity": "HIGH",
+            "category": "Agent Snooping",
+            "confidence": 0.85,
+            "file": "SKILL.md",
+            "line": 266,
+            "message": "find \"$probe_dir/.claude/"
+          },
+          {
+            "rule_id": "AS1",
+            "severity": "HIGH",
+            "category": "Agent Snooping",
+            "confidence": 0.85,
+            "file": "SKILL.md",
+            "line": 281,
+            "message": "find /sessions -maxdepth 8 -type d -path '*/.claude/"
+          },
+          {
+            "rule_id": "AS1",
+            "severity": "HIGH",
+            "category": "Agent Snooping",
+            "confidence": 0.85,
+            "file": "SKILL.md",
+            "line": 301,
+            "message": "find ~/.claude/"
+          },
+          {
+            "rule_id": "P2",
+            "severity": "HIGH",
+            "category": "Prompt Injection",
+            "confidence": 0.7,
+            "file": "SKILL.md",
+            "line": 342,
+            "message": "<!-- genjutsu:shared:load:start -->\r\n**Context layers** (load when applicable):\r\n\r\n| Detected | Load |\r\n|---|---|\r\n| Mobile context (web mobile OR native iOS / Android) | `$SKILL_BASE/mobile-principle"
+          },
+          {
+            "rule_id": "SQP-1",
+            "severity": "MEDIUM",
+            "confidence": 0.85,
+            "file": "SKILL.md",
+            "line": 2,
+            "message": "The skill name is 'cast', which is a common English word likely used as the primary trigger phrase. Without any explicit list of trigger phrases, negative examples, or exclusion conditions, this broad trigger could cause unintended invocations (e.g., if a user says 'cast' in another context). The description adds 'genjutsu' but the name alone is overly broad."
+          },
+          {
+            "rule_id": "EA2",
+            "severity": "MEDIUM",
+            "category": "Excessive Agency",
+            "confidence": 0.75,
+            "file": "SKILL.md",
+            "line": 35,
+            "message": "without asking"
+          },
+          {
+            "rule_id": "EA2",
+            "severity": "MEDIUM",
+            "category": "Excessive Agency",
+            "confidence": 0.75,
+            "file": "SKILL.md",
+            "line": 117,
+            "message": "without asking"
+          },
+          {
+            "rule_id": "AS3",
+            "severity": "MEDIUM",
+            "category": "Agent Snooping",
+            "confidence": 0.85,
+            "file": "SKILL.md",
+            "line": 78,
+            "message": "find /sessions -maxdepth 6 -type d -path '*/.claude/skills"
+          },
+          {
+            "rule_id": "AS3",
+            "severity": "MEDIUM",
+            "category": "Agent Snooping",
+            "confidence": 0.85,
+            "file": "SKILL.md",
+            "line": 266,
+            "message": "find \"$probe_dir/.claude/skills"
+          },
+          {
+            "rule_id": "AS3",
+            "severity": "MEDIUM",
+            "category": "Agent Snooping",
+            "confidence": 0.85,
+            "file": "SKILL.md",
+            "line": 281,
+            "message": "find /sessions -maxdepth 8 -type d -path '*/.claude/skills"
+          }
+        ],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": "deepseek/deepseek-v4-flash",
+        "llm_provider": "openai",
+        "llm_seed": 42,
+        "llm_temperature": 0.0,
+        "llm_requested": true,
+        "llm_ran": true,
+        "llm_attempts": 1,
+        "llm_last_error": null,
+        "llm_attempt_log": [
+          {
+            "at": "2026-09-02T02:40:04.537443+00:00",
+            "error": null
+          }
+        ],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 50.0,
+        "fully_inspected_files": 1,
+        "partially_inspected_files": 1,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [
+          "static_patterns_tool_misuse"
+        ],
+        "ledger_exception_reasons": [
+          "reference_unresolved",
+          "static_parse_limit"
+        ]
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-compose-graphics": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-compose-graphics",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-compose-graphics",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\compose-graphics",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:36:12.250700+00:00",
+      "content_hash": "bf7a497b0e6ad0cd2dc8466b46928d1dce6e99d7b5af7c0b58c602c0b30f3698",
+      "state": "fit_evaluated",
+      "history": [
+        {
+          "at": "2026-09-02T02:36:12.250725+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T02:41:17.795847+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "CAUTION score=25 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T12:16:20.582192+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "deferred: passed cheap gates; live evaluation not yet run"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T02:41:17.795819+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static+llm",
+        "score": 25,
+        "severity": "MEDIUM",
+        "recommendation": "CAUTION",
+        "has_executable_scripts": false,
+        "findings": [
+          {
+            "rule_id": "AE1",
+            "severity": "HIGH",
+            "category": "analysis-evasion",
+            "confidence": 1.0,
+            "file": "SKILL.md",
+            "line": 488,
+            "message": "references/m3-expressive-deep.md (partial)"
+          }
+        ],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": "deepseek/deepseek-v4-flash",
+        "llm_provider": "openai",
+        "llm_seed": 42,
+        "llm_temperature": 0.0,
+        "llm_requested": true,
+        "llm_ran": true,
+        "llm_attempts": 1,
+        "llm_last_error": null,
+        "llm_attempt_log": [
+          {
+            "at": "2026-09-02T02:41:17.795770+00:00",
+            "error": null
+          }
+        ],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 80.0,
+        "fully_inspected_files": 4,
+        "partially_inspected_files": 1,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [
+          "static_patterns_tool_misuse"
+        ],
+        "ledger_exception_reasons": [
+          "reference_unresolved",
+          "static_parse_limit"
+        ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T12:16:18.137127+00:00",
+        "target": "general@day-to-day",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved', 'static_parse_limit'])"
+        ],
+        "relevance": {
+          "score": 0.75,
+          "matched_needs": [
+            "design-and-frontend",
+            "cli-and-agent-tooling",
+            "output-and-productivity"
+          ],
+          "method": "keyword"
+        },
+        "redundancy": {
+          "max_similarity": 0.0,
+          "closest_existing": null,
+          "verdict": "partial_overlap",
+          "note": "similarity unavailable: No provider is configured (SKILL_EVAL_EMBEDDING_PROVIDER unset and no credential found). Set one of: NVIDIA_API_KEY for NVIDIA Build (build.nvidia.com) or OPENAI_API_KEY (auto-"
+        },
+        "provenance_flags": [
+          "Schema & Repository Governance/folder_hierarchy: Skill not in standard location (skills/ or team-skills/)",
+          "Schema & Repository Governance/line_count: SKILL.md has 503 lines (limit: 500)",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Instructions'",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Examples'",
+          "Schema & Repository Governance/author_missing: Author not specified in metadata",
+          "QUALITY score 83.2/100 (grade B)",
+          "QUALITY: SKILL_SPEC recommended field missing: 'version'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.author'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
+          "QUALITY: Description doesn't mention WHEN to use this skill",
+          "QUALITY: No '## Purpose' section",
+          "QUALITY: No mention of error handling or validation",
+          "QUALITY: No prerequisites/requirements documented",
+          "QUALITY: No limitations documented",
+          "QUALITY: No troubleshooting section documented",
+          "QUALITY: High line repetition detected"
+        ],
+        "validation": {
+          "passed": true,
+          "failed_checks": []
+        },
+        "verdict": "deferred",
+        "rationale": "passed cheap gates; live evaluation not yet run"
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-compose-motion": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-compose-motion",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-compose-motion",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\compose-motion",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:36:12.953573+00:00",
+      "content_hash": "993ae7c4287b391c74cf1cfda8a5f63179f21ec4a0f13c0f37896654f873585c",
+      "state": "fit_evaluated",
+      "history": [
+        {
+          "at": "2026-09-02T02:36:12.953608+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T02:41:56.836784+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "CAUTION score=37 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T12:16:23.386905+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "deferred: passed cheap gates; live evaluation not yet run"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T02:41:56.836765+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static+llm",
+        "score": 37,
+        "severity": "MEDIUM",
+        "recommendation": "CAUTION",
+        "has_executable_scripts": false,
+        "findings": [
+          {
+            "rule_id": "AE1",
+            "severity": "HIGH",
+            "category": "analysis-evasion",
+            "confidence": 1.0,
+            "file": "SKILL.md",
+            "line": 174,
+            "message": "references/shared-transitions.md (partial)"
+          },
+          {
+            "rule_id": "AE1",
+            "severity": "HIGH",
+            "category": "analysis-evasion",
+            "confidence": 1.0,
+            "file": "SKILL.md",
+            "line": 342,
+            "message": "references/shared-transitions.md (partial)"
+          }
+        ],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": "deepseek/deepseek-v4-flash",
+        "llm_provider": "openai",
+        "llm_seed": 42,
+        "llm_temperature": 0.0,
+        "llm_requested": true,
+        "llm_ran": true,
+        "llm_attempts": 1,
+        "llm_last_error": null,
+        "llm_attempt_log": [
+          {
+            "at": "2026-09-02T02:41:56.836725+00:00",
+            "error": null
+          }
+        ],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 60.0,
+        "fully_inspected_files": 3,
+        "partially_inspected_files": 2,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [
+          "static_patterns_tool_misuse"
+        ],
+        "ledger_exception_reasons": [
+          "reference_unresolved",
+          "static_parse_limit"
+        ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T12:16:20.954402+00:00",
+        "target": "general@day-to-day",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved', 'static_parse_limit'])"
+        ],
+        "relevance": {
+          "score": 0.75,
+          "matched_needs": [
+            "design-and-frontend",
+            "cli-and-agent-tooling",
+            "output-and-productivity"
+          ],
+          "method": "keyword"
+        },
+        "redundancy": {
+          "max_similarity": 0.0,
+          "closest_existing": null,
+          "verdict": "partial_overlap",
+          "note": "similarity unavailable: No provider is configured (SKILL_EVAL_EMBEDDING_PROVIDER unset and no credential found). Set one of: NVIDIA_API_KEY for NVIDIA Build (build.nvidia.com) or OPENAI_API_KEY (auto-"
+        },
+        "provenance_flags": [
+          "Schema & Repository Governance/folder_hierarchy: Skill not in standard location (skills/ or team-skills/)",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Instructions'",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Examples'",
+          "Schema & Repository Governance/author_missing: Author not specified in metadata",
+          "QUALITY score 83.2/100 (grade B)",
+          "QUALITY: SKILL_SPEC recommended field missing: 'version'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.author'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
+          "QUALITY: Description doesn't mention WHEN to use this skill",
+          "QUALITY: No '## Purpose' section",
+          "QUALITY: No mention of error handling or validation",
+          "QUALITY: No prerequisites/requirements documented",
+          "QUALITY: No limitations documented",
+          "QUALITY: No troubleshooting section documented",
+          "QUALITY: High line repetition detected"
+        ],
+        "validation": {
+          "passed": true,
+          "failed_checks": []
+        },
+        "verdict": "deferred",
+        "rationale": "passed cheap gates; live evaluation not yet run"
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-compose-multiplatform": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-compose-multiplatform",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-compose-multiplatform",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\compose-multiplatform",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:36:13.634354+00:00",
+      "content_hash": "0e36e2a46b822031a1eb666d3d376d0ce087f12b3376c9df22538726a04b3207",
+      "state": "fit_evaluated",
+      "history": [
+        {
+          "at": "2026-09-02T02:36:13.634383+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T02:42:37.758875+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "CAUTION score=0 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T12:16:26.187817+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "deferred: passed cheap gates; live evaluation not yet run"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T02:42:37.758854+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static+llm",
+        "score": 0,
+        "severity": "LOW",
+        "recommendation": "CAUTION",
+        "has_executable_scripts": false,
+        "findings": [],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": "deepseek/deepseek-v4-flash",
+        "llm_provider": "openai",
+        "llm_seed": 42,
+        "llm_temperature": 0.0,
+        "llm_requested": true,
+        "llm_ran": true,
+        "llm_attempts": 1,
+        "llm_last_error": null,
+        "llm_attempt_log": [
+          {
+            "at": "2026-09-02T02:42:37.758807+00:00",
+            "error": null
+          }
+        ],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 75.0,
+        "fully_inspected_files": 3,
+        "partially_inspected_files": 1,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [
+          "static_patterns_tool_misuse"
+        ],
+        "ledger_exception_reasons": [
+          "reference_unresolved",
+          "static_parse_limit"
+        ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T12:16:23.774953+00:00",
+        "target": "general@day-to-day",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved', 'static_parse_limit'])"
+        ],
+        "relevance": {
+          "score": 0.25,
+          "matched_needs": [
+            "design-and-frontend"
+          ],
+          "method": "keyword"
+        },
+        "redundancy": {
+          "max_similarity": 0.0,
+          "closest_existing": null,
+          "verdict": "partial_overlap",
+          "note": "similarity unavailable: No provider is configured (SKILL_EVAL_EMBEDDING_PROVIDER unset and no credential found). Set one of: NVIDIA_API_KEY for NVIDIA Build (build.nvidia.com) or OPENAI_API_KEY (auto-"
+        },
+        "provenance_flags": [
+          "Schema & Repository Governance/folder_hierarchy: Skill not in standard location (skills/ or team-skills/)",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Instructions'",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Examples'",
+          "Schema & Repository Governance/author_missing: Author not specified in metadata",
+          "QUALITY score 87.2/100 (grade B)",
+          "QUALITY: SKILL_SPEC recommended field missing: 'version'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.author'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
+          "QUALITY: Description doesn't mention WHEN to use this skill",
+          "QUALITY: No '## Purpose' section",
+          "QUALITY: No prerequisites/requirements documented",
+          "QUALITY: No limitations documented",
+          "QUALITY: No troubleshooting section documented"
+        ],
+        "validation": {
+          "passed": true,
+          "failed_checks": []
+        },
+        "verdict": "deferred",
+        "rationale": "passed cheap gates; live evaluation not yet run"
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-css-native": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-css-native",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-css-native",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\css-native",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:36:14.239749+00:00",
+      "content_hash": "25f45ee59b1096a4f57cde5f0fe0824ed9ced7acd9be44a73bb9f5fc4c27c122",
+      "state": "fit_evaluated",
+      "history": [
+        {
+          "at": "2026-09-02T02:36:14.239774+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T02:43:11.403763+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "CAUTION score=0 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T12:16:28.881367+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "deferred: passed cheap gates; live evaluation not yet run"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T02:43:11.403739+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static+llm",
+        "score": 0,
+        "severity": "LOW",
+        "recommendation": "CAUTION",
+        "has_executable_scripts": false,
+        "findings": [],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": "deepseek/deepseek-v4-flash",
+        "llm_provider": "openai",
+        "llm_seed": 42,
+        "llm_temperature": 0.0,
+        "llm_requested": true,
+        "llm_ran": true,
+        "llm_attempts": 1,
+        "llm_last_error": null,
+        "llm_attempt_log": [
+          {
+            "at": "2026-09-02T02:43:11.403693+00:00",
+            "error": null
+          }
+        ],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 100.0,
+        "fully_inspected_files": 3,
+        "partially_inspected_files": 0,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [],
+        "ledger_exception_reasons": [
+          "reference_unresolved"
+        ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T12:16:26.503817+00:00",
+        "target": "general@day-to-day",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
+        ],
+        "relevance": {
+          "score": 0.25,
+          "matched_needs": [
+            "design-and-frontend"
+          ],
+          "method": "keyword"
+        },
+        "redundancy": {
+          "max_similarity": 0.0,
+          "closest_existing": null,
+          "verdict": "partial_overlap",
+          "note": "similarity unavailable: No provider is configured (SKILL_EVAL_EMBEDDING_PROVIDER unset and no credential found). Set one of: NVIDIA_API_KEY for NVIDIA Build (build.nvidia.com) or OPENAI_API_KEY (auto-"
+        },
+        "provenance_flags": [
+          "Schema & Repository Governance/folder_hierarchy: Skill not in standard location (skills/ or team-skills/)",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Instructions'",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Examples'",
+          "Schema & Repository Governance/author_missing: Author not specified in metadata",
+          "QUALITY score 83.2/100 (grade B)",
+          "QUALITY: SKILL_SPEC recommended field missing: 'version'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.author'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
+          "QUALITY: Description doesn't mention WHEN to use this skill",
+          "QUALITY: No '## Purpose' section",
+          "QUALITY: No mention of error handling or validation",
+          "QUALITY: No prerequisites/requirements documented",
+          "QUALITY: No limitations documented",
+          "QUALITY: No troubleshooting section documented",
+          "QUALITY: High line repetition detected"
+        ],
+        "validation": {
+          "passed": true,
+          "failed_checks": []
+        },
+        "verdict": "deferred",
+        "rationale": "passed cheap gates; live evaluation not yet run"
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-design-audit": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-design-audit",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-design-audit",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\design-audit",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:36:14.801911+00:00",
+      "content_hash": "582245a393ac788142e32bf77ba2cc22c2665702fef225ebbaa0fb46bfc6de50",
+      "state": "fit_evaluated",
+      "history": [
+        {
+          "at": "2026-09-02T02:36:14.801936+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T02:47:23.706316+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "CAUTION score=12 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T12:16:32.303163+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "deferred: passed cheap gates; live evaluation not yet run"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T02:47:23.706284+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static+llm",
+        "score": 12,
+        "severity": "LOW",
+        "recommendation": "CAUTION",
+        "has_executable_scripts": false,
+        "findings": [
+          {
+            "rule_id": "RP1",
+            "severity": "MEDIUM",
+            "category": "MCP Rug Pull",
+            "confidence": 0.7,
+            "file": "SKILL.md",
+            "line": 81,
+            "message": "The `npx pa11y` command executes an arbitrary npm package from the registry without pinning a specific version. An attacker could publish a malicious version of a package with a similar name or compromise the existing package. If the pipeline executes this command, it could lead to remote code execution or data exfiltration. This is particularly dangerous because the skill is designed for auditing, so a developer might run it against sensitive codebases or applications. While the immediate risk is mitigated if only the file content is analyzed (not executed), the structure of the file suggests it's meant to be run in an active pipeline, making this a real supply chain security risk. The intent appears negligent (lack of security awareness) rather than malicious, as `npx` is commonly misused this way in development tooling."
+          },
+          {
+            "rule_id": "RP1",
+            "severity": "MEDIUM",
+            "category": "MCP Rug Pull",
+            "confidence": 0.7,
+            "file": "SKILL.md",
+            "line": 133,
+            "message": "Same pattern as the other findings. `npx vite-bundle-visualizer` runs an arbitrary npm package without version pinning. While likely less targeted than the more popular source-map-explorer, it still represents a supply chain attack vector. The tool analyzes bundle contents, so a malicious version could report false data to hide injected payloads or exfiltrate source code structure. The intent is negligent; the skill author is using a common anti-pattern in documentation."
+          },
+          {
+            "rule_id": "RP1",
+            "severity": "MEDIUM",
+            "category": "MCP Rug Pull",
+            "confidence": 0.7,
+            "file": "SKILL.md",
+            "line": 133,
+            "message": "Same pattern as the other findings. `npx vite-bundle-visualizer` runs an arbitrary npm package without version pinning. While likely less targeted than the more popular source-map-explorer, it still represents a supply chain attack vector. The tool analyzes bundle contents, so a malicious version could report false data to hide injected payloads or exfiltrate source code structure. The intent is negligent; the skill author is using a common anti-pattern in documentation."
+          }
+        ],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": "deepseek/deepseek-v4-flash",
+        "llm_provider": "openai",
+        "llm_seed": 42,
+        "llm_temperature": 0.0,
+        "llm_requested": true,
+        "llm_ran": true,
+        "llm_attempts": 1,
+        "llm_last_error": null,
+        "llm_attempt_log": [
+          {
+            "at": "2026-09-02T02:47:23.706217+00:00",
+            "error": null
+          }
+        ],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 100.0,
+        "fully_inspected_files": 2,
+        "partially_inspected_files": 0,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [],
+        "ledger_exception_reasons": [
+          "reference_unresolved"
+        ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T12:16:29.335887+00:00",
+        "target": "general@day-to-day",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
+        ],
+        "relevance": {
+          "score": 0.5,
+          "matched_needs": [
+            "design-and-frontend",
+            "cli-and-agent-tooling"
+          ],
+          "method": "keyword"
+        },
+        "redundancy": {
+          "max_similarity": 0.0,
+          "closest_existing": null,
+          "verdict": "partial_overlap",
+          "note": "similarity unavailable: No provider is configured (SKILL_EVAL_EMBEDDING_PROVIDER unset and no credential found). Set one of: NVIDIA_API_KEY for NVIDIA Build (build.nvidia.com) or OPENAI_API_KEY (auto-"
+        },
+        "provenance_flags": [
+          "Schema & Repository Governance/folder_hierarchy: Skill not in standard location (skills/ or team-skills/)",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Instructions'",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Examples'",
+          "Schema & Repository Governance/author_missing: Author not specified in metadata",
+          "QUALITY score 87.2/100 (grade B)",
+          "QUALITY: SKILL_SPEC recommended field missing: 'version'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.author'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
+          "QUALITY: Description doesn't mention WHEN to use this skill",
+          "QUALITY: No '## Purpose' section",
+          "QUALITY: No prerequisites/requirements documented",
+          "QUALITY: No limitations documented",
+          "QUALITY: No troubleshooting section documented"
+        ],
+        "validation": {
+          "passed": true,
+          "failed_checks": []
+        },
+        "verdict": "deferred",
+        "rationale": "passed cheap gates; live evaluation not yet run"
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-desktop-principles": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-desktop-principles",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-desktop-principles",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\desktop-principles",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:36:15.355328+00:00",
+      "content_hash": "156b380a8d8e69a899fd7d3eb984ca73059e33f3fd26f5b25386257548d1f816",
+      "state": "fit_evaluated",
+      "history": [
+        {
+          "at": "2026-09-02T02:36:15.355353+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T02:48:00.944185+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "CAUTION score=0 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T12:16:35.019943+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "deferred: passed cheap gates; live evaluation not yet run"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T02:48:00.944162+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static+llm",
+        "score": 0,
+        "severity": "LOW",
+        "recommendation": "CAUTION",
+        "has_executable_scripts": false,
+        "findings": [],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": "deepseek/deepseek-v4-flash",
+        "llm_provider": "openai",
+        "llm_seed": 42,
+        "llm_temperature": 0.0,
+        "llm_requested": true,
+        "llm_ran": true,
+        "llm_attempts": 1,
+        "llm_last_error": null,
+        "llm_attempt_log": [
+          {
+            "at": "2026-09-02T02:48:00.944115+00:00",
+            "error": null
+          }
+        ],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 100.0,
+        "fully_inspected_files": 4,
+        "partially_inspected_files": 0,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [],
+        "ledger_exception_reasons": [
+          "reference_unresolved"
+        ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T12:16:32.626537+00:00",
+        "target": "general@day-to-day",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
+        ],
+        "relevance": {
+          "score": 0.75,
+          "matched_needs": [
+            "design-and-frontend",
+            "cli-and-agent-tooling",
+            "output-and-productivity"
+          ],
+          "method": "keyword"
+        },
+        "redundancy": {
+          "max_similarity": 0.0,
+          "closest_existing": null,
+          "verdict": "partial_overlap",
+          "note": "similarity unavailable: No provider is configured (SKILL_EVAL_EMBEDDING_PROVIDER unset and no credential found). Set one of: NVIDIA_API_KEY for NVIDIA Build (build.nvidia.com) or OPENAI_API_KEY (auto-"
+        },
+        "provenance_flags": [
+          "Schema & Repository Governance/folder_hierarchy: Skill not in standard location (skills/ or team-skills/)",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Instructions'",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Examples'",
+          "Schema & Repository Governance/author_missing: Author not specified in metadata",
+          "QUALITY score 84.8/100 (grade B)",
+          "QUALITY: SKILL_SPEC recommended field missing: 'version'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.author'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
+          "QUALITY: Description doesn't mention WHEN to use this skill",
+          "QUALITY: No '## Purpose' section",
+          "QUALITY: No mention of error handling or validation",
+          "QUALITY: No prerequisites/requirements documented",
+          "QUALITY: No limitations documented",
+          "QUALITY: No troubleshooting section documented"
+        ],
+        "validation": {
+          "passed": true,
+          "failed_checks": []
+        },
+        "verdict": "deferred",
+        "rationale": "passed cheap gates; live evaluation not yet run"
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-framer-motion": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-framer-motion",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-framer-motion",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\framer-motion",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:36:15.948408+00:00",
+      "content_hash": "1aba73a8ce2738774fe8b7de589d0e3d58868ebf953fc85df22ab38e3d7eb9ca",
+      "state": "fit_evaluated",
+      "history": [
+        {
+          "at": "2026-09-02T02:36:15.948433+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T02:48:25.763921+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "CAUTION score=0 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T12:16:37.648077+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "deferred: passed cheap gates; live evaluation not yet run"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T02:48:25.763902+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static+llm",
+        "score": 0,
+        "severity": "LOW",
+        "recommendation": "CAUTION",
+        "has_executable_scripts": false,
+        "findings": [],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": "deepseek/deepseek-v4-flash",
+        "llm_provider": "openai",
+        "llm_seed": 42,
+        "llm_temperature": 0.0,
+        "llm_requested": true,
+        "llm_ran": true,
+        "llm_attempts": 1,
+        "llm_last_error": null,
+        "llm_attempt_log": [
+          {
+            "at": "2026-09-02T02:48:25.763863+00:00",
+            "error": null
+          }
+        ],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 100.0,
+        "fully_inspected_files": 3,
+        "partially_inspected_files": 0,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [],
+        "ledger_exception_reasons": [
+          "reference_unresolved"
+        ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T12:16:35.349700+00:00",
+        "target": "general@day-to-day",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
+        ],
+        "relevance": {
+          "score": 0.25,
+          "matched_needs": [
+            "design-and-frontend"
+          ],
+          "method": "keyword"
+        },
+        "redundancy": {
+          "max_similarity": 0.0,
+          "closest_existing": null,
+          "verdict": "partial_overlap",
+          "note": "similarity unavailable: No provider is configured (SKILL_EVAL_EMBEDDING_PROVIDER unset and no credential found). Set one of: NVIDIA_API_KEY for NVIDIA Build (build.nvidia.com) or OPENAI_API_KEY (auto-"
+        },
+        "provenance_flags": [
+          "Schema & Repository Governance/folder_hierarchy: Skill not in standard location (skills/ or team-skills/)",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Instructions'",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Examples'",
+          "Schema & Repository Governance/author_missing: Author not specified in metadata",
+          "QUALITY score 84.0/100 (grade B)",
+          "QUALITY: SKILL_SPEC recommended field missing: 'version'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.author'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
+          "QUALITY: Description doesn't mention WHEN to use this skill",
+          "QUALITY: No '## Purpose' section",
+          "QUALITY: No mention of error handling or validation",
+          "QUALITY: No prerequisites/requirements documented",
+          "QUALITY: No limitations documented",
+          "QUALITY: No troubleshooting section documented",
+          "QUALITY: Non-descriptive filename: api.md"
+        ],
+        "validation": {
+          "passed": true,
+          "failed_checks": []
+        },
+        "verdict": "deferred",
+        "rationale": "passed cheap gates; live evaluation not yet run"
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-gsap": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-gsap",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-gsap",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\gsap",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:36:16.622414+00:00",
+      "content_hash": "e74483868f6624c02f6f65eac440be68ca01a2eef0b36fc5d50bca8047eefe73",
+      "state": "fit_evaluated",
+      "history": [
+        {
+          "at": "2026-09-02T02:36:16.622438+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T02:49:04.807449+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "CAUTION score=0 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T12:16:41.253359+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "deferred: passed cheap gates; live evaluation not yet run"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T02:49:04.807421+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static+llm",
+        "score": 0,
+        "severity": "LOW",
+        "recommendation": "CAUTION",
+        "has_executable_scripts": false,
+        "findings": [],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": "deepseek/deepseek-v4-flash",
+        "llm_provider": "openai",
+        "llm_seed": 42,
+        "llm_temperature": 0.0,
+        "llm_requested": true,
+        "llm_ran": true,
+        "llm_attempts": 1,
+        "llm_last_error": null,
+        "llm_attempt_log": [
+          {
+            "at": "2026-09-02T02:49:04.807365+00:00",
+            "error": null
+          }
+        ],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 100.0,
+        "fully_inspected_files": 6,
+        "partially_inspected_files": 0,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [],
+        "ledger_exception_reasons": [
+          "reference_unresolved"
+        ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T12:16:38.048422+00:00",
+        "target": "general@day-to-day",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
+        ],
+        "relevance": {
+          "score": 0.25,
+          "matched_needs": [
+            "design-and-frontend"
+          ],
+          "method": "keyword"
+        },
+        "redundancy": {
+          "max_similarity": 0.0,
+          "closest_existing": null,
+          "verdict": "partial_overlap",
+          "note": "similarity unavailable: No provider is configured (SKILL_EVAL_EMBEDDING_PROVIDER unset and no credential found). Set one of: NVIDIA_API_KEY for NVIDIA Build (build.nvidia.com) or OPENAI_API_KEY (auto-"
+        },
+        "provenance_flags": [
+          "Schema & Repository Governance/folder_hierarchy: Skill not in standard location (skills/ or team-skills/)",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Instructions'",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Examples'",
+          "Schema & Repository Governance/author_missing: Author not specified in metadata",
+          "QUALITY score 82.2/100 (grade B)",
+          "QUALITY: SKILL_SPEC recommended field missing: 'version'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.author'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
+          "QUALITY: Description doesn't mention WHEN to use this skill",
+          "QUALITY: No '## Purpose' section",
+          "QUALITY: Skill name very short: 'gsap'",
+          "QUALITY: No mention of error handling or validation",
+          "QUALITY: No prerequisites/requirements documented",
+          "QUALITY: No limitations documented",
+          "QUALITY: No troubleshooting section documented"
+        ],
+        "validation": {
+          "passed": true,
+          "failed_checks": []
+        },
+        "verdict": "deferred",
+        "rationale": "passed cheap gates; live evaluation not yet run"
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-mobile-principles": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-mobile-principles",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-mobile-principles",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\mobile-principles",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:36:17.292235+00:00",
+      "content_hash": "e421574f810d9530134dba81e7472b79388558b215f36b06ea226768182f454e",
+      "state": "fit_evaluated",
+      "history": [
+        {
+          "at": "2026-09-02T02:36:17.292258+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T02:50:46.834893+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "CAUTION score=6 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T12:16:43.951313+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "deferred: passed cheap gates; live evaluation not yet run"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T02:50:46.834873+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static+llm",
+        "score": 6,
+        "severity": "LOW",
+        "recommendation": "CAUTION",
+        "has_executable_scripts": false,
+        "findings": [
+          {
+            "rule_id": "OH3",
+            "severity": "MEDIUM",
+            "category": "Output Handling",
+            "confidence": 0.6,
+            "file": "references/accessibility-mobile.md",
+            "line": 163,
+            "message": "no truncation"
+          }
+        ],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": "deepseek/deepseek-v4-flash",
+        "llm_provider": "openai",
+        "llm_seed": 42,
+        "llm_temperature": 0.0,
+        "llm_requested": true,
+        "llm_ran": true,
+        "llm_attempts": 1,
+        "llm_last_error": null,
+        "llm_attempt_log": [
+          {
+            "at": "2026-09-02T02:50:46.834832+00:00",
+            "error": null
+          }
+        ],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 100.0,
+        "fully_inspected_files": 4,
+        "partially_inspected_files": 0,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [],
+        "ledger_exception_reasons": [
+          "reference_unresolved"
+        ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T12:16:41.594667+00:00",
+        "target": "general@day-to-day",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
+        ],
+        "relevance": {
+          "score": 0.5,
+          "matched_needs": [
+            "design-and-frontend",
+            "output-and-productivity"
+          ],
+          "method": "keyword"
+        },
+        "redundancy": {
+          "max_similarity": 0.0,
+          "closest_existing": null,
+          "verdict": "partial_overlap",
+          "note": "similarity unavailable: No provider is configured (SKILL_EVAL_EMBEDDING_PROVIDER unset and no credential found). Set one of: NVIDIA_API_KEY for NVIDIA Build (build.nvidia.com) or OPENAI_API_KEY (auto-"
+        },
+        "provenance_flags": [
+          "Schema & Repository Governance/folder_hierarchy: Skill not in standard location (skills/ or team-skills/)",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Instructions'",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Examples'",
+          "Schema & Repository Governance/author_missing: Author not specified in metadata",
+          "QUALITY score 85.8/100 (grade B)",
+          "QUALITY: SKILL_SPEC recommended field missing: 'version'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.author'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
+          "QUALITY: Description doesn't mention WHEN to use this skill",
+          "QUALITY: No '## Purpose' section",
+          "QUALITY: No prerequisites/requirements documented",
+          "QUALITY: No limitations documented",
+          "QUALITY: No troubleshooting section documented",
+          "QUALITY: High line repetition detected"
+        ],
+        "validation": {
+          "passed": true,
+          "failed_checks": []
+        },
+        "verdict": "deferred",
+        "rationale": "passed cheap gates; live evaluation not yet run"
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-motion-principles": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-motion-principles",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-motion-principles",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\motion-principles",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:36:17.891029+00:00",
+      "content_hash": "e9152650a95989e475c9dc50a82924ee16b47fdf94a08f3dcdcac1dabf9683f4",
+      "state": "fit_evaluated",
+      "history": [
+        {
+          "at": "2026-09-02T02:36:17.891068+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T02:51:20.464282+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "CAUTION score=0 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T12:16:46.695915+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "deferred: passed cheap gates; live evaluation not yet run"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T02:51:20.464249+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static+llm",
+        "score": 0,
+        "severity": "LOW",
+        "recommendation": "CAUTION",
+        "has_executable_scripts": false,
+        "findings": [],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": "deepseek/deepseek-v4-flash",
+        "llm_provider": "openai",
+        "llm_seed": 42,
+        "llm_temperature": 0.0,
+        "llm_requested": true,
+        "llm_ran": true,
+        "llm_attempts": 1,
+        "llm_last_error": null,
+        "llm_attempt_log": [
+          {
+            "at": "2026-09-02T02:51:20.464187+00:00",
+            "error": null
+          }
+        ],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 100.0,
+        "fully_inspected_files": 5,
+        "partially_inspected_files": 0,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [],
+        "ledger_exception_reasons": [
+          "reference_unresolved"
+        ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T12:16:44.302399+00:00",
+        "target": "general@day-to-day",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
+        ],
+        "relevance": {
+          "score": 0.5,
+          "matched_needs": [
+            "design-and-frontend",
+            "output-and-productivity"
+          ],
+          "method": "keyword"
+        },
+        "redundancy": {
+          "max_similarity": 0.0,
+          "closest_existing": null,
+          "verdict": "partial_overlap",
+          "note": "similarity unavailable: No provider is configured (SKILL_EVAL_EMBEDDING_PROVIDER unset and no credential found). Set one of: NVIDIA_API_KEY for NVIDIA Build (build.nvidia.com) or OPENAI_API_KEY (auto-"
+        },
+        "provenance_flags": [
+          "Schema & Repository Governance/folder_hierarchy: Skill not in standard location (skills/ or team-skills/)",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Instructions'",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Examples'",
+          "Schema & Repository Governance/author_missing: Author not specified in metadata",
+          "QUALITY score 87.2/100 (grade B)",
+          "QUALITY: SKILL_SPEC recommended field missing: 'version'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.author'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
+          "QUALITY: Description doesn't mention WHEN to use this skill",
+          "QUALITY: No '## Purpose' section",
+          "QUALITY: No prerequisites/requirements documented",
+          "QUALITY: No limitations documented",
+          "QUALITY: No troubleshooting section documented"
+        ],
+        "validation": {
+          "passed": true,
+          "failed_checks": []
+        },
+        "verdict": "deferred",
+        "rationale": "passed cheap gates; live evaluation not yet run"
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-paint": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-paint",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-paint",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\paint",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:36:18.531433+00:00",
+      "content_hash": "e61afa3ab9f11ef6410422e540b7aa26dfdc9935e3e8adcc88af3b7bc772226b",
+      "state": "quarantined",
+      "history": [
+        {
+          "at": "2026-09-02T02:36:18.531459+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T02:52:36.610208+00:00",
+          "actor": "pipeline1",
+          "event": "gate2_retry",
+          "note": "attempt 1 failed (reference_unresolved; runtime_limit; static_parse_limit); backing off 60s"
+        },
+        {
+          "at": "2026-09-02T02:55:23.075615+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "DO_NOT_INSTALL score=93 mode=static+llm llm_attempts=2"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T02:55:23.075589+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static+llm",
+        "score": 93,
+        "severity": "CRITICAL",
+        "recommendation": "DO_NOT_INSTALL",
+        "has_executable_scripts": false,
+        "findings": [
+          {
+            "rule_id": "P2",
+            "severity": "HIGH",
+            "category": "Prompt Injection",
+            "confidence": 0.7,
+            "file": "SKILL.md",
+            "line": 94,
+            "message": "<!-- genjutsu:shared:preview:start -->\r\n## Showing Your Work - The Preview Gate\r\n\r\nSome gates in this pipeline exist so the user can *look* at something before approving it: an interaction thesis, a s"
+          },
+          {
+            "rule_id": "AS1",
+            "severity": "HIGH",
+            "category": "Agent Snooping",
+            "confidence": 0.85,
+            "file": "SKILL.md",
+            "line": 128,
+            "message": "find /sessions -maxdepth 6 -type d -path '*/.claude/"
+          },
+          {
+            "rule_id": "P2",
+            "severity": "HIGH",
+            "category": "Prompt Injection",
+            "confidence": 0.7,
+            "file": "SKILL.md",
+            "line": 175,
+            "message": "<!-- genjutsu:shared:skill-base:start -->\r\n```bash\r\n# Environment detection, most specific first:\r\n# - claude.ai: skills are uploaded individually to /mnt/skills/user/<name>/\r\n# - Claude Code: ${CLAUD"
+          },
+          {
+            "rule_id": "AS1",
+            "severity": "HIGH",
+            "category": "Agent Snooping",
+            "confidence": 0.85,
+            "file": "SKILL.md",
+            "line": 200,
+            "message": "find \"$probe_dir/.claude/"
+          },
+          {
+            "rule_id": "AS1",
+            "severity": "HIGH",
+            "category": "Agent Snooping",
+            "confidence": 0.85,
+            "file": "SKILL.md",
+            "line": 215,
+            "message": "find /sessions -maxdepth 8 -type d -path '*/.claude/"
+          },
+          {
+            "rule_id": "AS1",
+            "severity": "HIGH",
+            "category": "Agent Snooping",
+            "confidence": 0.85,
+            "file": "SKILL.md",
+            "line": 235,
+            "message": "find ~/.claude/"
+          },
+          {
+            "rule_id": "P2",
+            "severity": "HIGH",
+            "category": "Prompt Injection",
+            "confidence": 0.7,
+            "file": "SKILL.md",
+            "line": 287,
+            "message": "<!-- genjutsu:shared:scan:start -->\r\n```bash\r\n# 1. Web (existing)\r\ncat package.json 2>/dev/null | grep -E '\"(gsap|framer-motion|three|@react-three/fiber|@react-three/drei|animejs|popmotion|lenis|locom"
+          },
+          {
+            "rule_id": "P2",
+            "severity": "HIGH",
+            "category": "Prompt Injection",
+            "confidence": 0.7,
+            "file": "SKILL.md",
+            "line": 474,
+            "message": "<!-- genjutsu:shared:load:start -->\r\n**Context layers** (load when applicable):\r\n\r\n| Detected | Load |\r\n|---|---|\r\n| Mobile context (web mobile OR native iOS / Android) | `$SKILL_BASE/mobile-principle"
+          },
+          {
+            "rule_id": "EA2",
+            "severity": "MEDIUM",
+            "category": "Excessive Agency",
+            "confidence": 0.75,
+            "file": "SKILL.md",
+            "line": 53,
+            "message": "without asking"
+          },
+          {
+            "rule_id": "EA2",
+            "severity": "MEDIUM",
+            "category": "Excessive Agency",
+            "confidence": 0.75,
+            "file": "SKILL.md",
+            "line": 167,
+            "message": "without asking"
+          },
+          {
+            "rule_id": "AS3",
+            "severity": "MEDIUM",
+            "category": "Agent Snooping",
+            "confidence": 0.85,
+            "file": "SKILL.md",
+            "line": 128,
+            "message": "find /sessions -maxdepth 6 -type d -path '*/.claude/skills"
+          },
+          {
+            "rule_id": "AS3",
+            "severity": "MEDIUM",
+            "category": "Agent Snooping",
+            "confidence": 0.85,
+            "file": "SKILL.md",
+            "line": 200,
+            "message": "find \"$probe_dir/.claude/skills"
+          },
+          {
+            "rule_id": "AS3",
+            "severity": "MEDIUM",
+            "category": "Agent Snooping",
+            "confidence": 0.85,
+            "file": "SKILL.md",
+            "line": 215,
+            "message": "find /sessions -maxdepth 8 -type d -path '*/.claude/skills"
+          }
+        ],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": "deepseek/deepseek-v4-flash",
+        "llm_provider": "openai",
+        "llm_seed": 42,
+        "llm_temperature": 0.0,
+        "llm_requested": true,
+        "llm_ran": true,
+        "llm_attempts": 2,
+        "llm_last_error": null,
+        "llm_attempt_log": [
+          {
+            "at": "2026-09-02T02:52:36.610159+00:00",
+            "error": "reference_unresolved; runtime_limit; static_parse_limit"
+          },
+          {
+            "at": "2026-09-02T02:55:23.075531+00:00",
+            "error": null
+          }
+        ],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 50.0,
+        "fully_inspected_files": 1,
+        "partially_inspected_files": 1,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [
+          "static_patterns_tool_misuse"
+        ],
+        "ledger_exception_reasons": [
+          "reference_unresolved",
+          "static_parse_limit"
+        ]
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-swiftui-graphics": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-swiftui-graphics",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-swiftui-graphics",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\swiftui-graphics",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:36:19.069508+00:00",
+      "content_hash": "02304027eb6c13091c11ef2eab927ab971d4b2ac55e5d4bdcb4141a4963d0df6",
+      "state": "fit_evaluated",
+      "history": [
+        {
+          "at": "2026-09-02T02:36:19.069532+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T02:56:00.009120+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "CAUTION score=0 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T12:16:49.356417+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "deferred: passed cheap gates; live evaluation not yet run"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T02:56:00.009092+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static+llm",
+        "score": 0,
+        "severity": "LOW",
+        "recommendation": "CAUTION",
+        "has_executable_scripts": false,
+        "findings": [],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": "deepseek/deepseek-v4-flash",
+        "llm_provider": "openai",
+        "llm_seed": 42,
+        "llm_temperature": 0.0,
+        "llm_requested": true,
+        "llm_ran": true,
+        "llm_attempts": 1,
+        "llm_last_error": null,
+        "llm_attempt_log": [
+          {
+            "at": "2026-09-02T02:56:00.009040+00:00",
+            "error": null
+          }
+        ],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 100.0,
+        "fully_inspected_files": 5,
+        "partially_inspected_files": 0,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [],
+        "ledger_exception_reasons": [
+          "reference_unresolved"
+        ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T12:16:47.026424+00:00",
+        "target": "general@day-to-day",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
+        ],
+        "relevance": {
+          "score": 0.75,
+          "matched_needs": [
+            "design-and-frontend",
+            "cli-and-agent-tooling",
+            "output-and-productivity"
+          ],
+          "method": "keyword"
+        },
+        "redundancy": {
+          "max_similarity": 0.0,
+          "closest_existing": null,
+          "verdict": "partial_overlap",
+          "note": "similarity unavailable: No provider is configured (SKILL_EVAL_EMBEDDING_PROVIDER unset and no credential found). Set one of: NVIDIA_API_KEY for NVIDIA Build (build.nvidia.com) or OPENAI_API_KEY (auto-"
+        },
+        "provenance_flags": [
+          "Schema & Repository Governance/folder_hierarchy: Skill not in standard location (skills/ or team-skills/)",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Instructions'",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Examples'",
+          "Schema & Repository Governance/author_missing: Author not specified in metadata",
+          "QUALITY score 83.2/100 (grade B)",
+          "QUALITY: SKILL_SPEC recommended field missing: 'version'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.author'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
+          "QUALITY: Description doesn't mention WHEN to use this skill",
+          "QUALITY: No '## Purpose' section",
+          "QUALITY: No mention of error handling or validation",
+          "QUALITY: No prerequisites/requirements documented",
+          "QUALITY: No limitations documented",
+          "QUALITY: No troubleshooting section documented",
+          "QUALITY: High line repetition detected"
+        ],
+        "validation": {
+          "passed": true,
+          "failed_checks": []
+        },
+        "verdict": "deferred",
+        "rationale": "passed cheap gates; live evaluation not yet run"
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-swiftui-motion": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-swiftui-motion",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-swiftui-motion",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\swiftui-motion",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:36:19.741248+00:00",
+      "content_hash": "980b3f4e368fbf33b5ef3f8ed4447b34b7fdb0b26fbcd7e971d83dbdf2da7661",
+      "state": "fit_evaluated",
+      "history": [
+        {
+          "at": "2026-09-02T02:36:19.741274+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T02:57:06.532480+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "CAUTION score=11 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T12:16:52.053948+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "deferred: passed cheap gates; live evaluation not yet run"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T02:57:06.532452+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static+llm",
+        "score": 11,
+        "severity": "LOW",
+        "recommendation": "CAUTION",
+        "has_executable_scripts": false,
+        "findings": [
+          {
+            "rule_id": "EA4",
+            "severity": "MEDIUM",
+            "category": "Excessive Agency",
+            "confidence": 0.75,
+            "file": "SKILL.md",
+            "line": 24,
+            "message": "Loop forever"
+          },
+          {
+            "rule_id": "EA4",
+            "severity": "MEDIUM",
+            "category": "Excessive Agency",
+            "confidence": 0.75,
+            "file": "references/phase-keyframe-deep.md",
+            "line": 16,
+            "message": "Loop forever"
+          }
+        ],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": "deepseek/deepseek-v4-flash",
+        "llm_provider": "openai",
+        "llm_seed": 42,
+        "llm_temperature": 0.0,
+        "llm_requested": true,
+        "llm_ran": true,
+        "llm_attempts": 1,
+        "llm_last_error": null,
+        "llm_attempt_log": [
+          {
+            "at": "2026-09-02T02:57:06.532395+00:00",
+            "error": null
+          }
+        ],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 100.0,
+        "fully_inspected_files": 5,
+        "partially_inspected_files": 0,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [],
+        "ledger_exception_reasons": [
+          "reference_unresolved"
+        ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T12:16:49.693303+00:00",
+        "target": "general@day-to-day",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
+        ],
+        "relevance": {
+          "score": 0.5,
+          "matched_needs": [
+            "design-and-frontend",
+            "output-and-productivity"
+          ],
+          "method": "keyword"
+        },
+        "redundancy": {
+          "max_similarity": 0.0,
+          "closest_existing": null,
+          "verdict": "partial_overlap",
+          "note": "similarity unavailable: No provider is configured (SKILL_EVAL_EMBEDDING_PROVIDER unset and no credential found). Set one of: NVIDIA_API_KEY for NVIDIA Build (build.nvidia.com) or OPENAI_API_KEY (auto-"
+        },
+        "provenance_flags": [
+          "Schema & Repository Governance/folder_hierarchy: Skill not in standard location (skills/ or team-skills/)",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Instructions'",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Examples'",
+          "Schema & Repository Governance/author_missing: Author not specified in metadata",
+          "QUALITY score 84.8/100 (grade B)",
+          "QUALITY: SKILL_SPEC recommended field missing: 'version'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.author'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
+          "QUALITY: Description doesn't mention WHEN to use this skill",
+          "QUALITY: No '## Purpose' section",
+          "QUALITY: No mention of error handling or validation",
+          "QUALITY: No prerequisites/requirements documented",
+          "QUALITY: No limitations documented",
+          "QUALITY: No troubleshooting section documented"
+        ],
+        "validation": {
+          "passed": true,
+          "failed_checks": []
+        },
+        "verdict": "deferred",
+        "rationale": "passed cheap gates; live evaluation not yet run"
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-animation": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-animation",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-animation",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\threejs-animation",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:36:20.358601+00:00",
+      "content_hash": "457900cae6babbe092e3226a2ac9ae5d09a84199c1b3d5050ed400d4f56a9d82",
+      "state": "fit_evaluated",
+      "history": [
+        {
+          "at": "2026-09-02T02:36:20.358631+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T02:57:45.633656+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "CAUTION score=7 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T12:16:54.626518+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "deferred: passed cheap gates; live evaluation not yet run"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T02:57:45.633629+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static+llm",
+        "score": 7,
+        "severity": "LOW",
+        "recommendation": "CAUTION",
+        "has_executable_scripts": false,
+        "findings": [
+          {
+            "rule_id": "EA4",
+            "severity": "MEDIUM",
+            "category": "Excessive Agency",
+            "confidence": 0.75,
+            "file": "SKILL.md",
+            "line": 179,
+            "message": "loop forever"
+          }
+        ],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": "deepseek/deepseek-v4-flash",
+        "llm_provider": "openai",
+        "llm_seed": 42,
+        "llm_temperature": 0.0,
+        "llm_requested": true,
+        "llm_ran": true,
+        "llm_attempts": 1,
+        "llm_last_error": null,
+        "llm_attempt_log": [
+          {
+            "at": "2026-09-02T02:57:45.633577+00:00",
+            "error": null
+          }
+        ],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 100.0,
+        "fully_inspected_files": 2,
+        "partially_inspected_files": 0,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [],
+        "ledger_exception_reasons": [
+          "reference_unresolved"
+        ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T12:16:52.377218+00:00",
+        "target": "general@day-to-day",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
+        ],
+        "relevance": {
+          "score": 0.5,
+          "matched_needs": [
+            "design-and-frontend",
+            "cli-and-agent-tooling"
+          ],
+          "method": "keyword"
+        },
+        "redundancy": {
+          "max_similarity": 0.0,
+          "closest_existing": null,
+          "verdict": "partial_overlap",
+          "note": "similarity unavailable: No provider is configured (SKILL_EVAL_EMBEDDING_PROVIDER unset and no credential found). Set one of: NVIDIA_API_KEY for NVIDIA Build (build.nvidia.com) or OPENAI_API_KEY (auto-"
+        },
+        "provenance_flags": [
+          "Schema & Repository Governance/folder_hierarchy: Skill not in standard location (skills/ or team-skills/)",
+          "Schema & Repository Governance/line_count: SKILL.md has 552 lines (limit: 500)",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Instructions'",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Examples'",
+          "Schema & Repository Governance/author_missing: Author not specified in metadata",
+          "QUALITY score 87.2/100 (grade B)",
+          "QUALITY: SKILL_SPEC recommended field missing: 'version'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.author'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
+          "QUALITY: No '## Purpose' section",
+          "QUALITY: No mention of error handling or validation",
+          "QUALITY: No prerequisites/requirements documented",
+          "QUALITY: No limitations documented",
+          "QUALITY: No troubleshooting section documented"
+        ],
+        "validation": {
+          "passed": true,
+          "failed_checks": []
+        },
+        "verdict": "deferred",
+        "rationale": "passed cheap gates; live evaluation not yet run"
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-fundamentals": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-fundamentals",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-fundamentals",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\threejs-fundamentals",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:36:20.912947+00:00",
+      "content_hash": "110044d18d358c235c3f938e7117ea0ccbcf72e0a8703567473e85c84b09ae99",
+      "state": "fit_evaluated",
+      "history": [
+        {
+          "at": "2026-09-02T02:36:20.912971+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T02:58:27.030079+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "CAUTION score=0 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T12:16:58.623523+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "deferred: passed cheap gates; live evaluation not yet run"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T02:58:27.030053+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static+llm",
+        "score": 0,
+        "severity": "LOW",
+        "recommendation": "CAUTION",
+        "has_executable_scripts": false,
+        "findings": [],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": "deepseek/deepseek-v4-flash",
+        "llm_provider": "openai",
+        "llm_seed": 42,
+        "llm_temperature": 0.0,
+        "llm_requested": true,
+        "llm_ran": true,
+        "llm_attempts": 1,
+        "llm_last_error": null,
+        "llm_attempt_log": [
+          {
+            "at": "2026-09-02T02:58:27.030001+00:00",
+            "error": null
+          }
+        ],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 100.0,
+        "fully_inspected_files": 2,
+        "partially_inspected_files": 0,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [],
+        "ledger_exception_reasons": [
+          "reference_unresolved"
+        ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T12:16:54.931837+00:00",
+        "target": "general@day-to-day",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
+        ],
+        "relevance": {
+          "score": 0.5,
+          "matched_needs": [
+            "design-and-frontend",
+            "cli-and-agent-tooling"
+          ],
+          "method": "keyword"
+        },
+        "redundancy": {
+          "max_similarity": 0.0,
+          "closest_existing": null,
+          "verdict": "partial_overlap",
+          "note": "similarity unavailable: No provider is configured (SKILL_EVAL_EMBEDDING_PROVIDER unset and no credential found). Set one of: NVIDIA_API_KEY for NVIDIA Build (build.nvidia.com) or OPENAI_API_KEY (auto-"
+        },
+        "provenance_flags": [
+          "Schema & Repository Governance/folder_hierarchy: Skill not in standard location (skills/ or team-skills/)",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Instructions'",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Examples'",
+          "Schema & Repository Governance/author_missing: Author not specified in metadata",
+          "QUALITY score 88.5/100 (grade B)",
+          "QUALITY: SKILL_SPEC recommended field missing: 'version'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.author'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
+          "QUALITY: Description very long (209 chars, recommend 50-150)",
+          "QUALITY: No '## Purpose' section",
+          "QUALITY: No prerequisites/requirements documented",
+          "QUALITY: No limitations documented",
+          "QUALITY: No troubleshooting section documented"
+        ],
+        "validation": {
+          "passed": true,
+          "failed_checks": []
+        },
+        "verdict": "deferred",
+        "rationale": "passed cheap gates; live evaluation not yet run"
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-geometry": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-geometry",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-geometry",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\threejs-geometry",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:36:21.443023+00:00",
+      "content_hash": "9312cc4d2a68f408c789ff326904bbc88840605c8f6985d9a7a0a92d64918953",
+      "state": "rejected",
+      "history": [
+        {
+          "at": "2026-09-02T02:36:21.443050+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T02:59:12.091448+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "CAUTION score=0 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T12:16:58.971917+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "reject: no overlap with declared needs (relevance 0.0)"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T02:59:12.091431+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static+llm",
+        "score": 0,
+        "severity": "LOW",
+        "recommendation": "CAUTION",
+        "has_executable_scripts": false,
+        "findings": [],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": "deepseek/deepseek-v4-flash",
+        "llm_provider": "openai",
+        "llm_seed": 42,
+        "llm_temperature": 0.0,
+        "llm_requested": true,
+        "llm_ran": true,
+        "llm_attempts": 1,
+        "llm_last_error": null,
+        "llm_attempt_log": [
+          {
+            "at": "2026-09-02T02:59:12.091395+00:00",
+            "error": null
+          }
+        ],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 100.0,
+        "fully_inspected_files": 2,
+        "partially_inspected_files": 0,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [],
+        "ledger_exception_reasons": [
+          "reference_unresolved"
+        ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T12:16:58.952466+00:00",
+        "target": "general@day-to-day",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
+        ],
+        "relevance": {
+          "score": 0.0,
+          "matched_needs": [],
+          "method": "keyword"
         },
         "verdict": "reject",
-        "rationale": "failed tier 1 (hard): Schema & Repository Governance: name_consistency"
+        "rationale": "no overlap with declared needs (relevance 0.0)"
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-interaction": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-interaction",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-interaction",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\threejs-interaction",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:36:22.000927+00:00",
+      "content_hash": "d7d3b36f25e7705c3c1e9cac52699d50e84242fab6f26e3de57575b1bef2d391",
+      "state": "fit_evaluated",
+      "history": [
+        {
+          "at": "2026-09-02T02:36:22.000952+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T02:59:39.762394+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "CAUTION score=0 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T12:17:01.566029+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "deferred: passed cheap gates; live evaluation not yet run"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T02:59:39.762367+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static+llm",
+        "score": 0,
+        "severity": "LOW",
+        "recommendation": "CAUTION",
+        "has_executable_scripts": false,
+        "findings": [],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": "deepseek/deepseek-v4-flash",
+        "llm_provider": "openai",
+        "llm_seed": 42,
+        "llm_temperature": 0.0,
+        "llm_requested": true,
+        "llm_ran": true,
+        "llm_attempts": 1,
+        "llm_last_error": null,
+        "llm_attempt_log": [
+          {
+            "at": "2026-09-02T02:59:39.762316+00:00",
+            "error": null
+          }
+        ],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 100.0,
+        "fully_inspected_files": 2,
+        "partially_inspected_files": 0,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [],
+        "ledger_exception_reasons": [
+          "reference_unresolved"
+        ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T12:16:59.233716+00:00",
+        "target": "general@day-to-day",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
+        ],
+        "relevance": {
+          "score": 0.25,
+          "matched_needs": [
+            "cli-and-agent-tooling"
+          ],
+          "method": "keyword"
+        },
+        "redundancy": {
+          "max_similarity": 0.0,
+          "closest_existing": null,
+          "verdict": "partial_overlap",
+          "note": "similarity unavailable: No provider is configured (SKILL_EVAL_EMBEDDING_PROVIDER unset and no credential found). Set one of: NVIDIA_API_KEY for NVIDIA Build (build.nvidia.com) or OPENAI_API_KEY (auto-"
+        },
+        "provenance_flags": [
+          "Schema & Repository Governance/folder_hierarchy: Skill not in standard location (skills/ or team-skills/)",
+          "Schema & Repository Governance/line_count: SKILL.md has 660 lines (limit: 500)",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Instructions'",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Examples'",
+          "Schema & Repository Governance/author_missing: Author not specified in metadata",
+          "QUALITY score 84.5/100 (grade B)",
+          "QUALITY: SKILL_SPEC recommended field missing: 'version'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.author'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
+          "QUALITY: Description very long (205 chars, recommend 50-150)",
+          "QUALITY: No '## Purpose' section",
+          "QUALITY: No mention of error handling or validation",
+          "QUALITY: No prerequisites/requirements documented",
+          "QUALITY: No limitations documented",
+          "QUALITY: No troubleshooting section documented",
+          "QUALITY: High line repetition detected"
+        ],
+        "validation": {
+          "passed": true,
+          "failed_checks": []
+        },
+        "verdict": "deferred",
+        "rationale": "passed cheap gates; live evaluation not yet run"
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-lighting": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-lighting",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-lighting",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\threejs-lighting",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:36:22.531286+00:00",
+      "content_hash": "7adc319af73a15ce16b94c83aafe0bcca7b8ef17d9fb263d75a937b9670f1772",
+      "state": "fit_evaluated",
+      "history": [
+        {
+          "at": "2026-09-02T02:36:22.531314+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T03:00:23.741219+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "CAUTION score=0 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T12:17:04.385874+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "deferred: passed cheap gates; live evaluation not yet run"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T03:00:23.741194+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static+llm",
+        "score": 0,
+        "severity": "LOW",
+        "recommendation": "CAUTION",
+        "has_executable_scripts": false,
+        "findings": [],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": "deepseek/deepseek-v4-flash",
+        "llm_provider": "openai",
+        "llm_seed": 42,
+        "llm_temperature": 0.0,
+        "llm_requested": true,
+        "llm_ran": true,
+        "llm_attempts": 1,
+        "llm_last_error": null,
+        "llm_attempt_log": [
+          {
+            "at": "2026-09-02T03:00:23.741150+00:00",
+            "error": null
+          }
+        ],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 100.0,
+        "fully_inspected_files": 2,
+        "partially_inspected_files": 0,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [],
+        "ledger_exception_reasons": [
+          "reference_unresolved"
+        ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T12:17:01.896113+00:00",
+        "target": "general@day-to-day",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
+        ],
+        "relevance": {
+          "score": 0.25,
+          "matched_needs": [
+            "design-and-frontend"
+          ],
+          "method": "keyword"
+        },
+        "redundancy": {
+          "max_similarity": 0.0,
+          "closest_existing": null,
+          "verdict": "partial_overlap",
+          "note": "similarity unavailable: No provider is configured (SKILL_EVAL_EMBEDDING_PROVIDER unset and no credential found). Set one of: NVIDIA_API_KEY for NVIDIA Build (build.nvidia.com) or OPENAI_API_KEY (auto-"
+        },
+        "provenance_flags": [
+          "Schema & Repository Governance/folder_hierarchy: Skill not in standard location (skills/ or team-skills/)",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Instructions'",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Examples'",
+          "Schema & Repository Governance/author_missing: Author not specified in metadata",
+          "QUALITY score 87.2/100 (grade B)",
+          "QUALITY: SKILL_SPEC recommended field missing: 'version'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.author'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
+          "QUALITY: No '## Purpose' section",
+          "QUALITY: No mention of error handling or validation",
+          "QUALITY: No prerequisites/requirements documented",
+          "QUALITY: No limitations documented",
+          "QUALITY: No troubleshooting section documented"
+        ],
+        "validation": {
+          "passed": true,
+          "failed_checks": []
+        },
+        "verdict": "deferred",
+        "rationale": "passed cheap gates; live evaluation not yet run"
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-loaders": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-loaders",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-loaders",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\threejs-loaders",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:36:23.129805+00:00",
+      "content_hash": "ba08b24a9700c4e89f86155ee4f5f31709479ecb7c51bfe07306b3e2a5ad2e4a",
+      "state": "rejected",
+      "history": [
+        {
+          "at": "2026-09-02T02:36:23.129827+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T03:00:55.294591+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "CAUTION score=0 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T12:17:04.981949+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "reject: no overlap with declared needs (relevance 0.0)"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T03:00:55.294554+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static+llm",
+        "score": 0,
+        "severity": "LOW",
+        "recommendation": "CAUTION",
+        "has_executable_scripts": false,
+        "findings": [],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": "deepseek/deepseek-v4-flash",
+        "llm_provider": "openai",
+        "llm_seed": 42,
+        "llm_temperature": 0.0,
+        "llm_requested": true,
+        "llm_ran": true,
+        "llm_attempts": 1,
+        "llm_last_error": null,
+        "llm_attempt_log": [
+          {
+            "at": "2026-09-02T03:00:55.294486+00:00",
+            "error": null
+          }
+        ],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 100.0,
+        "fully_inspected_files": 2,
+        "partially_inspected_files": 0,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [],
+        "ledger_exception_reasons": [
+          "reference_unresolved"
+        ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T12:17:04.935586+00:00",
+        "target": "general@day-to-day",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
+        ],
+        "relevance": {
+          "score": 0.0,
+          "matched_needs": [],
+          "method": "keyword"
+        },
+        "verdict": "reject",
+        "rationale": "no overlap with declared needs (relevance 0.0)"
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-materials": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-materials",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-materials",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\threejs-materials",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:36:23.714200+00:00",
+      "content_hash": "4d181db0b35213b772bf20eff5fe6f72f1c84bdc03294db96d1f712dd9047443",
+      "state": "fit_evaluated",
+      "history": [
+        {
+          "at": "2026-09-02T02:36:23.714224+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T03:01:22.015641+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "CAUTION score=0 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T12:17:09.643361+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "deferred: passed cheap gates; live evaluation not yet run"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T03:01:22.015616+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static+llm",
+        "score": 0,
+        "severity": "LOW",
+        "recommendation": "CAUTION",
+        "has_executable_scripts": false,
+        "findings": [],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": "deepseek/deepseek-v4-flash",
+        "llm_provider": "openai",
+        "llm_seed": 42,
+        "llm_temperature": 0.0,
+        "llm_requested": true,
+        "llm_ran": true,
+        "llm_attempts": 1,
+        "llm_last_error": null,
+        "llm_attempt_log": [
+          {
+            "at": "2026-09-02T03:01:22.015568+00:00",
+            "error": null
+          }
+        ],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 100.0,
+        "fully_inspected_files": 2,
+        "partially_inspected_files": 0,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [],
+        "ledger_exception_reasons": [
+          "reference_unresolved"
+        ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T12:17:05.578622+00:00",
+        "target": "general@day-to-day",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
+        ],
+        "relevance": {
+          "score": 0.25,
+          "matched_needs": [
+            "design-and-frontend"
+          ],
+          "method": "keyword"
+        },
+        "redundancy": {
+          "max_similarity": 0.0,
+          "closest_existing": null,
+          "verdict": "partial_overlap",
+          "note": "similarity unavailable: No provider is configured (SKILL_EVAL_EMBEDDING_PROVIDER unset and no credential found). Set one of: NVIDIA_API_KEY for NVIDIA Build (build.nvidia.com) or OPENAI_API_KEY (auto-"
+        },
+        "provenance_flags": [
+          "Schema & Repository Governance/folder_hierarchy: Skill not in standard location (skills/ or team-skills/)",
+          "Schema & Repository Governance/line_count: SKILL.md has 520 lines (limit: 500)",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Instructions'",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Examples'",
+          "Schema & Repository Governance/author_missing: Author not specified in metadata",
+          "QUALITY score 87.2/100 (grade B)",
+          "QUALITY: SKILL_SPEC recommended field missing: 'version'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.author'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
+          "QUALITY: No '## Purpose' section",
+          "QUALITY: No mention of error handling or validation",
+          "QUALITY: No prerequisites/requirements documented",
+          "QUALITY: No limitations documented",
+          "QUALITY: No troubleshooting section documented"
+        ],
+        "validation": {
+          "passed": true,
+          "failed_checks": []
+        },
+        "verdict": "deferred",
+        "rationale": "passed cheap gates; live evaluation not yet run"
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-postprocessing": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-postprocessing",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-postprocessing",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\threejs-postprocessing",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:36:24.285129+00:00",
+      "content_hash": "95c3952afb0f1164253e013cce0c1cb1c290b17e3cbdc3583379bd4c66ca2870",
+      "state": "fit_evaluated",
+      "history": [
+        {
+          "at": "2026-09-02T02:36:24.285157+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T03:01:55.383741+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "CAUTION score=0 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T12:17:12.379301+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "deferred: passed cheap gates; live evaluation not yet run"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T03:01:55.383716+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static+llm",
+        "score": 0,
+        "severity": "LOW",
+        "recommendation": "CAUTION",
+        "has_executable_scripts": false,
+        "findings": [],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": "deepseek/deepseek-v4-flash",
+        "llm_provider": "openai",
+        "llm_seed": 42,
+        "llm_temperature": 0.0,
+        "llm_requested": true,
+        "llm_ran": true,
+        "llm_attempts": 1,
+        "llm_last_error": null,
+        "llm_attempt_log": [
+          {
+            "at": "2026-09-02T03:01:55.383664+00:00",
+            "error": null
+          }
+        ],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 100.0,
+        "fully_inspected_files": 2,
+        "partially_inspected_files": 0,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [],
+        "ledger_exception_reasons": [
+          "reference_unresolved"
+        ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T12:17:09.968964+00:00",
+        "target": "general@day-to-day",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
+        ],
+        "relevance": {
+          "score": 0.25,
+          "matched_needs": [
+            "design-and-frontend"
+          ],
+          "method": "keyword"
+        },
+        "redundancy": {
+          "max_similarity": 0.0,
+          "closest_existing": null,
+          "verdict": "partial_overlap",
+          "note": "similarity unavailable: No provider is configured (SKILL_EVAL_EMBEDDING_PROVIDER unset and no credential found). Set one of: NVIDIA_API_KEY for NVIDIA Build (build.nvidia.com) or OPENAI_API_KEY (auto-"
+        },
+        "provenance_flags": [
+          "Schema & Repository Governance/folder_hierarchy: Skill not in standard location (skills/ or team-skills/)",
+          "Schema & Repository Governance/line_count: SKILL.md has 602 lines (limit: 500)",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Instructions'",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Examples'",
+          "Schema & Repository Governance/author_missing: Author not specified in metadata",
+          "QUALITY score 85.8/100 (grade B)",
+          "QUALITY: SKILL_SPEC recommended field missing: 'version'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.author'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
+          "QUALITY: No '## Purpose' section",
+          "QUALITY: No mention of error handling or validation",
+          "QUALITY: No prerequisites/requirements documented",
+          "QUALITY: No limitations documented",
+          "QUALITY: No troubleshooting section documented",
+          "QUALITY: High line repetition detected"
+        ],
+        "validation": {
+          "passed": true,
+          "failed_checks": []
+        },
+        "verdict": "deferred",
+        "rationale": "passed cheap gates; live evaluation not yet run"
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-r3f": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-r3f",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-r3f",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\threejs-r3f",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:36:24.828211+00:00",
+      "content_hash": "a5effc26bfe1640e3943084fdf7b7f6561cba3d18753755e888bc3e94a06dfd1",
+      "state": "fit_evaluated",
+      "history": [
+        {
+          "at": "2026-09-02T02:36:24.828237+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T03:02:30.998587+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "CAUTION score=25 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T12:17:15.113765+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "deferred: passed cheap gates; live evaluation not yet run"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T03:02:30.998568+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static+llm",
+        "score": 25,
+        "severity": "MEDIUM",
+        "recommendation": "CAUTION",
+        "has_executable_scripts": false,
+        "findings": [
+          {
+            "rule_id": "AE1",
+            "severity": "HIGH",
+            "category": "analysis-evasion",
+            "confidence": 1.0,
+            "file": "SKILL.md",
+            "line": 241,
+            "message": "references/shaders.md (partial)"
+          }
+        ],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": "deepseek/deepseek-v4-flash",
+        "llm_provider": "openai",
+        "llm_seed": 42,
+        "llm_temperature": 0.0,
+        "llm_requested": true,
+        "llm_ran": true,
+        "llm_attempts": 1,
+        "llm_last_error": null,
+        "llm_attempt_log": [
+          {
+            "at": "2026-09-02T03:02:30.998523+00:00",
+            "error": null
+          }
+        ],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 75.0,
+        "fully_inspected_files": 3,
+        "partially_inspected_files": 1,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [
+          "static_patterns_tool_misuse"
+        ],
+        "ledger_exception_reasons": [
+          "reference_unresolved",
+          "static_parse_limit"
+        ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T12:17:12.697812+00:00",
+        "target": "general@day-to-day",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved', 'static_parse_limit'])"
+        ],
+        "relevance": {
+          "score": 0.5,
+          "matched_needs": [
+            "design-and-frontend",
+            "output-and-productivity"
+          ],
+          "method": "keyword"
+        },
+        "redundancy": {
+          "max_similarity": 0.0,
+          "closest_existing": null,
+          "verdict": "partial_overlap",
+          "note": "similarity unavailable: No provider is configured (SKILL_EVAL_EMBEDDING_PROVIDER unset and no credential found). Set one of: NVIDIA_API_KEY for NVIDIA Build (build.nvidia.com) or OPENAI_API_KEY (auto-"
+        },
+        "provenance_flags": [
+          "Schema & Repository Governance/folder_hierarchy: Skill not in standard location (skills/ or team-skills/)",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Instructions'",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Examples'",
+          "Schema & Repository Governance/author_missing: Author not specified in metadata",
+          "QUALITY score 84.8/100 (grade B)",
+          "QUALITY: SKILL_SPEC recommended field missing: 'version'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.author'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
+          "QUALITY: Description doesn't mention WHEN to use this skill",
+          "QUALITY: No '## Purpose' section",
+          "QUALITY: No mention of error handling or validation",
+          "QUALITY: No prerequisites/requirements documented",
+          "QUALITY: No limitations documented",
+          "QUALITY: No troubleshooting section documented"
+        ],
+        "validation": {
+          "passed": true,
+          "failed_checks": []
+        },
+        "verdict": "deferred",
+        "rationale": "passed cheap gates; live evaluation not yet run"
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-shaders": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-shaders",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-shaders",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\threejs-shaders",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:36:25.423191+00:00",
+      "content_hash": "d95f7e19b4aa4992d3d5dfbdbfeec0d21affd251dc2006dc0d4d4d1a317f1b04",
+      "state": "fit_evaluated",
+      "history": [
+        {
+          "at": "2026-09-02T02:36:25.423219+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T03:03:03.886573+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "CAUTION score=0 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T12:17:18.622185+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "deferred: passed cheap gates; live evaluation not yet run"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T03:03:03.886551+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static+llm",
+        "score": 0,
+        "severity": "LOW",
+        "recommendation": "CAUTION",
+        "has_executable_scripts": false,
+        "findings": [],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": "deepseek/deepseek-v4-flash",
+        "llm_provider": "openai",
+        "llm_seed": 42,
+        "llm_temperature": 0.0,
+        "llm_requested": true,
+        "llm_ran": true,
+        "llm_attempts": 1,
+        "llm_last_error": null,
+        "llm_attempt_log": [
+          {
+            "at": "2026-09-02T03:03:03.886506+00:00",
+            "error": null
+          }
+        ],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 100.0,
+        "fully_inspected_files": 2,
+        "partially_inspected_files": 0,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [],
+        "ledger_exception_reasons": [
+          "reference_unresolved"
+        ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T12:17:15.564115+00:00",
+        "target": "general@day-to-day",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
+        ],
+        "relevance": {
+          "score": 0.25,
+          "matched_needs": [
+            "design-and-frontend"
+          ],
+          "method": "keyword"
+        },
+        "redundancy": {
+          "max_similarity": 0.0,
+          "closest_existing": null,
+          "verdict": "partial_overlap",
+          "note": "similarity unavailable: No provider is configured (SKILL_EVAL_EMBEDDING_PROVIDER unset and no credential found). Set one of: NVIDIA_API_KEY for NVIDIA Build (build.nvidia.com) or OPENAI_API_KEY (auto-"
+        },
+        "provenance_flags": [
+          "Schema & Repository Governance/folder_hierarchy: Skill not in standard location (skills/ or team-skills/)",
+          "Schema & Repository Governance/line_count: SKILL.md has 642 lines (limit: 500)",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Instructions'",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Examples'",
+          "Schema & Repository Governance/author_missing: Author not specified in metadata",
+          "QUALITY score 88.2/100 (grade B)",
+          "QUALITY: SKILL_SPEC recommended field missing: 'version'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.author'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
+          "QUALITY: No '## Purpose' section",
+          "QUALITY: No prerequisites/requirements documented",
+          "QUALITY: No limitations documented",
+          "QUALITY: No troubleshooting section documented",
+          "QUALITY: High line repetition detected"
+        ],
+        "validation": {
+          "passed": true,
+          "failed_checks": []
+        },
+        "verdict": "deferred",
+        "rationale": "passed cheap gates; live evaluation not yet run"
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-textures": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-textures",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-threejs-textures",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\threejs-textures",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:36:25.944081+00:00",
+      "content_hash": "5afbbaa048507fcbb76adca76cdc2fa58f7edb68383c0c48785756fecb68a2d0",
+      "state": "fit_evaluated",
+      "history": [
+        {
+          "at": "2026-09-02T02:36:25.944108+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T03:03:36.397370+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "CAUTION score=0 mode=static+llm"
+        },
+        {
+          "at": "2026-09-02T12:17:21.207251+00:00",
+          "actor": "pipeline2",
+          "event": "fit_evaluated",
+          "note": "deferred: passed cheap gates; live evaluation not yet run"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T03:03:36.397352+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static+llm",
+        "score": 0,
+        "severity": "LOW",
+        "recommendation": "CAUTION",
+        "has_executable_scripts": false,
+        "findings": [],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": "deepseek/deepseek-v4-flash",
+        "llm_provider": "openai",
+        "llm_seed": 42,
+        "llm_temperature": 0.0,
+        "llm_requested": true,
+        "llm_ran": true,
+        "llm_attempts": 1,
+        "llm_last_error": null,
+        "llm_attempt_log": [
+          {
+            "at": "2026-09-02T03:03:36.397312+00:00",
+            "error": null
+          }
+        ],
+        "blind_spot_kind": null,
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 100.0,
+        "fully_inspected_files": 2,
+        "partially_inspected_files": 0,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [],
+        "ledger_exception_reasons": [
+          "reference_unresolved"
+        ]
+      },
+      "fit": {
+        "evaluated_at": "2026-09-02T12:17:18.950448+00:00",
+        "target": "general@day-to-day",
+        "scan_flags": [
+          "scan incomplete (benign): incomplete but within benign bounds (['reference_unresolved'])"
+        ],
+        "relevance": {
+          "score": 0.25,
+          "matched_needs": [
+            "design-and-frontend"
+          ],
+          "method": "keyword"
+        },
+        "redundancy": {
+          "max_similarity": 0.0,
+          "closest_existing": null,
+          "verdict": "partial_overlap",
+          "note": "similarity unavailable: No provider is configured (SKILL_EVAL_EMBEDDING_PROVIDER unset and no credential found). Set one of: NVIDIA_API_KEY for NVIDIA Build (build.nvidia.com) or OPENAI_API_KEY (auto-"
+        },
+        "provenance_flags": [
+          "Schema & Repository Governance/folder_hierarchy: Skill not in standard location (skills/ or team-skills/)",
+          "Schema & Repository Governance/line_count: SKILL.md has 628 lines (limit: 500)",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Instructions'",
+          "Schema & Repository Governance/body_recommended_section: Missing recommended section: '## Examples'",
+          "Schema & Repository Governance/author_missing: Author not specified in metadata",
+          "QUALITY score 89.8/100 (grade B)",
+          "QUALITY: SKILL_SPEC recommended field missing: 'version'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.author'",
+          "QUALITY: SKILL_SPEC recommended field missing: 'metadata.tags'",
+          "QUALITY: No '## Purpose' section",
+          "QUALITY: No prerequisites/requirements documented",
+          "QUALITY: No limitations documented",
+          "QUALITY: No troubleshooting section documented"
+        ],
+        "validation": {
+          "passed": true,
+          "failed_checks": []
+        },
+        "verdict": "deferred",
+        "rationale": "passed cheap gates; live evaluation not yet run"
+      }
+    },
+    "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-ui-ux-pro-max": {
+      "id": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-ui-ux-pro-max",
+      "name": "c-users-tswid-appdata-local-temp-claude-c--users-tswid-personalprograms-trellis-50cd7a55-f3b9-4b56-aab3-e61463526ada-scratchpad-skillrepos2-ui-ux-pro-max",
+      "source": {
+        "url": "C:\\Users\\tswid\\AppData\\Local\\Temp\\claude\\C--Users-tswid-PersonalPrograms-Trellis\\50cd7a55-f3b9-4b56-aab3-e61463526ada\\scratchpad\\skillrepos2\\ui-ux-pro-max",
+        "origin": "manual"
+      },
+      "discovered_at": "2026-09-02T02:36:26.473664+00:00",
+      "content_hash": "6355b07ca8ab0429500160ff66accda83f21d358bf3f70c296aedfa3bf2873a9",
+      "state": "quarantined",
+      "history": [
+        {
+          "at": "2026-09-02T02:36:26.473688+00:00",
+          "actor": "pipeline1",
+          "event": "discovered",
+          "note": "manual"
+        },
+        {
+          "at": "2026-09-02T03:04:50.427194+00:00",
+          "actor": "pipeline1",
+          "event": "scanned",
+          "note": "DO_NOT_INSTALL score=100 mode=static blind_spot=structural"
+        }
+      ],
+      "security": {
+        "scanned_at": "2026-09-02T03:04:50.427170+00:00",
+        "scanner_version": "2.11.0",
+        "scan_mode": "static",
+        "score": 100,
+        "severity": "CRITICAL",
+        "recommendation": "DO_NOT_INSTALL",
+        "has_executable_scripts": true,
+        "findings": [
+          {
+            "rule_id": "AS1",
+            "severity": "HIGH",
+            "category": "Agent Snooping",
+            "confidence": 0.85,
+            "file": "SKILL.md",
+            "line": 111,
+            "message": "find \"$HOME/.claude/"
+          },
+          {
+            "rule_id": "AE1",
+            "severity": "HIGH",
+            "category": "analysis-evasion",
+            "confidence": 1.0,
+            "file": "SKILL.md",
+            "line": 128,
+            "message": "scripts/search.py (partial)"
+          },
+          {
+            "rule_id": "AE1",
+            "severity": "HIGH",
+            "category": "analysis-evasion",
+            "confidence": 1.0,
+            "file": "SKILL.md",
+            "line": 139,
+            "message": "scripts/search.py (partial)"
+          },
+          {
+            "rule_id": "AE1",
+            "severity": "HIGH",
+            "category": "analysis-evasion",
+            "confidence": 1.0,
+            "file": "SKILL.md",
+            "line": 147,
+            "message": "scripts/search.py (partial)"
+          },
+          {
+            "rule_id": "AE1",
+            "severity": "HIGH",
+            "category": "analysis-evasion",
+            "confidence": 1.0,
+            "file": "SKILL.md",
+            "line": 158,
+            "message": "scripts/search.py (partial)"
+          },
+          {
+            "rule_id": "AE1",
+            "severity": "HIGH",
+            "category": "analysis-evasion",
+            "confidence": 1.0,
+            "file": "SKILL.md",
+            "line": 183,
+            "message": "scripts/search.py (partial)"
+          },
+          {
+            "rule_id": "AE1",
+            "severity": "HIGH",
+            "category": "analysis-evasion",
+            "confidence": 1.0,
+            "file": "SKILL.md",
+            "line": 201,
+            "message": "scripts/search.py (partial)"
+          },
+          {
+            "rule_id": "AE1",
+            "severity": "HIGH",
+            "category": "analysis-evasion",
+            "confidence": 1.0,
+            "file": "SKILL.md",
+            "line": 269,
+            "message": "scripts/search.py (partial)"
+          },
+          {
+            "rule_id": "AE1",
+            "severity": "HIGH",
+            "category": "analysis-evasion",
+            "confidence": 1.0,
+            "file": "SKILL.md",
+            "line": 278,
+            "message": "scripts/search.py (partial)"
+          },
+          {
+            "rule_id": "AE1",
+            "severity": "HIGH",
+            "category": "analysis-evasion",
+            "confidence": 1.0,
+            "file": "SKILL.md",
+            "line": 281,
+            "message": "scripts/search.py (partial)"
+          },
+          {
+            "rule_id": "AE1",
+            "severity": "HIGH",
+            "category": "analysis-evasion",
+            "confidence": 1.0,
+            "file": "SKILL.md",
+            "line": 287,
+            "message": "scripts/search.py (partial)"
+          },
+          {
+            "rule_id": "AE1",
+            "severity": "HIGH",
+            "category": "analysis-evasion",
+            "confidence": 1.0,
+            "file": "SKILL.md",
+            "line": 300,
+            "message": "scripts/search.py (partial)"
+          },
+          {
+            "rule_id": "AE1",
+            "severity": "HIGH",
+            "category": "analysis-evasion",
+            "confidence": 1.0,
+            "file": "SKILL.md",
+            "line": 303,
+            "message": "scripts/search.py (partial)"
+          },
+          {
+            "rule_id": "AE1",
+            "severity": "HIGH",
+            "category": "analysis-evasion",
+            "confidence": 1.0,
+            "file": "SKILL.md",
+            "line": 133,
+            "message": "data/ui-reasoning.csv (partial)"
+          },
+          {
+            "rule_id": "OH1",
+            "severity": "HIGH",
+            "category": "Output Handling",
+            "confidence": 0.65,
+            "file": "data/react-performance.csv",
+            "line": 29,
+            "message": "dangerouslySetInnerHTML={"
+          },
+          {
+            "rule_id": "OH1",
+            "severity": "HIGH",
+            "category": "Output Handling",
+            "confidence": 0.65,
+            "file": "data/stacks/nextjs.csv",
+            "line": 51,
+            "message": "dangerouslySetInnerHTML={"
+          },
+          {
+            "rule_id": "LP3",
+            "severity": "MEDIUM",
+            "category": "MCP Least Privilege",
+            "confidence": 0.7,
+            "file": "SKILL.md",
+            "line": 1,
+            "message": "Without declared permissions the skill's intent is opaque and cannot be validated."
+          },
+          {
+            "rule_id": "EA2",
+            "severity": "MEDIUM",
+            "category": "Excessive Agency",
+            "confidence": 0.75,
+            "file": "data/app-interface.csv",
+            "line": 15,
+            "message": "no confirmation"
+          },
+          {
+            "rule_id": "RP1",
+            "severity": "MEDIUM",
+            "category": "MCP Rug Pull",
+            "confidence": 0.7,
+            "file": "data/stacks/astro.csv",
+            "line": 18,
+            "message": "npx commands without a version suffix (e.g. @1.0.0) create a rug-pull risk if the upstream server is compromised and publishes a malicious update."
+          },
+          {
+            "rule_id": "RP1",
+            "severity": "MEDIUM",
+            "category": "MCP Rug Pull",
+            "confidence": 0.7,
+            "file": "data/stacks/astro.csv",
+            "line": 34,
+            "message": "npx commands without a version suffix (e.g. @1.0.0) create a rug-pull risk if the upstream server is compromised and publishes a malicious update."
+          },
+          {
+            "rule_id": "RP1",
+            "severity": "MEDIUM",
+            "category": "MCP Rug Pull",
+            "confidence": 0.7,
+            "file": "data/stacks/astro.csv",
+            "line": 37,
+            "message": "npx commands without a version suffix (e.g. @1.0.0) create a rug-pull risk if the upstream server is compromised and publishes a malicious update."
+          },
+          {
+            "rule_id": "RP1",
+            "severity": "MEDIUM",
+            "category": "MCP Rug Pull",
+            "confidence": 0.7,
+            "file": "data/stacks/astro.csv",
+            "line": 54,
+            "message": "npx commands without a version suffix (e.g. @1.0.0) create a rug-pull risk if the upstream server is compromised and publishes a malicious update."
+          },
+          {
+            "rule_id": "E1",
+            "severity": "MEDIUM",
+            "category": "Data Exfiltration",
+            "confidence": 0.5,
+            "file": "data/stacks/flutter.csv",
+            "line": 2,
+            "message": "https://api.flutter.dev/"
+          },
+          {
+            "rule_id": "E1",
+            "severity": "MEDIUM",
+            "category": "Data Exfiltration",
+            "confidence": 0.5,
+            "file": "data/stacks/flutter.csv",
+            "line": 6,
+            "message": "https://api.flutter.dev/"
+          },
+          {
+            "rule_id": "E1",
+            "severity": "MEDIUM",
+            "category": "Data Exfiltration",
+            "confidence": 0.5,
+            "file": "data/stacks/flutter.csv",
+            "line": 11,
+            "message": "https://api.flutter.dev/"
+          },
+          {
+            "rule_id": "E1",
+            "severity": "MEDIUM",
+            "category": "Data Exfiltration",
+            "confidence": 0.5,
+            "file": "data/stacks/flutter.csv",
+            "line": 14,
+            "message": "https://api.flutter.dev/"
+          },
+          {
+            "rule_id": "E1",
+            "severity": "MEDIUM",
+            "category": "Data Exfiltration",
+            "confidence": 0.5,
+            "file": "data/stacks/flutter.csv",
+            "line": 16,
+            "message": "https://api.flutter.dev/"
+          },
+          {
+            "rule_id": "E1",
+            "severity": "MEDIUM",
+            "category": "Data Exfiltration",
+            "confidence": 0.5,
+            "file": "data/stacks/flutter.csv",
+            "line": 19,
+            "message": "https://api.flutter.dev/"
+          },
+          {
+            "rule_id": "E1",
+            "severity": "MEDIUM",
+            "category": "Data Exfiltration",
+            "confidence": 0.5,
+            "file": "data/stacks/flutter.csv",
+            "line": 22,
+            "message": "https://api.flutter.dev/"
+          },
+          {
+            "rule_id": "E1",
+            "severity": "MEDIUM",
+            "category": "Data Exfiltration",
+            "confidence": 0.5,
+            "file": "data/stacks/flutter.csv",
+            "line": 24,
+            "message": "https://api.flutter.dev/"
+          },
+          {
+            "rule_id": "E1",
+            "severity": "MEDIUM",
+            "category": "Data Exfiltration",
+            "confidence": 0.5,
+            "file": "data/stacks/flutter.csv",
+            "line": 25,
+            "message": "https://api.flutter.dev/"
+          },
+          {
+            "rule_id": "E1",
+            "severity": "MEDIUM",
+            "category": "Data Exfiltration",
+            "confidence": 0.5,
+            "file": "data/stacks/flutter.csv",
+            "line": 28,
+            "message": "https://api.flutter.dev/"
+          },
+          {
+            "rule_id": "E1",
+            "severity": "MEDIUM",
+            "category": "Data Exfiltration",
+            "confidence": 0.5,
+            "file": "data/stacks/flutter.csv",
+            "line": 32,
+            "message": "https://api.flutter.dev/"
+          },
+          {
+            "rule_id": "E1",
+            "severity": "MEDIUM",
+            "category": "Data Exfiltration",
+            "confidence": 0.5,
+            "file": "data/stacks/flutter.csv",
+            "line": 35,
+            "message": "https://api.flutter.dev/"
+          },
+          {
+            "rule_id": "E1",
+            "severity": "MEDIUM",
+            "category": "Data Exfiltration",
+            "confidence": 0.5,
+            "file": "data/stacks/flutter.csv",
+            "line": 36,
+            "message": "https://api.flutter.dev/"
+          },
+          {
+            "rule_id": "E1",
+            "severity": "MEDIUM",
+            "category": "Data Exfiltration",
+            "confidence": 0.5,
+            "file": "data/stacks/flutter.csv",
+            "line": 42,
+            "message": "https://api.flutter.dev/"
+          },
+          {
+            "rule_id": "E1",
+            "severity": "MEDIUM",
+            "category": "Data Exfiltration",
+            "confidence": 0.5,
+            "file": "data/stacks/flutter.csv",
+            "line": 44,
+            "message": "https://api.flutter.dev/"
+          },
+          {
+            "rule_id": "RP1",
+            "severity": "MEDIUM",
+            "category": "MCP Rug Pull",
+            "confidence": 0.7,
+            "file": "data/stacks/shadcn.csv",
+            "line": 2,
+            "message": "npx commands without a version suffix (e.g. @1.0.0) create a rug-pull risk if the upstream server is compromised and publishes a malicious update."
+          },
+          {
+            "rule_id": "RP1",
+            "severity": "MEDIUM",
+            "category": "MCP Rug Pull",
+            "confidence": 0.7,
+            "file": "data/stacks/shadcn.csv",
+            "line": 3,
+            "message": "npx commands without a version suffix (e.g. @1.0.0) create a rug-pull risk if the upstream server is compromised and publishes a malicious update."
+          },
+          {
+            "rule_id": "RP1",
+            "severity": "MEDIUM",
+            "category": "MCP Rug Pull",
+            "confidence": 0.7,
+            "file": "data/stacks/shadcn.csv",
+            "line": 51,
+            "message": "npx commands without a version suffix (e.g. @1.0.0) create a rug-pull risk if the upstream server is compromised and publishes a malicious update."
+          },
+          {
+            "rule_id": "RP1",
+            "severity": "MEDIUM",
+            "category": "MCP Rug Pull",
+            "confidence": 0.7,
+            "file": "data/stacks/nuxt-ui.csv",
+            "line": 53,
+            "message": "npx commands without a version suffix (e.g. @1.0.0) create a rug-pull risk if the upstream server is compromised and publishes a malicious update."
+          },
+          {
+            "rule_id": "RP1",
+            "severity": "MEDIUM",
+            "category": "MCP Rug Pull",
+            "confidence": 0.7,
+            "file": "data/stacks/vue.csv",
+            "line": 49,
+            "message": "npx commands without a version suffix (e.g. @1.0.0) create a rug-pull risk if the upstream server is compromised and publishes a malicious update."
+          }
+        ],
+        "baseline_applied": "skillspector-baseline.yaml",
+        "error": null,
+        "llm_model": null,
+        "llm_provider": null,
+        "llm_seed": null,
+        "llm_temperature": null,
+        "llm_requested": true,
+        "llm_ran": false,
+        "llm_attempts": 1,
+        "llm_last_error": "obfuscated_instruction_text; reference_unresolved; runtime_limit; static_parse_limit",
+        "llm_attempt_log": [
+          {
+            "at": "2026-09-02T03:04:50.427120+00:00",
+            "error": "obfuscated_instruction_text; reference_unresolved; runtime_limit; static_parse_limit"
+          }
+        ],
+        "blind_spot_kind": "structural",
+        "consecutive_provider_failures": 0,
+        "is_complete": false,
+        "coverage_percent": 0.0,
+        "fully_inspected_files": 0,
+        "partially_inspected_files": 45,
+        "entirely_uninspected_files": 0,
+        "degraded_analyzers": [
+          "mcp_tool_poisoning",
+          "meta_analyzer",
+          "semantic_developer_intent",
+          "semantic_quality_policy",
+          "semantic_security_discovery",
+          "static_patterns_agent_snooping",
+          "static_patterns_anti_refusal",
+          "static_patterns_deserialization",
+          "static_patterns_excessive_agency",
+          "static_patterns_harmful_content",
+          "static_patterns_memory_poisoning",
+          "static_patterns_privilege_escalation",
+          "static_patterns_prompt_injection",
+          "static_patterns_rogue_agent",
+          "static_patterns_ssrf",
+          "static_patterns_supply_chain",
+          "static_patterns_system_prompt_leakage",
+          "static_patterns_tool_misuse",
+          "static_yara"
+        ],
+        "ledger_exception_reasons": [
+          "obfuscated_instruction_text",
+          "reference_unresolved",
+          "runtime_limit",
+          "static_parse_limit"
+        ]
       }
     }
   }

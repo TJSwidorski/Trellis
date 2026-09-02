@@ -141,14 +141,30 @@ class Manifest:
 # gate A - relevance
 # --------------------------------------------------------------------------
 
-def fetch_skill(url: str, dest: Path) -> Path | None:
+def _clone_slug(url: str) -> str:
+    """Last path segment of a clone URL, minus a trailing ``.git``.
+
+    This is the name the skill's own repo (or collection subdirectory) gives it,
+    and it is what gate C's ``name_consistency`` check must see. Cloning into a
+    fixed ``src`` directory instead made every root-level-SKILL.md skill's
+    directory name ``src`` and hard-failed that check on every candidate.
+    """
+    seg = re.split(r"[\\/]", str(url).strip().rstrip("/").removesuffix(".git"))[-1]
+    return seg or "skill"
+
+
+def fetch_skill(url: str, workdir: Path) -> Path | None:
+    dest = workdir / _clone_slug(url)
     proc = subprocess.run(
         ["git", "clone", "--depth", "1", "--quiet", url, str(dest)],
         capture_output=True, text=True, timeout=CLONE_TIMEOUT,
     )
     if proc.returncode != 0:
         return None
-    # a repo may hold several skills; the shallowest SKILL.md is the entry point
+    # A repo may hold several skills; the shallowest SKILL.md is the entry point.
+    # For a root-level SKILL.md this is `dest` itself -- named for the skill, not
+    # `src`. For a `skills/<name>/` layout it is that subdirectory, already
+    # correctly named, and `dest`'s own name is never consulted.
     found = sorted(dest.rglob("SKILL.md"), key=lambda p: len(p.parts))
     return found[0].parent if found else None
 
@@ -598,7 +614,7 @@ def evaluate(
         sec = entry.get("security") or {}
         workdir = Path(tempfile.mkdtemp(prefix="fit-"))
         try:
-            skill_dir = fetch_skill(entry["source"]["url"], workdir / "src")
+            skill_dir = fetch_skill(entry["source"]["url"], workdir)
             if skill_dir is None:
                 entry["fit"] = {"evaluated_at": now(), "verdict": "deferred",
                                 "error": "could not fetch or no SKILL.md found"}
